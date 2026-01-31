@@ -5,23 +5,23 @@ Date: 2026-01-27
 Status: In progress
 
 ## Milestone 1 — Project Bootstrap
-- [ ] Add dependencies (Riverpod, Hive, audioplayers, vibration, go_router optional)
+- [x] Add dependencies (Riverpod, Hive, audioplayers, vibration, go_router optional)
 - [ ] Configure assets (tap + alert sounds placeholders)
-- [ ] Create base app entry (`main.dart`, `app.dart`)
-- [ ] Define core enums and models
-- [ ] Initialize Hive and repositories
-- [ ] Create settings provider with defaults
+- [x] Create base app entry (`main.dart`, `app.dart`)
+- [x] Define core enums and models
+- [x] Initialize Hive and repositories
+- [x] Create settings provider with defaults
 
 **Acceptance checks**
 - App runs with a basic home screen
 - Hive opens boxes without errors
 
 ## Milestone 2 — Counter MVP
-- [ ] Implement `CounterState` and `counterProvider`
-- [ ] Build `CounterScreen` layout
-- [ ] Implement `ResizableTapLayout` + `TapZone`
-- [ ] Implement `TapFeedbackService`
-- [ ] Implement alert logic + in‑app feedback
+- [x] Implement `CounterState` and `counterProvider`
+- [x] Build `CounterScreen` layout
+- [x] Implement `ResizableTapLayout` + `TapZone`
+- [x] Implement `TapFeedbackService`
+- [x] Implement alert logic + in‑app feedback
 
 **Acceptance checks**
 - Tap increments reliably
@@ -29,18 +29,18 @@ Status: In progress
 - Alerts fire on threshold and repeat interval
 
 ## Milestone 3 — Sessions
-- [ ] Implement `CountSession` model + adapter
-- [ ] Implement sessions repository
-- [ ] Add Save Session flow (sheet + persistence)
-- [ ] Build Sessions list + details
+- [x] Implement `CountSession` model + adapter
+- [x] Implement sessions repository
+- [x] Add Save Session flow (sheet + persistence)
+- [x] Build Sessions list + details
 
 **Acceptance checks**
 - Sessions save and display correctly
 
 ## Milestone 4 — Settings & Themes
-- [ ] Build theme system and registry
-- [ ] Implement Settings screen
-- [ ] Wire theme mode + theme id persistence
+- [x] Build theme system and registry
+- [x] Implement Settings screen
+- [x] Wire theme mode + theme id persistence
 
 **Acceptance checks**
 - Theme switching works across app

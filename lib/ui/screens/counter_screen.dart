@@ -2,10 +2,16 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../state/providers/counter_provider.dart';
+import '../../state/providers/settings_provider.dart';
+import '../sheets/alert_config_sheet.dart';
+import '../sheets/save_session_sheet.dart';
+import '../sheets/sound_mode_sheet.dart';
 import '../widgets/count_display.dart';
 import '../widgets/quick_controls_bar.dart';
 import '../widgets/resizable_tap_layout.dart';
 import '../widgets/tap_zone.dart';
+import 'sessions_screen.dart';
+import 'settings_screen.dart';
 
 class CounterScreen extends ConsumerWidget {
   const CounterScreen({super.key});
@@ -13,40 +19,46 @@ class CounterScreen extends ConsumerWidget {
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     final counter = ref.watch(counterProvider);
+    final settings = ref.watch(settingsProvider);
 
     return Scaffold(
-      appBar: AppBar(title: const Text('Mantra Counter'), centerTitle: true),
+      appBar: AppBar(
+        title: const Text('Counta'),
+        centerTitle: true,
+        actions: [
+          IconButton(
+            icon: const Icon(Icons.history),
+            onPressed: () => Navigator.of(
+              context,
+            ).push(MaterialPageRoute(builder: (_) => const SessionsScreen())),
+          ),
+          IconButton(
+            icon: const Icon(Icons.settings),
+            onPressed: () => Navigator.of(
+              context,
+            ).push(MaterialPageRoute(builder: (_) => const SettingsScreen())),
+          ),
+        ],
+      ),
       body: SafeArea(
         child: ResizableTapLayout(
           tapChild: TapZone(
             onTap: () => ref.read(counterProvider.notifier).increment(),
           ),
-          infoChild: Padding(
-            padding: const EdgeInsets.all(24),
+          infoChild: SingleChildScrollView(
+            padding: const EdgeInsets.all(16),
             child: Column(
               mainAxisAlignment: MainAxisAlignment.center,
+              mainAxisSize: MainAxisSize.min,
               children: [
                 CountDisplay(count: counter.count),
-                const SizedBox(height: 24),
+                const SizedBox(height: 16),
                 QuickControlsBar(
-                  onReset: () => ref.read(counterProvider.notifier).reset(),
-                  onSave: () {
-                    ScaffoldMessenger.of(context).showSnackBar(
-                      const SnackBar(content: Text('Save flow coming next.')),
-                    );
-                  },
-                  onAlertConfig: () {
-                    ScaffoldMessenger.of(context).showSnackBar(
-                      const SnackBar(
-                        content: Text('Alert settings coming next.'),
-                      ),
-                    );
-                  },
-                  onSoundMode: () {
-                    ScaffoldMessenger.of(context).showSnackBar(
-                      const SnackBar(content: Text('Sound mode coming next.')),
-                    );
-                  },
+                  onReset: () =>
+                      _handleReset(context, ref, settings.confirmReset),
+                  onSave: () => showSaveSessionSheet(context),
+                  onAlertConfig: () => showAlertConfigSheet(context),
+                  onSoundMode: () => showSoundModeSheet(context),
                 ),
               ],
             ),
@@ -54,5 +66,32 @@ class CounterScreen extends ConsumerWidget {
         ),
       ),
     );
+  }
+
+  void _handleReset(BuildContext context, WidgetRef ref, bool confirmReset) {
+    if (confirmReset) {
+      showDialog(
+        context: context,
+        builder: (context) => AlertDialog(
+          title: const Text('Reset Count?'),
+          content: const Text('This will reset your current count to zero.'),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.of(context).pop(),
+              child: const Text('Cancel'),
+            ),
+            FilledButton(
+              onPressed: () {
+                ref.read(counterProvider.notifier).reset();
+                Navigator.of(context).pop();
+              },
+              child: const Text('Reset'),
+            ),
+          ],
+        ),
+      );
+    } else {
+      ref.read(counterProvider.notifier).reset();
+    }
   }
 }
