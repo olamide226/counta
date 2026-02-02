@@ -4,15 +4,19 @@ class QuickControlsBar extends StatelessWidget {
   const QuickControlsBar({
     super.key,
     required this.onReset,
+    required this.onUndo,
     required this.onSave,
     required this.onAlertConfig,
     required this.onSoundMode,
+    required this.soundModeIcon,
   });
 
   final VoidCallback onReset;
+  final VoidCallback onUndo;
   final VoidCallback onSave;
   final VoidCallback onAlertConfig;
   final VoidCallback onSoundMode;
+  final IconData soundModeIcon;
 
   @override
   Widget build(BuildContext context) {
@@ -32,21 +36,27 @@ class QuickControlsBar extends StatelessWidget {
               ),
               const SizedBox(width: 8),
               IconButton.outlined(
+                onPressed: onUndo,
+                icon: const Icon(Icons.undo),
+                tooltip: 'Undo',
+              ),
+              const SizedBox(width: 8),
+              IconButton.outlined(
                 onPressed: onAlertConfig,
                 icon: const Icon(Icons.notifications_active_outlined),
-                tooltip: 'Alert Settings',
+                tooltip: 'Alert',
               ),
               const SizedBox(width: 8),
               IconButton.outlined(
                 onPressed: onSoundMode,
-                icon: const Icon(Icons.volume_up_outlined),
-                tooltip: 'Sound Mode',
+                icon: Icon(soundModeIcon),
+                tooltip: 'Sound',
               ),
               const SizedBox(width: 8),
               IconButton.filledTonal(
                 onPressed: onSave,
                 icon: const Icon(Icons.save_outlined),
-                tooltip: 'Save Session',
+                tooltip: 'Save',
               ),
             ],
           );
@@ -64,13 +74,18 @@ class QuickControlsBar extends StatelessWidget {
               label: const Text('Reset'),
             ),
             OutlinedButton.icon(
+              onPressed: onUndo,
+              icon: const Icon(Icons.undo),
+              label: const Text('Undo'),
+            ),
+            OutlinedButton.icon(
               onPressed: onAlertConfig,
               icon: const Icon(Icons.notifications_active_outlined),
               label: const Text('Alert'),
             ),
             OutlinedButton.icon(
               onPressed: onSoundMode,
-              icon: const Icon(Icons.volume_up_outlined),
+              icon: Icon(soundModeIcon),
               label: const Text('Sound'),
             ),
             FilledButton.tonalIcon(

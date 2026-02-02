@@ -49,6 +49,17 @@ class CounterNotifier extends StateNotifier<CounterState> {
     await tapService.playTapFeedback(settings.soundMode);
   }
 
+  Future<void> decrement() async {
+    if (state.count <= 0) return; // Prevent negative counts
+
+    state = state.copyWith(count: state.count - 1);
+
+    // Play light haptic for undo
+    final settings = _ref.read(settingsProvider);
+    final tapService = _ref.read(tapFeedbackServiceProvider);
+    await tapService.playTapFeedback(settings.soundMode);
+  }
+
   void reset({bool keepSessionStart = false}) {
     state = state.copyWith(
       count: 0,

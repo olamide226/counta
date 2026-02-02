@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
+import '../../domain/models/enums.dart';
 import '../../state/providers/counter_provider.dart';
 import '../../state/providers/settings_provider.dart';
 import '../sheets/alert_config_sheet.dart';
@@ -56,9 +57,11 @@ class CounterScreen extends ConsumerWidget {
                 QuickControlsBar(
                   onReset: () =>
                       _handleReset(context, ref, settings.confirmReset),
+                  onUndo: () => ref.read(counterProvider.notifier).decrement(),
                   onSave: () => showSaveSessionSheet(context),
                   onAlertConfig: () => showAlertConfigSheet(context),
                   onSoundMode: () => showSoundModeSheet(context),
+                  soundModeIcon: _getSoundModeIcon(settings.soundMode),
                 ),
               ],
             ),
@@ -93,5 +96,14 @@ class CounterScreen extends ConsumerWidget {
     } else {
       ref.read(counterProvider.notifier).reset();
     }
+  }
+
+  IconData _getSoundModeIcon(SoundMode mode) {
+    return switch (mode) {
+      SoundMode.mute => Icons.volume_off,
+      SoundMode.sound => Icons.volume_up,
+      SoundMode.vibrate => Icons.vibration,
+      SoundMode.soundAndVibrate => Icons.speaker_phone,
+    };
   }
 }

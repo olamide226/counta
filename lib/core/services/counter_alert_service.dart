@@ -31,10 +31,17 @@ class CounterAlertService {
 
   Future<void> triggerAlert() async {
     if (_supportsHaptics) {
+      if (Platform.isIOS || Platform.isAndroid) {
+        await SystemSound.play(SystemSoundType.click);
+      } else {
+        // Fallback sound for other platforms
+        await SystemSound.play(SystemSoundType.alert);
+      }
+      // Double haptic pulse
       await HapticFeedback.mediumImpact();
       await Future.delayed(const Duration(milliseconds: 100));
       await HapticFeedback.mediumImpact();
+      await HapticFeedback.mediumImpact();
     }
-    // Desktop/web: visual feedback handled by UI
   }
 }

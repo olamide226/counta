@@ -16,6 +16,7 @@ class SaveSessionSheet extends ConsumerStatefulWidget {
 class _SaveSessionSheetState extends ConsumerState<SaveSessionSheet> {
   final _mantraController = TextEditingController();
   final _notesController = TextEditingController();
+  String? _errorMessage;
 
   @override
   void dispose() {
@@ -49,6 +50,33 @@ class _SaveSessionSheetState extends ConsumerState<SaveSessionSheet> {
             style: Theme.of(context).textTheme.titleMedium,
           ),
           const SizedBox(height: 16),
+          if (_errorMessage != null)
+            Container(
+              padding: const EdgeInsets.all(12),
+              margin: const EdgeInsets.only(bottom: 12),
+              decoration: BoxDecoration(
+                color: Theme.of(context).colorScheme.errorContainer,
+                borderRadius: BorderRadius.circular(8),
+              ),
+              child: Row(
+                children: [
+                  Icon(
+                    Icons.error_outline,
+                    color: Theme.of(context).colorScheme.error,
+                    size: 20,
+                  ),
+                  const SizedBox(width: 8),
+                  Expanded(
+                    child: Text(
+                      _errorMessage!,
+                      style: TextStyle(
+                        color: Theme.of(context).colorScheme.error,
+                      ),
+                    ),
+                  ),
+                ],
+              ),
+            ),
           TextField(
             controller: _mantraController,
             decoration: const InputDecoration(
@@ -57,6 +85,13 @@ class _SaveSessionSheetState extends ConsumerState<SaveSessionSheet> {
               border: OutlineInputBorder(),
             ),
             textCapitalization: TextCapitalization.words,
+            onChanged: (_) {
+              if (_errorMessage != null) {
+                setState(() {
+                  _errorMessage = null;
+                });
+              }
+            },
           ),
           const SizedBox(height: 12),
           TextField(
@@ -81,11 +116,15 @@ class _SaveSessionSheetState extends ConsumerState<SaveSessionSheet> {
 
     final mantra = _mantraController.text.trim();
     if (mantra.isEmpty) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('Please enter a mantra name')),
-      );
+      setState(() {
+        _errorMessage = 'Please enter a mantra name';
+      });
       return;
     }
+
+    setState(() {
+      _errorMessage = null;
+    });
 
     final session = CountSession(
       mantra: mantra,

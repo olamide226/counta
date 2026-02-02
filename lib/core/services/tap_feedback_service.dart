@@ -18,7 +18,6 @@ class TapFeedbackService {
 
   Future<void> init() async {
     if (_initialized) return;
-    // Preload would happen here if we had audio assets
     _initialized = true;
   }
 
@@ -36,16 +35,22 @@ class TapFeedbackService {
   }
 
   Future<void> _playSound() async {
-    // Placeholder - would play actual sound file
-    // When you add audio assets:
-    // await _player.play(AssetSource('sounds/tap.mp3'));
+    // Use system click sound on iOS and Android
+    if (Platform.isIOS || Platform.isAndroid) {
+      await SystemSound.play(SystemSoundType.click);
+    } else {
+      await SystemSound.play(SystemSoundType.alert);
+    }
+    // Sound mode uses subtle haptic as well
+    if (_supportsHaptics) {
+      await HapticFeedback.selectionClick();
+    }
   }
 
   Future<void> _vibrate() async {
     if (_supportsHaptics) {
       await HapticFeedback.lightImpact();
     }
-    // Desktop/web: silent (visual feedback only)
   }
 
   void dispose() {
