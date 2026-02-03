@@ -7,6 +7,7 @@ A minimalist Flutter app for counting mantras, prayers, or affirmations during m
 - **Resizable Tap Zone**: Adjust the counting area to your preference with a simple drag handle
 - **Smart Alerts**: Set threshold and repeat interval alerts with subtle haptic feedback
 - **Session Tracking**: Save and review your meditation sessions with notes
+- **Resume Notifications**: Get notified to resume from where you left off when the app is backgrounded
 - **Multiple Themes**: Choose from 5 beautiful color schemes (Ocean, Forest, Sunset, Mono, Lavender)
 - **Haptic Feedback**: Subtle vibrations for tap confirmation and milestone alerts
 - **Dark Mode**: Full support for light and dark themes
@@ -63,12 +64,14 @@ A minimalist Flutter app for counting mantras, prayers, or affirmations during m
 5. **Review History**: View all your saved sessions from the Sessions screen
 6. **Customize**: Access Settings to change themes, sound modes, and other preferences
 7. **Undo Mistakes**: Tap the Undo button to decrease the count by one
+8. **Resume Notifications**: When you background the app during a counting session, you'll receive a notification showing your current count and session duration. Tap it to resume your practice.
 
 ## 🛠️ Tech Stack
 
 - **Framework**: Flutter 3.38.8
 - **State Management**: Riverpod 2.6.1
 - **Local Database**: Hive 2.2.3
+- **Notifications**: flutter_local_notifications 18.0.1
 - **Audio**: audioplayers 6.1.0
 - **Haptics**: Flutter's HapticFeedback API
 - **Code Generation**: build_runner, hive_generator
@@ -80,7 +83,7 @@ lib/
 ├── main.dart                 # App entry point
 ├── app.dart                  # Root MaterialApp widget
 ├── core/
-│   ├── services/            # Alert and feedback services
+│   ├── services/            # Alert, feedback, and notification services
 │   └── theme/               # Theme registry and color schemes
 ├── data/
 │   ├── hive/                # Hive initialization
@@ -94,6 +97,48 @@ lib/
     ├── sheets/              # Bottom sheets
     └── widgets/             # Reusable widgets
 ```
+
+## 🔔 Resume Notifications
+
+Counta helps you maintain your practice with smart resume notifications:
+
+### How It Works
+
+When you minimize or background the app during a counting session (count > 0), Counta automatically:
+
+1. **Tracks Your Progress**: Records your current count and session duration
+2. **Sends a Notification**: Displays a notification showing:
+   - Your current count
+   - Session duration
+   - A prompt to resume
+
+3. **Resume Seamlessly**: Tap the notification to return to your session exactly where you left off
+
+### Notification Details
+
+- **Title**: "Resume Counting"
+- **Content**: "You were at [X] counts. Session duration: [Y]m"
+- **Auto-Cancel**: Notifications are automatically cleared when you return to the app
+- **Privacy**: All notifications are local - no data is sent to external servers
+
+### Platform-Specific Notes
+
+**iOS/macOS**: 
+- Notification permissions are requested on first launch
+- You can manage permissions in Settings > Notifications
+
+**Android**:
+- Notification permission is requested on Android 13+ (API 33+)
+- Notifications use a dedicated "Resume Notifications" channel
+- High priority for immediate visibility
+
+### Permissions
+
+The app requires notification permissions to function:
+- **Android**: `POST_NOTIFICATIONS` permission (Android 13+)
+- **iOS**: Alert, Badge, and Sound permissions
+
+These are requested automatically when the app first launches.
 
 ## 🤝 Contributing
 

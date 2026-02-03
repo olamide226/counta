@@ -2,7 +2,9 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../domain/models/enums.dart';
+import '../../state/providers/app_lifecycle_provider.dart';
 import '../../state/providers/counter_provider.dart';
+import '../../state/providers/services_provider.dart';
 import '../../state/providers/settings_provider.dart';
 import '../sheets/alert_config_sheet.dart';
 import '../sheets/save_session_sheet.dart';
@@ -14,11 +16,39 @@ import '../widgets/tap_zone.dart';
 import 'sessions_screen.dart';
 import 'settings_screen.dart';
 
-class CounterScreen extends ConsumerWidget {
+class CounterScreen extends ConsumerStatefulWidget {
   const CounterScreen({super.key});
 
   @override
-  Widget build(BuildContext context, WidgetRef ref) {
+  ConsumerState<CounterScreen> createState() => _CounterScreenState();
+}
+
+class _CounterScreenState extends ConsumerState<CounterScreen>
+    with WidgetsBindingObserver {
+  @override
+  void initState() {
+    super.initState();
+    WidgetsBinding.instance.addObserver(this);
+
+    // Initialize notification service
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      ref.read(notificationServiceProvider).init();
+    });
+  }
+
+  @override
+  void dispose() {
+    WidgetsBinding.instance.removeObserver(this);
+    super.dispose();
+  }
+
+  @override
+  void didChangeAppLifecycleState(AppLifecycleState state) {
+    ref.read(appLifecycleProvider.notifier).handleLifecycleChange(state);
+  }
+
+  @override
+  Widget build(BuildContext context) {
     final counter = ref.watch(counterProvider);
     final settings = ref.watch(settingsProvider);
 

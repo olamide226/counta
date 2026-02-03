@@ -1,10 +1,10 @@
-import 'package:flutter/services.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:counta/state/providers/counter_provider.dart';
 import 'package:counta/state/providers/settings_provider.dart';
 import 'package:counta/state/providers/services_provider.dart';
 import 'package:counta/core/services/tap_feedback_service.dart';
+import 'package:counta/core/services/notification_service.dart';
 import 'package:counta/domain/models/app_settings.dart';
 import 'package:counta/domain/models/enums.dart';
 
@@ -24,6 +24,23 @@ class MockTapFeedbackService implements TapFeedbackService {
   void dispose() {}
 }
 
+class MockNotificationService implements NotificationService {
+  @override
+  Future<void> init() async {}
+
+  @override
+  Future<void> showResumeNotification({
+    required int currentCount,
+    String? sessionInfo,
+  }) async {}
+
+  @override
+  Future<void> cancelAllNotifications() async {}
+
+  @override
+  void dispose() {}
+}
+
 void main() {
   TestWidgetsFlutterBinding.ensureInitialized();
 
@@ -38,6 +55,9 @@ void main() {
           ),
           tapFeedbackServiceProvider.overrideWithValue(
             MockTapFeedbackService(),
+          ),
+          notificationServiceProvider.overrideWithValue(
+            MockNotificationService(),
           ),
         ],
       );
