@@ -1,0 +1,149 @@
+name: Build and Release
+
+on:
+  push:
+    tags:
+      - 'v*.*.*'
+
+jobs:
+  create-release:
+    runs-on: ubuntu-latest
+    outputs:
+      upload_url: ${{ steps.create_release.outputs.upload_url }}
+      version: ${{ steps.get_version.outputs.version }}
+    steps:
+      - name: Get version from tag
+        id: get_version
+        run: echo "version=${GITHUB_REF#refs/tags/v}" >> $GITHUB_OUTPUT
+
+      - name: Create Release
+        id: create_release
+        uses: actions/create-release@v1
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        with:
+          tag_name: ${{ github.ref }}
+          release_name: Release ${{ github.ref }}
+          draft: false
+          prerelease: false
+          body: |
+            ## What's New in v${{ steps.get_version.outputs.version }}
+            
+            ### Downloads
+            - **macOS**: Download the `.dmg` file
+            - **Android**: Download the `.apk` file
+            - **Windows**: Download the `.zip` file
+            
+            See the [CHANGELOG](https://github.com/${{ github.repository }}/blob/main/CHANGELOG.md) for detailed changes.
+
+  build-android:
+    needs: create-release
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Setup Java
+        uses: actions/setup-java@v4
+        with:
+          distribution: 'zulu'
+          java-version: '17'
+
+      - name: Setup Flutter
+        uses: subosito/flutter-action@v2
+        with:
+          flutter-version: '3.38.8'
+          channel: 'stable'
+
+      - name: Install dependencies
+        run: flutter pub get
+
+      - name: Build APK
+        run: flutter build apk --release
+
+      - name: Rename APK
+        run: mv build/app/outputs/flutter-apk/app-release.apk build/app/outputs/flutter-apk/counta-${{ needs.create-release.outputs.version }}-android.apk
+
+      - name: Upload APK to Release
+        uses: actions/upload-release-asset@v1
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        with:
+          upload_url: ${{ needs.create-release.outputs.upload_url }}
+          asset_path: build/app/outputs/flutter-apk/counta-${{ needs.create-release.outputs.version }}-android.apk
+          asset_name: counta-${{ needs.create-release.outputs.version }}-android.apk
+          asset_content_type: application/vnd.android.package-archive
+
+  build-macos:
+    needs: create-release
+    runs-on: macos-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Setup Flutter
+        uses: subosito/flutter-action@v2
+        with:
+          flutter-version: '3.38.8'
+          channel: 'stable'
+
+      - name: Install dependencies
+        run: flutter pub get
+
+      - name: Build macOS app
+        run: flutter build macos --release
+
+      - name: Create DMG
+        run: |
+          brew install create-dmg
+          create-dmg \
+            --volname "Counta Installer" \
+            --window-pos 200 120 \
+            --window-size 800 400 \
+            --icon-size 100 \
+            --icon "Counta.app" 200 190 \
+            --hide-extension "Counta.app" \
+            --app-drop-link 600 185 \
+            "counta-${{ needs.create-release.outputs.version }}-macos.dmg" \
+            "build/macos/Build/Products/Release/counta.app" || \
+          hdiutil create -volname "Counta" -srcfolder build/macos/Build/Products/Release/counta.app -ov -format UDZO counta-${{ needs.create-release.outputs.version }}-macos.dmg
+
+      - name: Upload DMG to Release
+        uses: actions/upload-release-asset@v1
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        with:
+          upload_url: ${{ needs.create-release.outputs.upload_url }}
+          asset_path: counta-${{ needs.create-release.outputs.version }}-macos.dmg
+          asset_name: counta-${{ needs.create-release.outputs.version }}-macos.dmg
+          asset_content_type: application/x-apple-diskimage
+
+  build-windows:
+    needs: create-release
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Setup Flutter
+        uses: subosito/flutter-action@v2
+        with:
+          flutter-version: '3.38.8'
+          channel: 'stable'
+
+      - name: Install dependencies
+        run: flutter pub get
+
+      - name: Build Windows app
+        run: flutter build windows --release
+
+      - name: Create Windows ZIP
+        run: |
+          Compress-Archive -Path build\windows\x64\runner\Release\* -DestinationPath counta-${{ needs.create-release.outputs.version }}-windows.zip
+
+      - name: Upload Windows ZIP to Release
+        uses: actions/upload-release-asset@v1
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        with:
+          upload_url: ${{ needs.create-release.outputs.upload_url }}
+          asset_path: counta-${{ needs.create-release.outputs.version }}-windows.zip
+          asset_name: counta-${{ needs.create-release.outputs.version }}-windows.zip
+          asset_content_type: application/zip

@@ -1,0 +1,72 @@
+name: Version Bump
+
+on:
+  workflow_dispatch:
+    inputs:
+      version_type:
+        description: 'Version bump type'
+        required: true
+        type: choice
+        options:
+          - patch
+          - minor
+          - major
+
+jobs:
+  bump-version:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Configure Git
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+
+      - name: Get current version
+        id: current_version
+        run: |
+          CURRENT_VERSION=$(grep '^version:' pubspec.yaml | sed 's/version: //' | sed 's/+.*//')
+          echo "current=$CURRENT_VERSION" >> $GITHUB_OUTPUT
+          echo "Current version: $CURRENT_VERSION"
+
+      - name: Calculate new version
+        id: new_version
+        run: |
+          CURRENT="${{ steps.current_version.outputs.current }}"
+          IFS='.' read -r major minor patch <<< "$CURRENT"
+          
+          case "${{ github.event.inputs.version_type }}" in
+            major)
+              major=$((major + 1))
+              minor=0
+              patch=0
+              ;;
+            minor)
+              minor=$((minor + 1))
+              patch=0
+              ;;
+            patch)
+              patch=$((patch + 1))
+              ;;
+          esac
+          
+          NEW_VERSION="${major}.${minor}.${patch}"
+          echo "version=$NEW_VERSION" >> $GITHUB_OUTPUT
+          echo "New version: $NEW_VERSION"
+
+      - name: Update pubspec.yaml
+        run: |
+          BUILD_NUMBER=$(grep '^version:' pubspec.yaml | sed 's/.*+//')
+          NEW_BUILD=$((BUILD_NUMBER + 1))
+          sed -i "s/^version:.*/version: ${{ steps.new_version.outputs.version }}+$NEW_BUILD/" pubspec.yaml
+          git add pubspec.yaml
+          git commit -m "chore: bump version to ${{ steps.new_version.outputs.version }}"
+          git push
+
+      - name: Create and push tag
+        run: |
+          git tag "v${{ steps.new_version.outputs.version }}"
+          git push origin "v${{ steps.new_version.outputs.version }}"
