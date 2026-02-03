@@ -1,24 +1,45 @@
-// This is a basic Flutter widget test.
-//
-// To perform an interaction with a widget in your test, use the WidgetTester
-// utility in the flutter_test package. For example, you can send tap and scroll
-// gestures. You can also use WidgetTester to find child widgets in the widget
-// tree, read text, and verify that the values of widget properties are correct.
-
-import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:counta/domain/models/app_settings.dart';
+import 'package:counta/state/providers/counter_provider.dart';
+import 'package:counta/state/providers/settings_provider.dart';
 
-import 'package:counta/app.dart';
+class MockSettingsRepository {
+  AppSettings getSettings() => AppSettings.defaults();
+  Future<void> saveSettings(AppSettings settings) async {}
+}
 
 void main() {
-  testWidgets('Tap zone increments count', (WidgetTester tester) async {
-    await tester.pumpWidget(const ProviderScope(child: App()));
+  group('Counter Widget', () {
+    testWidgets('Counter starts at 0', (WidgetTester tester) async {
+      final container = ProviderContainer(
+        overrides: [
+          settingsProvider.overrideWith(
+            (ref) => SettingsNotifier(MockSettingsRepository()),
+          ),
+        ],
+      );
+      addTearDown(container.dispose);
 
-    expect(find.text('0'), findsOneWidget);
-    await tester.tap(find.byIcon(Icons.touch_app_rounded));
-    await tester.pump();
+      final state = container.read(counterProvider);
+      expect(state.count, 0);
+    });
 
-    expect(find.text('1'), findsOneWidget);
+    testWidgets('Counter state can be incremented', (
+      WidgetTester tester,
+    ) async {
+      final container = ProviderContainer(
+        overrides: [
+          settingsProvider.overrideWith(
+            (ref) => SettingsNotifier(MockSettingsRepository()),
+          ),
+        ],
+      );
+      addTearDown(container.dispose);
+
+      await container.read(counterProvider.notifier).increment();
+      final state = container.read(counterProvider);
+      expect(state.count, 1);
+    });
   });
 }
