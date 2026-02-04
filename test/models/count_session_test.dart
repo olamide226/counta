@@ -11,7 +11,7 @@ void main() {
         mantra: 'Om Mani Padme Hum',
         startedAt: now,
         endedAt: now.add(const Duration(minutes: 30)),
-        finalCount: 108,
+        finalCount: 100,
         threshold: 100,
         repeatInterval: 100,
         soundMode: SoundMode.vibrate,
@@ -23,7 +23,7 @@ void main() {
       expect(session.mantra, 'Om Mani Padme Hum');
       expect(session.startedAt, now);
       expect(session.endedAt, now.add(const Duration(minutes: 30)));
-      expect(session.finalCount, 108);
+      expect(session.finalCount, 100);
       expect(session.threshold, 100);
       expect(session.repeatInterval, 100);
       expect(session.soundMode, SoundMode.vibrate);

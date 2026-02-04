@@ -55,7 +55,7 @@ class _AlertConfigSheetState extends ConsumerState<AlertConfigSheet> {
             controller: _thresholdController,
             decoration: const InputDecoration(
               labelText: 'Threshold',
-              hintText: 'e.g. 108',
+              hintText: 'e.g. 100',
               border: OutlineInputBorder(),
               helperText: 'Alert when count reaches this number',
             ),
@@ -66,7 +66,7 @@ class _AlertConfigSheetState extends ConsumerState<AlertConfigSheet> {
             controller: _repeatController,
             decoration: const InputDecoration(
               labelText: 'Repeat Interval',
-              hintText: 'e.g. 108',
+              hintText: 'e.g. 100',
               border: OutlineInputBorder(),
               helperText: 'Alert every N counts after threshold',
             ),

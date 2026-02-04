@@ -1,4 +1,4 @@
-package com.example.counta
+package com.ruach-tech.counta
 
 import io.flutter.embedding.android.FlutterActivity
 

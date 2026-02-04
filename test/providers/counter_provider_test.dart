@@ -176,10 +176,10 @@ void main() {
     test('setThreshold updates threshold', () {
       final notifier = container.read(counterProvider.notifier);
 
-      notifier.setThreshold(108);
+      notifier.setThreshold(100);
 
       final state = container.read(counterProvider);
-      expect(state.threshold, 108);
+      expect(state.threshold, 100);
     });
 
     test('setRepeatInterval updates repeat interval', () {

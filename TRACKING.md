@@ -65,8 +65,8 @@ Status: In progress
 - Default `tapZoneRatio = 0.75`
 - `soundMode = vibrate` by default
 - `confirmReset = true`
-- `defaultThreshold = 108`
-- `defaultRepeatInterval = 108`
+- `defaultThreshold = 100`
+- `defaultRepeatInterval = 100`
 
 ## Backlog (Post‑v1)
 - Auto‑save sessions on reset/exit

@@ -14,13 +14,13 @@ void main() {
     test('creates with all fields specified', () {
       final now = DateTime.now();
       final state = CounterState(
-        count: 108,
+        count: 100,
         threshold: 100,
         repeatInterval: 25,
         sessionStart: now,
       );
 
-      expect(state.count, 108);
+      expect(state.count, 100);
       expect(state.threshold, 100);
       expect(state.repeatInterval, 25);
       expect(state.sessionStart, now);

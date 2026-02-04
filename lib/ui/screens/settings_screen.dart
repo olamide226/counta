@@ -215,7 +215,7 @@ class SettingsScreen extends ConsumerWidget {
           controller: controller,
           keyboardType: TextInputType.number,
           decoration: const InputDecoration(
-            hintText: 'e.g. 108',
+            hintText: 'e.g. 100',
             border: OutlineInputBorder(),
           ),
         ),
@@ -250,7 +250,7 @@ class SettingsScreen extends ConsumerWidget {
           controller: controller,
           keyboardType: TextInputType.number,
           decoration: const InputDecoration(
-            hintText: 'e.g. 108',
+            hintText: 'e.g. 100',
             border: OutlineInputBorder(),
           ),
         ),

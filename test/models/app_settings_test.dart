@@ -22,11 +22,11 @@ void main() {
 
       final updated = original.copyWith(
         soundMode: SoundMode.mute,
-        defaultThreshold: 108,
+        defaultThreshold: 100,
       );
 
       expect(updated.soundMode, SoundMode.mute);
-      expect(updated.defaultThreshold, 108);
+      expect(updated.defaultThreshold, 100);
       // Other fields remain unchanged
       expect(updated.themeModeChoice, ThemeModeChoice.system);
       expect(updated.themeId, AppThemeId.ocean);
