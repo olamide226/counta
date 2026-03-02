@@ -1,15 +1,17 @@
 import 'package:flutter/material.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../domain/models/count_session.dart';
 import '../../domain/models/enums.dart';
+import '../../state/providers/counter_provider.dart';
 
-class SessionDetailScreen extends StatelessWidget {
+class SessionDetailScreen extends ConsumerWidget {
   const SessionDetailScreen({super.key, required this.session});
 
   final CountSession session;
 
   @override
-  Widget build(BuildContext context) {
+  Widget build(BuildContext context, WidgetRef ref) {
     final duration = session.endedAt.difference(session.startedAt);
 
     return Scaffold(
@@ -97,9 +99,50 @@ class SessionDetailScreen extends StatelessWidget {
               ),
             ),
           ],
+          const SizedBox(height: 32),
+          FilledButton.icon(
+            onPressed: () => _continueSession(context, ref),
+            icon: const Icon(Icons.play_arrow),
+            label: const Text('Continue Session'),
+            style: FilledButton.styleFrom(
+              minimumSize: const Size.fromHeight(52),
+            ),
+          ),
+          const SizedBox(height: 16),
         ],
       ),
     );
+  }
+
+  Future<void> _continueSession(BuildContext context, WidgetRef ref) async {
+    final currentCount = ref.read(counterProvider).count;
+    if (currentCount > 0) {
+      final confirmed = await showDialog<bool>(
+        context: context,
+        builder: (context) => AlertDialog(
+          title: const Text('Continue Session?'),
+          content: Text(
+            'This will replace your current count ($currentCount) with ${session.finalCount} from "${session.mantra}".',
+          ),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.of(context).pop(false),
+              child: const Text('Cancel'),
+            ),
+            FilledButton(
+              onPressed: () => Navigator.of(context).pop(true),
+              child: const Text('Continue'),
+            ),
+          ],
+        ),
+      );
+      if (confirmed != true) return;
+    }
+
+    ref.read(counterProvider.notifier).loadSession(session);
+    if (context.mounted) {
+      Navigator.of(context).popUntil((route) => route.isFirst);
+    }
   }
 
   Widget _buildStatCard(

@@ -1,5 +1,6 @@
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
+import '../../domain/models/count_session.dart';
 import '../../domain/models/counter_state.dart';
 import 'services_provider.dart';
 import 'settings_provider.dart';
@@ -77,5 +78,14 @@ class CounterNotifier extends StateNotifier<CounterState> {
 
   void startNewSession() {
     state = state.copyWith(count: 0, sessionStart: DateTime.now());
+  }
+
+  void loadSession(CountSession session) {
+    state = CounterState(
+      count: session.finalCount,
+      threshold: session.threshold,
+      repeatInterval: session.repeatInterval,
+      sessionStart: DateTime.now(),
+    );
   }
 }
