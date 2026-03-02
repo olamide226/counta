@@ -1,4 +1,4 @@
-.PHONY: help setup format lint analyze test test-coverage build-runner clean build-ios build-android build-macos build-web run run-ios run-android run-web doctor
+.PHONY: help setup format lint analyze test test-coverage build-runner clean build-ios build-android build-macos build-web run run-ios run-android run-web doctor icons
 
 # Default target
 help:
@@ -25,6 +25,9 @@ help:
 	@echo "  make run-ios        - Run on iOS"
 	@echo "  make run-android    - Run on Android"
 	@echo "  make run-web        - Run on Chrome"
+	@echo ""
+	@echo "Asset commands:"
+	@echo "  make icons          - Generate app icons from assets/icon/app_icon.png"
 	@echo ""
 	@echo "Other commands:"
 	@echo "  make doctor         - Check Flutter environment"
@@ -134,6 +137,12 @@ run-web:
 run-macos:
 	@echo "💻 Running on macOS..."
 	flutter run -d macos
+
+# Generate app icons from assets/icon/app_icon.png
+icons:
+	@echo "🖼️  Generating app icons from assets/icon/app_icon.png..."
+	dart run flutter_launcher_icons
+	@echo "✅ App icons generated!"
 
 # Check Flutter environment
 doctor:
