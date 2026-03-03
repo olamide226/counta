@@ -1,4 +1,4 @@
-.PHONY: help setup format lint analyze test test-coverage build-runner clean build-ios build-android build-macos build-web run run-ios run-android run-web doctor icons
+.PHONY: help setup format lint analyze test test-coverage build-runner clean build-ios build-ios-ipa build-android build-macos build-web run run-ios run-android run-web doctor icons
 
 # Default target
 help:
@@ -15,7 +15,8 @@ help:
 	@echo "  make clean          - Clean build artifacts"
 	@echo ""
 	@echo "Build commands:"
-	@echo "  make build-ios      - Build iOS app"
+	@echo "  make build-ios      - Build iOS app (debug/ad-hoc)"
+	@echo "  make build-ios-ipa  - Build iOS archive for App Store/TestFlight"
 	@echo "  make build-android  - Build Android APK"
 	@echo "  make build-macos    - Build macOS app"
 	@echo "  make build-web      - Build web app"
@@ -94,6 +95,13 @@ build-ios:
 	@echo "🍎 Building iOS app..."
 	flutter build ios
 	@echo "✅ iOS build complete!"
+
+# Build iOS archive (.ipa) for App Store / TestFlight
+build-ios-ipa:
+	@echo "🍎 Building iOS archive..."
+	flutter build ipa
+	@echo "✅ iOS archive ready at build/ios/archive/Runner.xcarchive"
+	@echo "   Upload via Xcode Organizer: open build/ios/archive/Runner.xcarchive"
 
 # Build for Android
 build-android:

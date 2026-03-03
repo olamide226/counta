@@ -4,6 +4,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../../domain/models/count_session.dart';
 import '../../domain/models/enums.dart';
 import '../../state/providers/counter_provider.dart';
+import '../../state/providers/sessions_provider.dart';
 
 class SessionDetailScreen extends ConsumerWidget {
   const SessionDetailScreen({super.key, required this.session});
@@ -15,7 +16,17 @@ class SessionDetailScreen extends ConsumerWidget {
     final duration = session.endedAt.difference(session.startedAt);
 
     return Scaffold(
-      appBar: AppBar(title: Text(session.mantra), centerTitle: true),
+      appBar: AppBar(
+        title: Text(session.mantra),
+        centerTitle: true,
+        actions: [
+          IconButton(
+            icon: const Icon(Icons.delete_outline),
+            tooltip: 'Delete session',
+            onPressed: () => _deleteSession(context, ref),
+          ),
+        ],
+      ),
       body: ListView(
         padding: const EdgeInsets.all(24),
         children: [
@@ -112,6 +123,33 @@ class SessionDetailScreen extends ConsumerWidget {
         ],
       ),
     );
+  }
+
+  Future<void> _deleteSession(BuildContext context, WidgetRef ref) async {
+    final confirmed = await showDialog<bool>(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: const Text('Delete Session?'),
+        content: const Text('This action cannot be undone.'),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.of(context).pop(false),
+            child: const Text('Cancel'),
+          ),
+          FilledButton(
+            style: FilledButton.styleFrom(
+              backgroundColor: Theme.of(context).colorScheme.error,
+            ),
+            onPressed: () => Navigator.of(context).pop(true),
+            child: const Text('Delete'),
+          ),
+        ],
+      ),
+    );
+
+    if (confirmed != true) return;
+    ref.read(sessionsProvider.notifier).deleteSession(session.id);
+    if (context.mounted) Navigator.of(context).pop();
   }
 
   Future<void> _continueSession(BuildContext context, WidgetRef ref) async {

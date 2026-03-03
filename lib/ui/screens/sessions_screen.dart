@@ -64,6 +64,14 @@ class SessionsScreen extends ConsumerWidget {
                         ),
                       );
                     },
+                    onLongPress: () async {
+                      final confirmed = await _confirmDelete(context);
+                      if (confirmed) {
+                        ref
+                            .read(sessionsProvider.notifier)
+                            .deleteSession(session.id);
+                      }
+                    },
                   ),
                 );
               },
