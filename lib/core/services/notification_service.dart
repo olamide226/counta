@@ -92,6 +92,58 @@ class NotificationService {
     );
   }
 
+  /// Notification id for the persistent "still counting" notice. Distinct from
+  /// the resume notification so the two never overwrite each other.
+  static const int voiceSessionNotificationId = 1;
+
+  /// Shows an ongoing notice that voice counting is still running.
+  ///
+  /// A backgrounded session keeps the microphone open, so the user must be able
+  /// to see that at a glance — both so they trust it is still counting while
+  /// they read, and so they are never unknowingly recorded.
+  Future<void> showVoiceSessionNotification({
+    required int currentCount,
+    required String phrase,
+  }) async {
+    if (!_initialized) await init();
+
+    const androidDetails = AndroidNotificationDetails(
+      'voice_session_channel',
+      'Voice Session',
+      channelDescription: 'Shown while voice counting is running',
+      importance: Importance.low,
+      priority: Priority.low,
+      ongoing: true,
+      autoCancel: false,
+      showWhen: false,
+      playSound: false,
+      enableVibration: false,
+      category: AndroidNotificationCategory.service,
+    );
+
+    const iosDetails = DarwinNotificationDetails(
+      presentAlert: false,
+      presentBadge: false,
+      presentSound: false,
+    );
+
+    const notificationDetails = NotificationDetails(
+      android: androidDetails,
+      iOS: iosDetails,
+    );
+
+    await _notifications.show(
+      voiceSessionNotificationId,
+      'Counting “$phrase”',
+      '$currentCount so far · tap to return',
+      notificationDetails,
+    );
+  }
+
+  Future<void> cancelVoiceSessionNotification() async {
+    await _notifications.cancel(voiceSessionNotificationId);
+  }
+
   Future<void> cancelAllNotifications() async {
     await _notifications.cancelAll();
   }
