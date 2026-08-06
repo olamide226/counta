@@ -37,27 +37,49 @@ domain/models → data/repositories → state/providers → ui/screens
               core/services ------
 ```
 
-- **domain/models/** — Business entities with `@HiveType` annotations for persistence. Immutable with `copyWith()`.
+- **domain/models/** — Business entities with `@HiveType` annotations for persistence. Immutable with `copyWith()`. Must never import Flutter.
+- **domain/counting/** — Voice-counting domain: the `CountingEngine` and `SpeechSocket` ports, `PhraseMatcher`, `PhraseNormaliser`, `TranscriptSegment`. Pure Dart, no plugins — this is what the unit tests exercise.
+- **domain/validation/** — Input rules, e.g. `PhraseValidator` (2–12 normalised tokens).
 - **data/repositories/** — Hive persistence layer. `SettingsRepository` (single document) and `SessionsRepository` (collection).
 - **data/hive/** — Hive initialization, adapter registration, box opening.
-- **state/providers/** — Riverpod `StateNotifierProvider`s for counter logic, settings, sessions, app lifecycle. This is where business logic lives.
-- **core/services/** — Cross-cutting: `CounterAlertService` (threshold alerts), `TapFeedbackService` (audio/haptics), `NotificationService` (local push).
-- **core/theme/** — `ThemeRegistry` with 5 color schemes, Material 3 `ColorScheme.fromSeed()`.
+- **state/providers/** — Riverpod providers plus `SessionController` (the `ChangeNotifier` that owns the authoritative session count). This is where business logic lives.
+- **core/config/** — `BuildConfig`: the single source of truth for dev-vs-release behaviour (app name, whether debug tools are reachable).
+- **core/services/** — Cross-cutting: `CounterAlertService` (threshold alerts), `TapFeedbackService` (audio/haptics), `NotificationService` (local push), `ScreenWakeService` (wakelock).
+- **core/services/counting/** — Platform adapters implementing the domain ports: `AudioSource` (record plugin), `DeepgramSocket` (WebSocket), `CloudCountingEngine`, `TapCountingEngine`.
+- **core/theme/** — `ThemeRegistry` with 5 color schemes, plus presentation extensions like `SoundModePresentation`.
 - **ui/screens/** — Full pages using `ConsumerWidget`/`ConsumerStatefulWidget`.
+- **ui/screens/debug/** — Dev-only tooling, gated behind `BuildConfig.showDebugTools`.
 - **ui/sheets/** — Bottom sheets for alert config, save session, sound mode.
-- **ui/widgets/** — Reusable components (count display, tap zone, controls bar).
+- **ui/widgets/** — Reusable components (count display, tap zone, controls bar, voice session banner).
+
+**Layer rule:** dependencies point inward. `domain/` imports nothing from `core/`, `data/`, `state/`, or `ui/`, and never imports Flutter or a plugin. Adapters in `core/services/counting/` implement the ports declared in `domain/counting/`.
+
+## Voice counting
+
+Two engines implement `CountingEngine`: `TapCountingEngine` (default) and `CloudCountingEngine` (streaming STT). `SessionController.setEngine()` swaps between them; screens get engines from `voiceEngineFactoryProvider` / `tapEngineFactoryProvider` rather than constructing them.
+
+The interface carries `counts`, `status`, `diagnostics`, `incrementManual()` and `decrementManual()` — add capabilities here rather than type-checking for a concrete engine.
+
+`CloudCountingEngine` retries dropped connections for `reconnectWindow` (default 5 min) with jittered backoff, because sessions run 1–2 hours. A socket drop reconnects without restarting the microphone; only a mic stall (`AudioSourceStalled`) restarts capture.
+
+**Platform requirements:** iOS declares `UIBackgroundModes: audio` so sessions survive backgrounding, and `AudioSource` sets `allowHapticsAndSystemSoundsDuringRecording` — without it the app's own tap sounds raise an audio-session interruption that permanently pauses recording. Android background recording is **not** supported yet: it needs a foreground service, which `record_android` does not provide.
 
 ## Key Provider Structure
 
 - `counterProvider` — `StateNotifierProvider<CounterNotifier, CounterState>`: active counting session (increment, decrement, reset, threshold, alerts)
+- `sessionControllerProvider` — `ChangeNotifierProvider<SessionController>`: owns the authoritative count. `CounterState.count` mirrors it; the controller is the single writer.
+- `voiceEngineFactoryProvider` / `tapEngineFactoryProvider` — build `CountingEngine`s so the UI never constructs platform stacks
 - `settingsProvider` — `StateNotifierProvider<SettingsNotifier, AppSettings>`: persisted app settings (theme, sound, defaults)
 - `sessionsProvider` — saved session list from Hive
+- `screenWakeServiceProvider` — holds the wakelock while a voice session is in the foreground
 - `hiveInitProvider` — `FutureProvider` for async Hive initialization at startup
-- `appLifecycleProvider` — handles background/foreground transitions, schedules resume notifications
+- `appLifecycleProvider` — handles background/foreground transitions; shows an ongoing notification for a backgrounded voice session instead of a resume prompt
 
 ## Hive Persistence
 
 Two Hive boxes: `'settings'` (single `AppSettings` doc) and `'sessions'` (collection of `CountSession` docs). Type IDs: `AppSettings`=0, `CountSession`=1, `SoundMode`=10, `ThemeModeChoice`=11, `AppThemeId`=12.
+
+`CountSession` fields 12–14 (`phrase`, `voiceCount`, `manualCount`) are nullable so sessions saved before voice counting existed still load.
 
 ## Testing
 
