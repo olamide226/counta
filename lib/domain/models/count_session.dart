@@ -45,6 +45,25 @@ class CountSession {
   @HiveField(11)
   final String? deviceLocale;
 
+  /// The phrase the user chanted, when the session was counted by voice.
+  ///
+  /// Null for tap-only sessions. Kept separate from [mantra], which is the
+  /// user's own label for the session and may differ from what they said.
+  @HiveField(12)
+  final String? phrase;
+
+  /// Counts detected from speech. Null for sessions recorded before voice
+  /// counting existed, and for tap-only sessions.
+  @HiveField(13)
+  final int? voiceCount;
+
+  /// Counts entered by tapping. Null under the same conditions as [voiceCount].
+  @HiveField(14)
+  final int? manualCount;
+
+  /// Whether this session recorded any voice-counted repetitions.
+  bool get isVoiceSession => (voiceCount ?? 0) > 0 || phrase != null;
+
   CountSession({
     String? id,
     required this.mantra,
@@ -58,5 +77,8 @@ class CountSession {
     required this.themeId,
     this.notes,
     this.deviceLocale,
+    this.phrase,
+    this.voiceCount,
+    this.manualCount,
   }) : id = id ?? _uuid.v4();
 }

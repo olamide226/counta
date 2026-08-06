@@ -1,20 +1,53 @@
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
+import 'session_controller.dart';
+import '../../core/services/counting/cloud_counting_engine.dart';
+import '../../core/services/counting/tap_counting_engine.dart';
+import '../../domain/counting/counting_engine.dart';
 import '../../domain/models/count_session.dart';
 import '../../domain/models/counter_state.dart';
 import 'services_provider.dart';
 import 'settings_provider.dart';
 
+final sessionControllerProvider = ChangeNotifierProvider<SessionController>(
+  (ref) => SessionController(),
+);
+
+/// Builds the engine for a voice session.
+///
+/// Exists so screens never construct a microphone + WebSocket stack
+/// themselves — that made the counter screen untestable and put platform
+/// wiring in the UI layer.
+final voiceEngineFactoryProvider = Provider<CountingEngine Function()>(
+  (ref) => CloudCountingEngine.new,
+);
+
+/// Builds the engine used when no voice session is running.
+final tapEngineFactoryProvider = Provider<CountingEngine Function()>(
+  (ref) => TapCountingEngine.new,
+);
+
 final counterProvider = StateNotifierProvider<CounterNotifier, CounterState>(
-  (ref) => CounterNotifier(ref),
+  (ref) => CounterNotifier(
+    ref,
+    sessionController: ref.read(sessionControllerProvider),
+  ),
 );
 
 class CounterNotifier extends StateNotifier<CounterState> {
   final Ref _ref;
+  final SessionController sessionController;
 
-  CounterNotifier(this._ref)
-    : super(CounterState(count: 0, sessionStart: DateTime.now())) {
+  CounterNotifier(this._ref, {required this.sessionController})
+      : super(CounterState(count: 0, sessionStart: DateTime.now())) {
     _initFromSettings();
+    sessionController.addListener(_onSessionChanged);
+  }
+
+  void _onSessionChanged() {
+    if (state.count != sessionController.total) {
+      state = state.copyWith(count: sessionController.total);
+    }
   }
 
   void _initFromSettings() {
@@ -27,9 +60,10 @@ class CounterNotifier extends StateNotifier<CounterState> {
 
   Future<void> increment() async {
     final previousCount = state.count;
-    final newCount = previousCount + 1;
-
-    state = state.copyWith(count: newCount);
+    // incrementManual notifies synchronously, so _onSessionChanged has already
+    // written the new count into state — the controller is the single owner.
+    sessionController.incrementManual();
+    final newCount = sessionController.total;
 
     // Check and trigger alert
     final alertService = _ref.read(alertServiceProvider);
@@ -53,7 +87,7 @@ class CounterNotifier extends StateNotifier<CounterState> {
   Future<void> decrement() async {
     if (state.count <= 0) return; // Prevent negative counts
 
-    state = state.copyWith(count: state.count - 1);
+    sessionController.decrementManual();
 
     // Play light haptic for undo
     final settings = _ref.read(settingsProvider);
@@ -62,6 +96,7 @@ class CounterNotifier extends StateNotifier<CounterState> {
   }
 
   void reset({bool keepSessionStart = false}) {
+    sessionController.reset(keepSessionStart: keepSessionStart);
     state = state.copyWith(
       count: 0,
       sessionStart: keepSessionStart ? state.sessionStart : DateTime.now(),
@@ -77,15 +112,25 @@ class CounterNotifier extends StateNotifier<CounterState> {
   }
 
   void startNewSession() {
+    sessionController.reset(keepSessionStart: false);
     state = state.copyWith(count: 0, sessionStart: DateTime.now());
   }
 
   void loadSession(CountSession session) {
+    // Seed rather than reset: the controller owns the running total, so
+    // leaving it at zero here made the next tap collapse the loaded count to 1.
+    sessionController.seed(session.finalCount);
     state = CounterState(
       count: session.finalCount,
       threshold: session.threshold,
       repeatInterval: session.repeatInterval,
       sessionStart: DateTime.now(),
     );
+  }
+
+  @override
+  void dispose() {
+    sessionController.removeListener(_onSessionChanged);
+    super.dispose();
   }
 }

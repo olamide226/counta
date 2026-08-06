@@ -1,6 +1,7 @@
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../core/services/counter_alert_service.dart';
+import '../../core/services/screen_wake_service.dart';
 import '../../core/services/tap_feedback_service.dart';
 import '../../core/services/notification_service.dart';
 
@@ -16,6 +17,12 @@ final alertServiceProvider = Provider<CounterAlertService>((ref) {
 
 final notificationServiceProvider = Provider<NotificationService>((ref) {
   final service = NotificationService();
+  ref.onDispose(() => service.dispose());
+  return service;
+});
+
+final screenWakeServiceProvider = Provider<ScreenWakeService>((ref) {
+  final service = ScreenWakeService();
   ref.onDispose(() => service.dispose());
   return service;
 });

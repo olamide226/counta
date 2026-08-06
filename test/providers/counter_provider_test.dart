@@ -35,6 +35,15 @@ class MockNotificationService implements NotificationService {
   }) async {}
 
   @override
+  Future<void> showVoiceSessionNotification({
+    required int currentCount,
+    required String phrase,
+  }) async {}
+
+  @override
+  Future<void> cancelVoiceSessionNotification() async {}
+
+  @override
   Future<void> cancelAllNotifications() async {}
 
   @override
@@ -155,7 +164,7 @@ void main() {
       final initialSessionStart = container.read(counterProvider).sessionStart;
 
       // Wait a bit to ensure time difference
-      Future.delayed(const Duration(milliseconds: 10), () {
+      return Future.delayed(const Duration(milliseconds: 10), () {
         notifier.reset();
         final newSessionStart = container.read(counterProvider).sessionStart;
 
@@ -200,7 +209,7 @@ void main() {
 
       final initialSessionStart = container.read(counterProvider).sessionStart;
 
-      Future.delayed(const Duration(milliseconds: 10), () {
+      return Future.delayed(const Duration(milliseconds: 10), () {
         notifier.startNewSession();
 
         final state = container.read(counterProvider);

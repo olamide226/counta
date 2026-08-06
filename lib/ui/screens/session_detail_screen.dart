@@ -1,8 +1,9 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
+import '../../core/theme/sound_mode_presentation.dart';
+
 import '../../domain/models/count_session.dart';
-import '../../domain/models/enums.dart';
 import '../../state/providers/counter_provider.dart';
 import '../../state/providers/sessions_provider.dart';
 
@@ -36,6 +37,25 @@ class SessionDetailScreen extends ConsumerWidget {
             label: 'Final Count',
             value: session.finalCount.toString(),
           ),
+          if (session.phrase != null) ...[
+            const SizedBox(height: 16),
+            _buildStatCard(
+              context,
+              icon: Icons.graphic_eq_rounded,
+              label: 'Phrase chanted',
+              value: '“${session.phrase}”',
+            ),
+          ],
+          if (session.voiceCount != null || session.manualCount != null) ...[
+            const SizedBox(height: 16),
+            _buildStatCard(
+              context,
+              icon: Icons.mic_rounded,
+              label: 'Voice vs tap',
+              value: '${session.voiceCount ?? 0} by voice · '
+                  '${session.manualCount ?? 0} by tap',
+            ),
+          ],
           const SizedBox(height: 16),
           _buildStatCard(
             context,
@@ -78,9 +98,9 @@ class SessionDetailScreen extends ConsumerWidget {
           const SizedBox(height: 16),
           _buildStatCard(
             context,
-            icon: _soundModeIcon(session.soundMode),
+            icon: session.soundMode.icon,
             label: 'Sound Mode',
-            value: _soundModeLabel(session.soundMode),
+            value: session.soundMode.label,
           ),
           if (session.notes != null && session.notes!.isNotEmpty) ...[
             const SizedBox(height: 16),
@@ -227,21 +247,5 @@ class SessionDetailScreen extends ConsumerWidget {
     return '${date.day}/${date.month}/${date.year} ${date.hour.toString().padLeft(2, '0')}:${date.minute.toString().padLeft(2, '0')}';
   }
 
-  IconData _soundModeIcon(SoundMode mode) {
-    return switch (mode) {
-      SoundMode.mute => Icons.volume_off,
-      SoundMode.sound => Icons.volume_up,
-      SoundMode.vibrate => Icons.vibration,
-      SoundMode.soundAndVibrate => Icons.speaker_phone,
-    };
-  }
 
-  String _soundModeLabel(SoundMode mode) {
-    return switch (mode) {
-      SoundMode.mute => 'Mute',
-      SoundMode.sound => 'Sound',
-      SoundMode.vibrate => 'Vibrate',
-      SoundMode.soundAndVibrate => 'Sound & Vibrate',
-    };
-  }
 }

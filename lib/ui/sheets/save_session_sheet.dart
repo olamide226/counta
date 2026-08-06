@@ -19,6 +19,16 @@ class _SaveSessionSheetState extends ConsumerState<SaveSessionSheet> {
   String? _errorMessage;
 
   @override
+  void initState() {
+    super.initState();
+    // Save a voice session without retyping what you just spent it chanting.
+    final phrase = ref.read(sessionControllerProvider).activePhrase;
+    if (phrase != null) {
+      _mantraController.text = phrase.raw;
+    }
+  }
+
+  @override
   void dispose() {
     _mantraController.dispose();
     _notesController.dispose();
@@ -28,6 +38,9 @@ class _SaveSessionSheetState extends ConsumerState<SaveSessionSheet> {
   @override
   Widget build(BuildContext context) {
     final counter = ref.watch(counterProvider);
+    final session = ref.watch(sessionControllerProvider);
+    final phrase = session.activePhrase;
+    final theme = Theme.of(context);
 
     return Padding(
       padding: EdgeInsets.only(
@@ -47,8 +60,51 @@ class _SaveSessionSheetState extends ConsumerState<SaveSessionSheet> {
           const SizedBox(height: 8),
           Text(
             'Count: ${counter.count}',
-            style: Theme.of(context).textTheme.titleMedium,
+            style: theme.textTheme.titleMedium,
           ),
+          if (phrase != null) ...[
+            const SizedBox(height: 12),
+            Container(
+              padding: const EdgeInsets.all(12),
+              decoration: BoxDecoration(
+                color: theme.colorScheme.surfaceContainerHighest,
+                borderRadius: BorderRadius.circular(12),
+              ),
+              child: Row(
+                children: [
+                  Icon(
+                    Icons.graphic_eq_rounded,
+                    size: 18,
+                    color: theme.colorScheme.primary,
+                  ),
+                  const SizedBox(width: 10),
+                  Expanded(
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Text(
+                          '“${phrase.raw}”',
+                          maxLines: 2,
+                          overflow: TextOverflow.ellipsis,
+                          style: theme.textTheme.bodyMedium?.copyWith(
+                            fontWeight: FontWeight.w600,
+                          ),
+                        ),
+                        const SizedBox(height: 2),
+                        Text(
+                          '${session.voiceCount} by voice · '
+                          '${session.manualCount} by tap',
+                          style: theme.textTheme.bodySmall?.copyWith(
+                            color: theme.colorScheme.onSurfaceVariant,
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+                ],
+              ),
+            ),
+          ],
           const SizedBox(height: 16),
           if (_errorMessage != null)
             Container(
@@ -113,6 +169,8 @@ class _SaveSessionSheetState extends ConsumerState<SaveSessionSheet> {
   Future<void> _saveSession() async {
     final counter = ref.read(counterProvider);
     final settings = ref.read(settingsProvider);
+    final controller = ref.read(sessionControllerProvider);
+    final phrase = controller.activePhrase;
 
     final mantra = _mantraController.text.trim();
     if (mantra.isEmpty) {
@@ -139,6 +197,9 @@ class _SaveSessionSheetState extends ConsumerState<SaveSessionSheet> {
       notes: _notesController.text.trim().isNotEmpty
           ? _notesController.text.trim()
           : null,
+      phrase: phrase?.raw,
+      voiceCount: phrase != null ? controller.voiceCount : null,
+      manualCount: phrase != null ? controller.manualCount : null,
     );
 
     await ref.read(sessionsProvider.notifier).saveSession(session);

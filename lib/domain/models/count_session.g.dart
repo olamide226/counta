@@ -29,13 +29,16 @@ class CountSessionAdapter extends TypeAdapter<CountSession> {
       themeId: fields[9] as AppThemeId,
       notes: fields[10] as String?,
       deviceLocale: fields[11] as String?,
+      phrase: fields[12] as String?,
+      voiceCount: fields[13] as int?,
+      manualCount: fields[14] as int?,
     );
   }
 
   @override
   void write(BinaryWriter writer, CountSession obj) {
     writer
-      ..writeByte(12)
+      ..writeByte(15)
       ..writeByte(0)
       ..write(obj.id)
       ..writeByte(1)
@@ -59,7 +62,13 @@ class CountSessionAdapter extends TypeAdapter<CountSession> {
       ..writeByte(10)
       ..write(obj.notes)
       ..writeByte(11)
-      ..write(obj.deviceLocale);
+      ..write(obj.deviceLocale)
+      ..writeByte(12)
+      ..write(obj.phrase)
+      ..writeByte(13)
+      ..write(obj.voiceCount)
+      ..writeByte(14)
+      ..write(obj.manualCount);
   }
 
   @override
