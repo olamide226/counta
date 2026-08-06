@@ -10,8 +10,11 @@ import 'services_provider.dart';
 import 'settings_provider.dart';
 
 final sessionControllerProvider = ChangeNotifierProvider<SessionController>(
-  (ref) => SessionController(),
+  (ref) => SessionController(
+    liveActivityService: ref.watch(liveActivityServiceProvider),
+  ),
 );
+
 
 /// Builds the engine for a voice session.
 ///

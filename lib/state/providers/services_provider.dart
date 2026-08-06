@@ -4,6 +4,7 @@ import '../../core/services/counter_alert_service.dart';
 import '../../core/services/screen_wake_service.dart';
 import '../../core/services/tap_feedback_service.dart';
 import '../../core/services/notification_service.dart';
+import '../../core/services/live_activity_service.dart';
 
 final tapFeedbackServiceProvider = Provider<TapFeedbackService>((ref) {
   final service = TapFeedbackService();
@@ -26,3 +27,10 @@ final screenWakeServiceProvider = Provider<ScreenWakeService>((ref) {
   ref.onDispose(() => service.dispose());
   return service;
 });
+
+final liveActivityServiceProvider = Provider<LiveActivityService>((ref) {
+  final service = LiveActivityService();
+  service.init();
+  return service;
+});
+

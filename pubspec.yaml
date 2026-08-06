@@ -45,6 +45,7 @@ dependencies:
   web_socket_channel: ^3.0.1
   path_provider: ^2.1.5
   wakelock_plus: ^1.7.0
+  live_activities: ^2.5.1
 
 dev_dependencies:
   flutter_test:

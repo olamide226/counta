@@ -3,11 +3,13 @@ import 'package:flutter/foundation.dart';
 
 import '../../domain/counting/counting_engine.dart';
 import '../../core/services/counting/tap_counting_engine.dart';
+import '../../core/services/live_activity_service.dart';
 
 /// Controller holding the authoritative local session count,
 /// tracking voice count and manual count separately.
 class SessionController extends ChangeNotifier {
   CountingEngine _engine;
+  final LiveActivityService? _liveActivityService;
   StreamSubscription<CountEvent>? _countSubscription;
   StreamSubscription<EngineStatus>? _statusSubscription;
   StreamSubscription<String>? _diagnosticsSubscription;
@@ -19,10 +21,14 @@ class SessionController extends ChangeNotifier {
   DateTime? _sessionStart;
   String? _lastDiagnostic;
 
-  SessionController({CountingEngine? engine})
-      : _engine = engine ?? TapCountingEngine() {
+  SessionController({
+    CountingEngine? engine,
+    LiveActivityService? liveActivityService,
+  })  : _engine = engine ?? TapCountingEngine(),
+        _liveActivityService = liveActivityService {
     _attachEngineListeners();
   }
+
 
   int get total => _voiceCount + _manualCount;
   int get voiceCount => _voiceCount;
@@ -70,12 +76,25 @@ class SessionController extends ChangeNotifier {
     });
   }
 
+  void _updateLiveActivity({bool force = false}) {
+    _liveActivityService?.updateActivity(
+      phrase: _activePhrase?.raw ?? '',
+      count: total,
+      voiceCount: _voiceCount,
+      manualCount: _manualCount,
+      status: _status.name,
+      force: force,
+    );
+  }
+
+
   void _handleCountEvent(CountEvent event) {
     // Manual events are deliberately ignored here: incrementManual() has
     // already counted them locally, so counting the echo would double up.
     if (event.source == CountSource.voice) {
       _voiceCount++;
     }
+    _updateLiveActivity();
     notifyListeners();
   }
 
@@ -86,6 +105,7 @@ class SessionController extends ChangeNotifier {
       _lastDiagnostic = null;
     }
     _status = newStatus;
+    _updateLiveActivity();
     notifyListeners();
   }
 
@@ -97,6 +117,14 @@ class SessionController extends ChangeNotifier {
     _lastDiagnostic = null;
     _sessionStart = DateTime.now();
     await _engine.start(phrase);
+    await _liveActivityService?.startActivity(
+      phrase: phrase?.raw ?? '',
+      count: total,
+      voiceCount: _voiceCount,
+      manualCount: _manualCount,
+      status: _status.name,
+    );
+
     notifyListeners();
   }
 
@@ -104,6 +132,7 @@ class SessionController extends ChangeNotifier {
   void incrementManual() {
     _manualCount++;
     _engine.incrementManual();
+    _updateLiveActivity();
     notifyListeners();
   }
 
@@ -118,6 +147,7 @@ class SessionController extends ChangeNotifier {
       // Floor of total is enforced, if manual is 0 we decrement total via voice count adjustment
       _voiceCount--;
     }
+    _updateLiveActivity();
     notifyListeners();
   }
 
@@ -131,6 +161,7 @@ class SessionController extends ChangeNotifier {
     _activePhrase = null;
     _lastDiagnostic = null;
     _sessionStart = startedAt ?? DateTime.now();
+    _updateLiveActivity();
     notifyListeners();
   }
 
@@ -141,6 +172,7 @@ class SessionController extends ChangeNotifier {
     if (!keepSessionStart) {
       _sessionStart = DateTime.now();
     }
+    _updateLiveActivity(force: true);
     notifyListeners();
   }
 
@@ -148,6 +180,7 @@ class SessionController extends ChangeNotifier {
   Future<SessionSummary> stop() async {
     final summary = await _engine.stop();
     _status = EngineStatus.idle;
+    await _liveActivityService?.endActivity();
     notifyListeners();
     return SessionSummary(
       voiceCount: _voiceCount,
@@ -156,6 +189,7 @@ class SessionController extends ChangeNotifier {
       duration: summary.duration,
     );
   }
+
 
   @override
   void dispose() {

@@ -4,6 +4,8 @@
 <dict>
 	<key>CADisableMinimumFrameDurationOnPhone</key>
 	<true/>
+	<key>NSSupportsLiveActivities</key>
+	<true/>
 	<key>NSMicrophoneUsageDescription</key>
 	<string>Counta requires microphone access to listen for your target mantra or phrase during voice counting sessions.</string>
 	<!-- Voice sessions run 1-2 hours and must keep counting while the user
