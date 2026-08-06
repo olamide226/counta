@@ -1,6 +1,8 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
+import '../../core/theme/sound_mode_presentation.dart';
+
 import '../../domain/models/enums.dart';
 import '../../state/providers/settings_provider.dart';
 
@@ -22,8 +24,8 @@ class SoundModeSheet extends ConsumerWidget {
           const SizedBox(height: 16),
           ...SoundMode.values.map(
             (mode) => RadioListTile<SoundMode>(
-              title: Text(_modeLabel(mode)),
-              secondary: Icon(_modeIcon(mode)),
+              title: Text(mode.label),
+              secondary: Icon(mode.icon),
               value: mode,
               groupValue: currentMode,
               onChanged: (value) {
@@ -39,23 +41,7 @@ class SoundModeSheet extends ConsumerWidget {
     );
   }
 
-  String _modeLabel(SoundMode mode) {
-    return switch (mode) {
-      SoundMode.mute => 'Mute',
-      SoundMode.sound => 'Sound Only',
-      SoundMode.vibrate => 'Vibrate Only',
-      SoundMode.soundAndVibrate => 'Sound & Vibrate',
-    };
-  }
 
-  IconData _modeIcon(SoundMode mode) {
-    return switch (mode) {
-      SoundMode.mute => Icons.volume_off,
-      SoundMode.sound => Icons.volume_up,
-      SoundMode.vibrate => Icons.vibration,
-      SoundMode.soundAndVibrate => Icons.speaker_phone,
-    };
-  }
 }
 
 Future<void> showSoundModeSheet(BuildContext context) {

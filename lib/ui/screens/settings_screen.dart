@@ -1,6 +1,8 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
+import '../../core/theme/sound_mode_presentation.dart';
+
 import '../../domain/models/enums.dart';
 import '../../state/providers/settings_provider.dart';
 
@@ -32,9 +34,9 @@ class SettingsScreen extends ConsumerWidget {
           const Divider(),
           _buildSectionHeader(context, 'Sound & Feedback'),
           ListTile(
-            leading: Icon(_soundModeIcon(settings.soundMode)),
+            leading: Icon(settings.soundMode.icon),
             title: const Text('Sound Mode'),
-            subtitle: Text(_soundModeLabel(settings.soundMode)),
+            subtitle: Text(settings.soundMode.label),
             onTap: () => _showSoundModeDialog(context, ref, settings.soundMode),
           ),
           const Divider(),
@@ -108,23 +110,7 @@ class SettingsScreen extends ConsumerWidget {
     };
   }
 
-  IconData _soundModeIcon(SoundMode mode) {
-    return switch (mode) {
-      SoundMode.mute => Icons.volume_off,
-      SoundMode.sound => Icons.volume_up,
-      SoundMode.vibrate => Icons.vibration,
-      SoundMode.soundAndVibrate => Icons.speaker_phone,
-    };
-  }
 
-  String _soundModeLabel(SoundMode mode) {
-    return switch (mode) {
-      SoundMode.mute => 'Mute',
-      SoundMode.sound => 'Sound Only',
-      SoundMode.vibrate => 'Vibrate Only',
-      SoundMode.soundAndVibrate => 'Sound & Vibrate',
-    };
-  }
 
   void _showThemeModeDialog(
     BuildContext context,
@@ -189,8 +175,8 @@ class SettingsScreen extends ConsumerWidget {
         title: const Text('Sound Mode'),
         children: SoundMode.values.map((mode) {
           return RadioListTile<SoundMode>(
-            title: Text(_soundModeLabel(mode)),
-            secondary: Icon(_soundModeIcon(mode)),
+            title: Text(mode.label),
+            secondary: Icon(mode.icon),
             value: mode,
             groupValue: current,
             onChanged: (value) {

@@ -52,6 +52,12 @@ class SessionsScreen extends ConsumerWidget {
                         .deleteSession(session.id);
                   },
                   child: ListTile(
+                    leading: session.isVoiceSession
+                        ? Icon(
+                            Icons.graphic_eq_rounded,
+                            color: Theme.of(context).colorScheme.primary,
+                          )
+                        : const Icon(Icons.touch_app_outlined),
                     title: Text(session.mantra),
                     subtitle: Text(
                       '${session.finalCount} counts • ${_formatDate(session.endedAt)}',

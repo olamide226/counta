@@ -1,7 +1,10 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
-import '../../domain/models/enums.dart';
+import '../../core/theme/sound_mode_presentation.dart';
+
+import '../../core/config/build_config.dart';
+import '../../state/providers/session_controller.dart';
 import '../../state/providers/app_lifecycle_provider.dart';
 import '../../state/providers/counter_provider.dart';
 import '../../state/providers/services_provider.dart';
@@ -13,8 +16,11 @@ import '../widgets/count_display.dart';
 import '../widgets/quick_controls_bar.dart';
 import '../widgets/resizable_tap_layout.dart';
 import '../widgets/tap_zone.dart';
+import '../widgets/voice_session_banner.dart';
+import 'phrase_setup_screen.dart';
 import 'sessions_screen.dart';
 import 'settings_screen.dart';
+import 'debug/streaming_debug_screen.dart';
 
 class CounterScreen extends ConsumerStatefulWidget {
   const CounterScreen({super.key});
@@ -47,61 +53,161 @@ class _CounterScreenState extends ConsumerState<CounterScreen>
     ref.read(appLifecycleProvider.notifier).handleLifecycleChange(state);
   }
 
-  @override
-  Widget build(BuildContext context) {
-    final counter = ref.watch(counterProvider);
-    final settings = ref.watch(settingsProvider);
-
-    return Scaffold(
-      appBar: AppBar(
-        title: const Text('Counta'),
-        centerTitle: true,
-        actions: [
-          IconButton(
-            icon: const Icon(Icons.history),
-            onPressed: () => Navigator.of(
-              context,
-            ).push(MaterialPageRoute(builder: (_) => const SessionsScreen())),
-          ),
-          IconButton(
-            icon: const Icon(Icons.settings),
-            onPressed: () => Navigator.of(
-              context,
-            ).push(MaterialPageRoute(builder: (_) => const SettingsScreen())),
-          ),
-        ],
-      ),
-      body: SafeArea(
-        child: ResizableTapLayout(
-          tapChild: TapZone(
-            onTap: () => ref.read(counterProvider.notifier).increment(),
-          ),
-          infoChild: SingleChildScrollView(
-            padding: const EdgeInsets.all(16),
-            child: Column(
-              mainAxisAlignment: MainAxisAlignment.center,
-              mainAxisSize: MainAxisSize.min,
-              children: [
-                CountDisplay(count: counter.count),
-                const SizedBox(height: 16),
-                QuickControlsBar(
-                  onReset: () =>
-                      _handleReset(context, ref, settings.confirmReset),
-                  onUndo: () => ref.read(counterProvider.notifier).decrement(),
-                  onSave: () => showSaveSessionSheet(context),
-                  onAlertConfig: () => showAlertConfigSheet(context),
-                  onSoundMode: () => showSoundModeSheet(context),
-                  soundModeIcon: _getSoundModeIcon(settings.soundMode),
-                ),
-              ],
-            ),
-          ),
+  void _openPhraseSetup(BuildContext context, SessionController sessionController) {
+    Navigator.of(context).push(
+      MaterialPageRoute(
+        builder: (_) => PhraseSetupScreen(
+          onStartSession: (phraseSpec) async {
+            sessionController.setEngine(ref.read(voiceEngineFactoryProvider)());
+            await sessionController.startSession(phraseSpec);
+          },
         ),
       ),
     );
   }
 
-  void _handleReset(BuildContext context, WidgetRef ref, bool confirmReset) {
+  Future<void> _stopVoiceSession(SessionController sessionController) async {
+    try {
+      await sessionController.stop();
+    } finally {
+      // Revert engine to TapCountingEngine even if teardown complained, so the
+      // app is never left holding a dead cloud engine.
+      sessionController.setEngine(ref.read(tapEngineFactoryProvider)());
+    }
+
+    if (!mounted) return;
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(
+        content: const Text('Voice session ended'),
+        behavior: SnackBarBehavior.floating,
+        duration: const Duration(seconds: 2),
+        action: SnackBarAction(
+          label: 'Save',
+          onPressed: () => showSaveSessionSheet(context),
+        ),
+      ),
+    );
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final counter = ref.watch(counterProvider);
+    final settings = ref.watch(settingsProvider);
+    final sessionController = ref.watch(sessionControllerProvider);
+
+    final isVoiceActive = sessionController.isVoiceActive;
+    final scheme = Theme.of(context).colorScheme;
+
+    // Mirror the screen wakelock to session state here rather than at the call
+    // sites, so a session that ends by erroring out releases it too.
+    ref.listen<SessionController>(sessionControllerProvider, (prev, next) {
+      final wasActive = prev?.isVoiceActive ?? false;
+      if (wasActive == next.isVoiceActive) return;
+
+      ref.read(screenWakeServiceProvider).setActive(next.isVoiceActive);
+      if (!next.isVoiceActive) {
+        ref.read(notificationServiceProvider).cancelVoiceSessionNotification();
+      }
+    });
+
+    return Scaffold(
+      appBar: AppBar(
+        title: const Text(BuildConfig.appName),
+        centerTitle: true,
+        actions: [
+          IconButton(
+            icon: Icon(
+              isVoiceActive ? Icons.stop_circle_outlined : Icons.mic_none_rounded,
+              color: isVoiceActive ? scheme.error : null,
+            ),
+            tooltip: isVoiceActive
+                ? 'Stop voice counting'
+                : 'Start voice counting',
+            onPressed: () {
+              if (isVoiceActive) {
+                _stopVoiceSession(sessionController);
+              } else {
+                _openPhraseSetup(context, sessionController);
+              }
+            },
+          ),
+          // Dev builds only: this screen exposes a Deepgram API key field and
+          // raw transcripts, neither of which belongs in a release.
+          if (BuildConfig.showDebugTools)
+            IconButton(
+              icon: const Icon(Icons.bug_report),
+              tooltip: 'Voice Streaming Debug',
+              onPressed: () => Navigator.of(context).push(
+                MaterialPageRoute(builder: (_) => const StreamingDebugScreen()),
+              ),
+            ),
+          IconButton(
+            icon: const Icon(Icons.history),
+            onPressed: () => Navigator.of(context).push(
+              MaterialPageRoute(builder: (_) => const SessionsScreen()),
+            ),
+          ),
+          IconButton(
+            icon: const Icon(Icons.settings),
+            onPressed: () => Navigator.of(context).push(
+              MaterialPageRoute(builder: (_) => const SettingsScreen()),
+            ),
+          ),
+        ],
+      ),
+      body: SafeArea(
+        top: false,
+        child: Column(
+          children: [
+            if (isVoiceActive)
+              VoiceSessionBanner(
+                status: sessionController.status,
+                phrase: sessionController.activePhrase?.raw ?? 'Voice session',
+                voiceCount: sessionController.voiceCount,
+                manualCount: sessionController.manualCount,
+                diagnostic: sessionController.lastDiagnostic,
+                onStop: () => _stopVoiceSession(sessionController),
+              ),
+            Expanded(
+              child: ResizableTapLayout(
+                tapChild: TapZone(
+                  onTap: () => ref.read(counterProvider.notifier).increment(),
+                ),
+                infoChild: SingleChildScrollView(
+                  padding: const EdgeInsets.all(16),
+                  child: Column(
+                    mainAxisAlignment: MainAxisAlignment.center,
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      CountDisplay(count: counter.count),
+                      const SizedBox(height: 16),
+                      QuickControlsBar(
+                        onReset: () => _handleReset(
+                            context, ref, sessionController, settings.confirmReset),
+                        onUndo: () =>
+                            ref.read(counterProvider.notifier).decrement(),
+                        onSave: () => showSaveSessionSheet(context),
+                        onAlertConfig: () => showAlertConfigSheet(context),
+                        onSoundMode: () => showSoundModeSheet(context),
+                        soundModeIcon: settings.soundMode.icon,
+                      ),
+                    ],
+                  ),
+                ),
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  void _handleReset(
+    BuildContext context,
+    WidgetRef ref,
+    SessionController sessionController,
+    bool confirmReset,
+  ) {
     if (confirmReset) {
       showDialog(
         context: context,
@@ -128,12 +234,4 @@ class _CounterScreenState extends ConsumerState<CounterScreen>
     }
   }
 
-  IconData _getSoundModeIcon(SoundMode mode) {
-    return switch (mode) {
-      SoundMode.mute => Icons.volume_off,
-      SoundMode.sound => Icons.volume_up,
-      SoundMode.vibrate => Icons.vibration,
-      SoundMode.soundAndVibrate => Icons.speaker_phone,
-    };
-  }
 }
