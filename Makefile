@@ -1,9 +1,12 @@
 .PHONY: help setup format lint analyze test test-coverage build-runner clean build-ios build-ios-ipa build-android build-macos build-web run run-ios run-android run-web doctor icons
 
-# Environment Variables (overridable from shell env or via `make target DEEPGRAM_API_KEY=...`)
+# Environment Configuration
+# Automatically loads variables from .env file if present, or CLI overrides
+-include .env
 DEEPGRAM_API_KEY ?=
 
-DART_DEFINES := $(if $(DEEPGRAM_API_KEY),--dart-define=DEEPGRAM_API_KEY=$(DEEPGRAM_API_KEY),)
+DART_DEFINES := $(if $(wildcard .env),--dart-define-from-file=.env,$(if $(DEEPGRAM_API_KEY),--dart-define=DEEPGRAM_API_KEY=$(DEEPGRAM_API_KEY),))
+
 
 # Default target
 help:
