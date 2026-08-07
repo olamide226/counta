@@ -1,5 +1,10 @@
 .PHONY: help setup format lint analyze test test-coverage build-runner clean build-ios build-ios-ipa build-android build-macos build-web run run-ios run-android run-web doctor icons
 
+# Environment Variables (overridable from shell env or via `make target DEEPGRAM_API_KEY=...`)
+DEEPGRAM_API_KEY ?=
+
+DART_DEFINES := $(if $(DEEPGRAM_API_KEY),--dart-define=DEEPGRAM_API_KEY=$(DEEPGRAM_API_KEY),)
+
 # Default target
 help:
 	@echo "Counta - Mantra Counter App"
@@ -14,14 +19,14 @@ help:
 	@echo "  make build-runner   - Generate code for Hive models"
 	@echo "  make clean          - Clean build artifacts"
 	@echo ""
-	@echo "Build commands:"
+	@echo "Build commands (supports DEEPGRAM_API_KEY=...):"
 	@echo "  make build-ios      - Build iOS app (debug/ad-hoc)"
 	@echo "  make build-ios-ipa  - Build iOS archive for App Store/TestFlight"
 	@echo "  make build-android  - Build Android APK"
 	@echo "  make build-macos    - Build macOS app"
 	@echo "  make build-web      - Build web app"
 	@echo ""
-	@echo "Run commands:"
+	@echo "Run commands (supports DEEPGRAM_API_KEY=...):"
 	@echo "  make run            - Run app (default device)"
 	@echo "  make run-ios        - Run on iOS"
 	@echo "  make run-android    - Run on Android"
@@ -93,58 +98,58 @@ clean:
 # Build for iOS
 build-ios:
 	@echo "🍎 Building iOS app..."
-	flutter build ios
+	flutter build ios $(DART_DEFINES)
 	@echo "✅ iOS build complete!"
 
 # Build iOS archive (.ipa) for App Store / TestFlight
 build-ios-ipa:
 	@echo "🍎 Building iOS archive..."
-	flutter build ipa
+	flutter build ipa $(DART_DEFINES)
 	@echo "✅ iOS archive ready at build/ios/archive/Runner.xcarchive"
 	@echo "   Upload via Xcode Organizer: open build/ios/archive/Runner.xcarchive"
 
 # Build for Android
 build-android:
 	@echo "🤖 Building Android APK..."
-	flutter build apk
+	flutter build apk $(DART_DEFINES)
 	@echo "✅ Android build complete!"
 
 # Build for macOS
 build-macos:
 	@echo "💻 Building macOS app..."
-	flutter build macos
+	flutter build macos $(DART_DEFINES)
 	@echo "✅ macOS build complete!"
 
 # Build for Web
 build-web:
 	@echo "🌐 Building web app..."
-	flutter build web
+	flutter build web $(DART_DEFINES)
 	@echo "✅ Web build complete!"
 
 # Run on default device
 run:
 	@echo "🚀 Running app..."
-	flutter run
+	flutter run $(DART_DEFINES)
 
 # Run on iOS
 run-ios:
 	@echo "🍎 Running on iOS..."
-	flutter run -d ios
+	flutter run -d ios $(DART_DEFINES)
 
 # Run on Android
 run-android:
 	@echo "🤖 Running on Android..."
-	flutter run -d android
+	flutter run -d android $(DART_DEFINES)
 
 # Run on Web (Chrome)
 run-web:
 	@echo "🌐 Running on Chrome..."
-	flutter run -d chrome
+	flutter run -d chrome $(DART_DEFINES)
 
 # Run on macOS
 run-macos:
 	@echo "💻 Running on macOS..."
-	flutter run -d macos
+	flutter run -d macos $(DART_DEFINES)
 
 # Generate app icons from assets/icon/app_icon.png
 icons:
