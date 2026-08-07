@@ -1,0 +1,18 @@
+// Single source of truth for bundle identity, shared by the Runner target (via
+// Debug.xcconfig / Release.xcconfig) and by the CountaLiveActivityExtension
+// target, which uses it as its own base configuration.
+//
+// The extension needs APP_BUNDLE_ID too: iOS refuses to install an app whose
+// appex identifier is not prefixed with the host app's identifier, so the appex
+// derives its ID as $(APP_BUNDLE_ID).CountaLiveActivity.
+//
+// Generated.xcconfig is included here so the extension also sees
+// FLUTTER_BUILD_NAME / FLUTTER_BUILD_NUMBER and can keep its version in step
+// with the app's.
+#include "Generated.xcconfig"
+
+// Release keeps the published app's ID. Debug and Profile are dev builds, so
+// they get the dev ID and can sit beside the App Store version.
+APP_BUNDLE_ID=com.ruach-tech.counta
+APP_BUNDLE_ID[config=Debug]=com.ruach-tech.counta.dev
+APP_BUNDLE_ID[config=Profile]=com.ruach-tech.counta.dev

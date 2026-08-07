@@ -1,13 +1,12 @@
 #include? "Pods/Target Support Files/Pods-Runner/Pods-Runner.release.xcconfig"
 #include "Generated.xcconfig"
 
+// Bundle identity (APP_BUNDLE_ID) lives here so the Live Activity extension can
+// share it.
+#include "AppIdentity.xcconfig"
+
 // Home-screen name. The Profile configuration also builds against this file,
 // but a profile build is still a dev build, so it gets the dev name to match
 // BuildConfig.appName on the Dart side.
 APP_DISPLAY_NAME=Counta
 APP_DISPLAY_NAME[config=Profile]=Counta Dev
-
-// Bundle identity. Release keeps the published app's ID; Profile is a dev
-// build, so it gets the dev ID and can sit beside the App Store version.
-APP_BUNDLE_ID=com.ruach-tech.counta
-APP_BUNDLE_ID[config=Profile]=com.ruach-tech.counta.dev

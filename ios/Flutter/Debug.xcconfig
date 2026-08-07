@@ -1,9 +1,11 @@
 #include? "Pods/Target Support Files/Pods-Runner/Pods-Runner.debug.xcconfig"
 #include "Generated.xcconfig"
 
+// Bundle identity (APP_BUNDLE_ID) lives here so the Live Activity extension can
+// share it. Dev builds install alongside the published app rather than
+// replacing it.
+#include "AppIdentity.xcconfig"
+
 // Home-screen name for dev builds, so it is distinguishable from the
 // published app. Release keeps the plain name.
 APP_DISPLAY_NAME=Counta Dev
-
-// Dev builds install alongside the published app rather than replacing it.
-APP_BUNDLE_ID=com.ruach-tech.counta.dev

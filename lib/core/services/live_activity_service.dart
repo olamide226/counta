@@ -48,9 +48,14 @@ class LiveActivityService {
       // Clean up any existing activity first
       await endActivity();
 
+      // iOSEnableRemoteUpdates defaults to true, which makes the plugin request
+      // a push token. That requires the Push Notifications capability and fails
+      // with ActivityKit.ActivityInput error 0 without it. Counta updates the
+      // activity locally from updateActivity(), so no APNs round trip is needed.
       _activityId = await _liveActivities.createActivity(
         'counta_active_session',
         data,
+        iOSEnableRemoteUpdates: false,
       );
       _lastUpdateTime = DateTime.now();
       debugPrint('Live Activity started with id: $_activityId');
