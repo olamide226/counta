@@ -5,6 +5,7 @@ import '../../domain/models/count_session.dart';
 import '../../state/providers/counter_provider.dart';
 import '../../state/providers/sessions_provider.dart';
 import '../../state/providers/settings_provider.dart';
+import '../../state/providers/services_provider.dart';
 
 class SaveSessionSheet extends ConsumerStatefulWidget {
   const SaveSessionSheet({super.key});
@@ -203,6 +204,9 @@ class _SaveSessionSheetState extends ConsumerState<SaveSessionSheet> {
     );
 
     await ref.read(sessionsProvider.notifier).saveSession(session);
+
+    // Clear any lingering notifications now that the session is saved.
+    await ref.read(notificationServiceProvider).cancelAllNotifications();
 
     if (mounted) {
       Navigator.of(context).pop();

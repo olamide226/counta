@@ -109,14 +109,13 @@ class SessionController extends ChangeNotifier {
     notifyListeners();
   }
 
-  /// Start a session (voice or tap).
+  /// Start or resume voice counting mid-session without wiping current count.
   Future<void> startSession([PhraseSpec? phrase]) async {
-    _voiceCount = 0;
-    _manualCount = 0;
     _activePhrase = phrase;
     _lastDiagnostic = null;
-    _sessionStart = DateTime.now();
+    _sessionStart ??= DateTime.now();
     await _engine.start(phrase);
+
     await _liveActivityService?.startActivity(
       phrase: phrase?.raw ?? '',
       count: total,

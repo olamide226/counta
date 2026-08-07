@@ -36,9 +36,12 @@ class _CounterScreenState extends ConsumerState<CounterScreen>
     super.initState();
     WidgetsBinding.instance.addObserver(this);
 
-    // Initialize notification service
-    WidgetsBinding.instance.addPostFrameCallback((_) {
-      ref.read(notificationServiceProvider).init();
+    // Initialize notification service and clear stale notifications from
+    // any previous session that may have been killed or crashed.
+    WidgetsBinding.instance.addPostFrameCallback((_) async {
+      final ns = ref.read(notificationServiceProvider);
+      await ns.init();
+      await ns.cancelAllNotifications();
     });
   }
 
@@ -75,18 +78,20 @@ class _CounterScreenState extends ConsumerState<CounterScreen>
       sessionController.setEngine(ref.read(tapEngineFactoryProvider)());
     }
 
+    // Clear all notifications — the voice session notification and any stale
+    // resume notifications from a previous session.
+    await ref.read(notificationServiceProvider).cancelAllNotifications();
+
     if (!mounted) return;
+
     ScaffoldMessenger.of(context).showSnackBar(
-      SnackBar(
-        content: const Text('Voice session ended'),
+      const SnackBar(
+        content: Text('Voice capture paused'),
         behavior: SnackBarBehavior.floating,
-        duration: const Duration(seconds: 2),
-        action: SnackBarAction(
-          label: 'Save',
-          onPressed: () => showSaveSessionSheet(context),
-        ),
+        duration: Duration(seconds: 2),
       ),
     );
+
   }
 
   @override
