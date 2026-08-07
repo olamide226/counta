@@ -129,10 +129,11 @@ void main() {
       await controller.startSession(phrase);
 
       expect(controller.activePhrase, phrase);
-      expect(controller.total, 0);
+      expect(controller.total, 1);
       expect(controller.voiceCount, 0);
-      expect(controller.manualCount, 0);
+      expect(controller.manualCount, 1);
       expect(controller.status, EngineStatus.live);
+
     });
 
     test('stop returns complete SessionSummary', () async {

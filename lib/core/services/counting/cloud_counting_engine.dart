@@ -85,8 +85,8 @@ class CloudCountingEngine implements CountingEngine {
   })  : _audioSource = audioSource ?? AudioSource(),
         _speechSocket = speechSocket ?? DeepgramSocket(),
         apiKeyOrToken = apiKeyOrToken ??
-            const String.fromEnvironment('DEEPGRAM_API_KEY',
-                defaultValue: '873faaaa8862bcff17e5ef732f352a85eed7a49c');
+            const String.fromEnvironment('DEEPGRAM_API_KEY');
+
 
   @override
   Stream<CountEvent> get counts => _countsController.stream;
