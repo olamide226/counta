@@ -55,8 +55,10 @@ class LiveActivityService {
       _activityId = await _liveActivities.createActivity(
         'counta_active_session',
         data,
+        removeWhenAppIsKilled: true,
         iOSEnableRemoteUpdates: false,
       );
+
       _lastUpdateTime = DateTime.now();
       debugPrint('Live Activity started with id: $_activityId');
     } catch (e) {

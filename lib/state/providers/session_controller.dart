@@ -77,6 +77,7 @@ class SessionController extends ChangeNotifier {
   }
 
   void _updateLiveActivity({bool force = false}) {
+    if (!isVoiceActive) return;
     _liveActivityService?.updateActivity(
       phrase: _activePhrase?.raw ?? '',
       count: total,
@@ -86,6 +87,7 @@ class SessionController extends ChangeNotifier {
       force: force,
     );
   }
+
 
 
   void _handleCountEvent(CountEvent event) {
