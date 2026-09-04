@@ -72,6 +72,14 @@ void main() {
       0.70,
     ], (v) => MatcherConfig(threshold: v));
 
+    sweep<double>('anchoredThreshold (recall)', const [
+      0.80,
+      0.70,
+      0.65,
+      0.60,
+      0.50,
+    ], (v) => MatcherConfig(anchoredThreshold: v));
+
     sweep<double>(
       'refractoryMultiplier with no floor (recall)',
       const [0.0, 0.20, 0.40, 0.60],

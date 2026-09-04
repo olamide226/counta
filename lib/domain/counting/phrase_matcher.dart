@@ -24,6 +24,14 @@ class Detection {
 
 class MatcherConfig {
   final double threshold;
+
+  /// Lower similarity accepted for a candidate whose head and tail match the
+  /// target exactly. Real transcripts garble the *middle* of a repetition far
+  /// more often than its ends ("the wisdom of god is how to walk in me"), and
+  /// a slice bracketed by the target's own opening and closing words is far
+  /// more likely a mangled repetition than unrelated speech. Set equal to
+  /// [threshold] to disable.
+  final double anchoredThreshold;
   final double refractoryMultiplier;
   final int refractoryFloorMs;
   final double windowSlack;
@@ -32,6 +40,7 @@ class MatcherConfig {
 
   const MatcherConfig({
     this.threshold = 0.80,
+    this.anchoredThreshold = 0.65,
     this.refractoryMultiplier = 0.0,
     this.refractoryFloorMs = 0,
     this.windowSlack = 1.5,
@@ -110,6 +119,11 @@ class PhraseMatcher {
   List<String> normaliseText(String text) => _normaliser(text);
 
   /// Calculates token-level Levenshtein similarity ratio in [0, 1].
+  ///
+  /// A substitution between two tokens that are themselves similar at the
+  /// character level ("working" for "work", "gods" for "god") costs less than
+  /// a full edit, so inflected or lightly misheard words are not punished as
+  /// hard as unrelated ones.
   double calculateTokenSimilarity(
     List<String> candidate,
     List<String> targetTokens,
@@ -122,16 +136,16 @@ class PhraseMatcher {
     return 1.0 - (distance / maxLen);
   }
 
-  int _levenshteinDistance(List<String> a, List<String> b) {
+  double _levenshteinDistance(List<String> a, List<String> b) {
     final m = a.length;
     final n = b.length;
-    var previous = List<int>.generate(n + 1, (index) => index);
-    var current = List<int>.filled(n + 1, 0);
+    var previous = List<double>.generate(n + 1, (index) => index.toDouble());
+    var current = List<double>.filled(n + 1, 0);
 
     for (int i = 1; i <= m; i++) {
-      current[0] = i;
+      current[0] = i.toDouble();
       for (int j = 1; j <= n; j++) {
-        final cost = a[i - 1] == b[j - 1] ? 0 : 1;
+        final cost = _substitutionCost(a[i - 1], b[j - 1]);
         current[j] = min(
           min(previous[j] + 1, current[j - 1] + 1),
           previous[j - 1] + cost,
@@ -143,6 +157,61 @@ class PhraseMatcher {
       current = swap;
     }
     return previous[n];
+  }
+
+  /// Tokens this short are too easy to confuse ("in"/"is"/"it") for character
+  /// overlap to mean anything, so they only ever match exactly.
+  static const int _minFuzzyTokenLength = 3;
+
+  /// Below this character similarity two tokens are treated as unrelated.
+  static const double _minFuzzyTokenSimilarity = 0.5;
+
+  double _substitutionCost(String a, String b) {
+    if (a == b) return 0.0;
+    if (a.length < _minFuzzyTokenLength || b.length < _minFuzzyTokenLength) {
+      return 1.0;
+    }
+    final similarity = 1.0 - _charLevenshtein(a, b) / max(a.length, b.length);
+    return similarity >= _minFuzzyTokenSimilarity ? 1.0 - similarity : 1.0;
+  }
+
+  static int _charLevenshtein(String a, String b) {
+    final m = a.length;
+    final n = b.length;
+    var previous = List<int>.generate(n + 1, (index) => index);
+    var current = List<int>.filled(n + 1, 0);
+    for (int i = 1; i <= m; i++) {
+      current[0] = i;
+      for (int j = 1; j <= n; j++) {
+        final cost = a.codeUnitAt(i - 1) == b.codeUnitAt(j - 1) ? 0 : 1;
+        current[j] = min(
+          min(previous[j] + 1, current[j - 1] + 1),
+          previous[j - 1] + cost,
+        );
+      }
+      final swap = previous;
+      previous = current;
+      current = swap;
+    }
+    return previous[n];
+  }
+
+  /// How many leading target tokens a candidate must reproduce exactly to
+  /// count as anchored. Anchoring needs at least four target tokens so that
+  /// the head and tail leave a middle for the relaxation to apply to.
+  static const int _minAnchoredTargetLength = 4;
+
+  int get _headAnchorLength => max(2, _normalisedTarget.length ~/ 3);
+
+  bool _isAnchored(List<String> candidate) {
+    final target = _normalisedTarget;
+    if (target.length < _minAnchoredTargetLength) return false;
+    final head = _headAnchorLength;
+    if (candidate.length <= head) return false;
+    for (int i = 0; i < head; i++) {
+      if (candidate[i] != target[i]) return false;
+    }
+    return candidate.last == target.last;
   }
 
   /// Calculates current adaptive refractory period in milliseconds.
@@ -235,18 +304,12 @@ class PhraseMatcher {
 
     _window.addAll(newTokens);
 
-    // Limit window size using windowSlack
-    final maxWindowLen =
-        (normalisedTarget.length * config.windowSlack).ceil() + 3;
-    if (_window.length > maxWindowLen) {
-      _window.removeRange(0, _window.length - maxWindowLen);
-    }
-
     // Evaluate candidate slices and choose the closest match. Searching by
     // length alone let a target plus one noise word beat an exact target.
     final targetLen = normalisedTarget.length;
     final minSliceLen = max(1, (targetLen * 0.7).floor());
     final maxSliceLen = (targetLen * config.windowSlack).ceil();
+    final maxRetainedWindowLen = maxSliceLen + 3;
 
     while (_window.isNotEmpty) {
       _MatchCandidate? best;
@@ -275,7 +338,10 @@ class PhraseMatcher {
             normalisedTarget,
           );
 
-          if (similarity < config.threshold) continue;
+          final threshold = _isAnchored(candidateStringList)
+              ? min(config.threshold, config.anchoredThreshold)
+              : config.threshold;
+          if (similarity < threshold) continue;
 
           final candidate = _MatchCandidate(
             startIndex: startIdx,
@@ -326,6 +392,14 @@ class PhraseMatcher {
       );
 
       _window.removeRange(0, best.startIndex + best.length);
+    }
+
+    // Retain only enough unmatched context to bridge a phrase split across
+    // adjacent final segments. This must happen after scanning the newly
+    // arrived segment, otherwise a long phrase repeated twice in one segment
+    // can be truncated before either repetition is counted.
+    if (_window.length > maxRetainedWindowLen) {
+      _window.removeRange(0, _window.length - maxRetainedWindowLen);
     }
 
     return detections;

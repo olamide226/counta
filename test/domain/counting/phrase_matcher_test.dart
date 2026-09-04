@@ -131,6 +131,119 @@ void main() {
       expect(detections.single.audioOffset, const Duration(milliseconds: 2050));
     });
 
+    test('a lightly misheard word costs less than an unrelated one', () {
+      final target = [
+        'the',
+        'wisdom',
+        'of',
+        'god',
+        'is',
+        'at',
+        'work',
+        'in',
+        'me',
+      ];
+      final inflected = matcher.calculateTokenSimilarity([
+        'the',
+        'wisdom',
+        'of',
+        'god',
+        'is',
+        'at',
+        'working',
+        'in',
+        'me',
+      ], target);
+      final unrelated = matcher.calculateTokenSimilarity([
+        'the',
+        'wisdom',
+        'of',
+        'god',
+        'is',
+        'at',
+        'peace',
+        'in',
+        'me',
+      ], target);
+      expect(inflected, greaterThan(unrelated));
+      expect(unrelated, closeTo(1 - 1 / 9, 0.001));
+    });
+
+    test('short tokens never fuzzy-match each other', () {
+      final sim = matcher.calculateTokenSimilarity(
+        ['i', 'am', 'rich', 'is', 'wisdom'],
+        ['i', 'am', 'rich', 'in', 'wisdom'],
+      );
+      expect(sim, closeTo(0.80, 0.001));
+    });
+
+    group('anchored relaxation', () {
+      final long = PhraseSpec(
+        raw: 'The wisdom of God is at work in me',
+        normalisedTokens: const [
+          'the',
+          'wisdom',
+          'of',
+          'god',
+          'is',
+          'at',
+          'work',
+          'in',
+          'me',
+        ],
+      );
+
+      TranscriptSegment finalSegment(String text) => TranscriptSegment(
+        text: text,
+        start: 1.0,
+        duration: 3.0,
+        isFinal: true,
+        confidence: 0.9,
+      );
+
+      test('accepts a repetition whose middle is garbled', () {
+        // Recorded in normal_426: scores 0.70, below the plain threshold.
+        final m = PhraseMatcher(target: long);
+        final detections = m.ingest(
+          finalSegment('the wisdom of god is how to walk in me'),
+        );
+        expect(detections, hasLength(1));
+      });
+
+      test('does not relax when the head is missing', () {
+        final m = PhraseMatcher(target: long);
+        expect(m.ingest(finalSegment('gods wisdom is at work in me')), isEmpty);
+      });
+
+      test('does not relax when the tail is missing', () {
+        final m = PhraseMatcher(target: long);
+        expect(
+          m.ingest(finalSegment('the wisdom of god is how to walk in')),
+          isEmpty,
+        );
+      });
+
+      test('can be disabled by matching the plain threshold', () {
+        final m = PhraseMatcher(
+          target: long,
+          config: const MatcherConfig(anchoredThreshold: 0.80),
+        );
+        expect(
+          m.ingest(finalSegment('the wisdom of god is how to walk in me')),
+          isEmpty,
+        );
+      });
+
+      test('never applies to phrases too short to have a middle', () {
+        const short = PhraseSpec(
+          raw: 'I breakthrough',
+          normalisedTokens: ['i', 'breakthrough'],
+        );
+        final m = PhraseMatcher(target: short);
+        expect(m.ingest(finalSegment('i did breakthrough')), isEmpty);
+      });
+    });
+
     test('prefers the exact phrase over a longer phrase with noise', () {
       final segment = TranscriptSegment(
         text: "I'm rich in wisdom shout",
@@ -191,6 +304,40 @@ void main() {
       final detections = matcher.ingest(seg);
       // Second match occurs after duration spacing, token consumption allows second match
       expect(detections.length, greaterThanOrEqualTo(1));
+    });
+
+    test('counts two long-phrase repetitions in the same final segment', () {
+      final longPhrase = const PhraseSpec(
+        raw: 'The wisdom of God is at work in me',
+        normalisedTokens: [
+          'the',
+          'wisdom',
+          'of',
+          'god',
+          'is',
+          'at',
+          'work',
+          'in',
+          'me',
+        ],
+      );
+      final longPhraseMatcher = PhraseMatcher(target: longPhrase);
+      final segment = TranscriptSegment(
+        text:
+            'the wisdom of god is at work in me the wisdom of god is at work in me',
+        start: 1.0,
+        duration: 6.0,
+        isFinal: true,
+        confidence: 0.99,
+      );
+
+      final detections = longPhraseMatcher.ingest(segment);
+
+      expect(detections, hasLength(2));
+      expect(
+        detections.map((d) => d.matchedText),
+        everyElement('the wisdom of god is at work in me'),
+      );
     });
   });
 
