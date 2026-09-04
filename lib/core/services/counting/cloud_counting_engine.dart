@@ -29,6 +29,13 @@ class CloudCountingEngine implements CountingEngine {
   /// Ceiling on the exponential backoff between attempts.
   final Duration maxReconnectBackoff;
 
+  /// Maximum time audio may flow without any response from the transcription
+  /// service before the socket is treated as silently dead.
+  final Duration transcriptionSilenceTimeout;
+
+  /// How often the silent-connection watchdog checks the latest activity.
+  final Duration transcriptionWatchdogInterval;
+
   final StreamController<CountEvent> _countsController =
       StreamController<CountEvent>.broadcast();
   final StreamController<EngineStatus> _statusController =
@@ -39,6 +46,7 @@ class CloudCountingEngine implements CountingEngine {
   StreamSubscription<Uint8List>? _audioSubscription;
   StreamSubscription<TranscriptSegment>? _segmentSubscription;
   StreamSubscription<SocketState>? _socketStateSubscription;
+  StreamSubscription<void>? _socketActivitySubscription;
 
   PhraseMatcher? _matcher;
   PhraseSpec? _phrase;
@@ -53,6 +61,9 @@ class CloudCountingEngine implements CountingEngine {
   bool _stopped = false;
   int _reconnectAttempts = 0;
   Timer? _reconnectTimer;
+  Timer? _transcriptionWatchdog;
+  DateTime? _lastSocketActivityAt;
+  DateTime? _lastAudioFrameAt;
 
   /// True while a reconnect attempt is executing. The attempt closes the old
   /// socket first, which emits `disconnected` — without this guard the engine
@@ -81,12 +92,13 @@ class CloudCountingEngine implements CountingEngine {
     this.matcherConfig = const MatcherConfig(),
     this.reconnectWindow = const Duration(minutes: 5),
     this.maxReconnectBackoff = const Duration(seconds: 15),
+    this.transcriptionSilenceTimeout = const Duration(seconds: 20),
+    this.transcriptionWatchdogInterval = const Duration(seconds: 5),
     String? apiKeyOrToken,
-  })  : _audioSource = audioSource ?? AudioSource(),
-        _speechSocket = speechSocket ?? DeepgramSocket(),
-        apiKeyOrToken = apiKeyOrToken ??
-            const String.fromEnvironment('DEEPGRAM_API_KEY');
-
+  }) : _audioSource = audioSource ?? AudioSource(),
+       _speechSocket = speechSocket ?? DeepgramSocket(),
+       apiKeyOrToken =
+           apiKeyOrToken ?? const String.fromEnvironment('DEEPGRAM_API_KEY');
 
   @override
   Stream<CountEvent> get counts => _countsController.stream;
@@ -118,7 +130,8 @@ class CloudCountingEngine implements CountingEngine {
 
   @override
   Future<void> start([PhraseSpec? phrase]) async {
-    final targetPhrase = phrase ??
+    final targetPhrase =
+        phrase ??
         const PhraseSpec(
           raw: "I'm rich in wisdom",
           normalisedTokens: ['i', 'am', 'rich', 'in', 'wisdom'],
@@ -132,6 +145,8 @@ class CloudCountingEngine implements CountingEngine {
     _recoveringSince = null;
     _totalReconnects = 0;
     _downtime = Duration.zero;
+    _lastSocketActivityAt = null;
+    _lastAudioFrameAt = null;
     _startTime = DateTime.now();
     _phrase = targetPhrase;
     _matcher = PhraseMatcher(target: targetPhrase, config: matcherConfig);
@@ -155,28 +170,41 @@ class CloudCountingEngine implements CountingEngine {
             _report('Voice counting reconnected.');
           }
           _reconnectAttempts = 0;
+          _lastSocketActivityAt = DateTime.now();
+          _startTranscriptionWatchdog();
           _setStatus(EngineStatus.live);
           break;
         case SocketState.closing:
           break;
         case SocketState.disconnected:
+          _stopTranscriptionWatchdog();
           // A disconnect we did not ask for means the session died mid-count.
           // Reporting `idle` here (as this used to) made the UI quietly drop
           // out of voice mode with no explanation.
           if (!_stopped) {
-            _report(_speechSocket.closeDescription ??
-                'Transcription connection closed unexpectedly.');
+            _report(
+              _speechSocket.closeDescription ??
+                  'Transcription connection closed unexpectedly.',
+            );
             _scheduleReconnect(restartAudio: false);
           }
           break;
         case SocketState.error:
+          _stopTranscriptionWatchdog();
           if (!_stopped) {
-            _report(_speechSocket.closeDescription ??
-                'Transcription connection errored.');
+            _report(
+              _speechSocket.closeDescription ??
+                  'Transcription connection errored.',
+            );
             _scheduleReconnect(restartAudio: false);
           }
           break;
       }
+    });
+
+    _socketActivitySubscription?.cancel();
+    _socketActivitySubscription = _speechSocket.activity.listen((_) {
+      _lastSocketActivityAt = DateTime.now();
     });
 
     // Attach segment listener -> PhraseMatcher
@@ -207,6 +235,7 @@ class CloudCountingEngine implements CountingEngine {
     _audioSubscription?.cancel();
     _audioSubscription = pcmStream.listen(
       (data) {
+        _lastAudioFrameAt = DateTime.now();
         _speechSocket.sendAudio(data);
       },
       onError: (Object error) {
@@ -224,6 +253,35 @@ class CloudCountingEngine implements CountingEngine {
     );
   }
 
+  void _startTranscriptionWatchdog() {
+    _transcriptionWatchdog?.cancel();
+    _transcriptionWatchdog = Timer.periodic(transcriptionWatchdogInterval, (_) {
+      if (_stopped || _speechSocket.currentState != SocketState.connected) {
+        return;
+      }
+
+      final lastAudio = _lastAudioFrameAt;
+      final lastActivity = _lastSocketActivityAt;
+      if (lastAudio == null || lastActivity == null) return;
+
+      final now = DateTime.now();
+      final audioIsFlowing =
+          now.difference(lastAudio) < AudioSource.stallTimeout;
+      final serviceIsSilent =
+          now.difference(lastActivity) >= transcriptionSilenceTimeout;
+      if (!audioIsFlowing || !serviceIsSilent) return;
+
+      _report('Transcription stopped responding. Reconnecting.');
+      _stopTranscriptionWatchdog();
+      _scheduleReconnect(restartAudio: false);
+    });
+  }
+
+  void _stopTranscriptionWatchdog() {
+    _transcriptionWatchdog?.cancel();
+    _transcriptionWatchdog = null;
+  }
+
   /// Schedules a recovery attempt.
   ///
   /// [restartAudio] distinguishes the two failure modes: a dead socket needs
@@ -235,6 +293,8 @@ class CloudCountingEngine implements CountingEngine {
     if (_stopped) return;
     if (_reconnectTimer != null || _reconnectInFlight) return;
 
+    _stopTranscriptionWatchdog();
+
     _recoveringSince ??= DateTime.now();
     final recoveringFor = DateTime.now().difference(_recoveringSince!);
 
@@ -242,8 +302,10 @@ class CloudCountingEngine implements CountingEngine {
     // covers a few seconds, which is nothing across a 1–2 hour session — a
     // tunnel, a lift, or a Wi-Fi handover routinely exceeds it.
     if (recoveringFor >= reconnectWindow) {
-      _report('Could not restore voice counting after '
-          '${recoveringFor.inMinutes} min of retrying. Tap the mic to restart.');
+      _report(
+        'Could not restore voice counting after '
+        '${recoveringFor.inMinutes} min of retrying. Tap the mic to restart.',
+      );
       _setStatus(EngineStatus.error);
       return;
     }
@@ -290,8 +352,9 @@ class CloudCountingEngine implements CountingEngine {
     final exponential = Duration(
       milliseconds: 500 * (1 << (attempt - 1).clamp(0, 10)),
     );
-    final capped =
-        exponential > maxReconnectBackoff ? maxReconnectBackoff : exponential;
+    final capped = exponential > maxReconnectBackoff
+        ? maxReconnectBackoff
+        : exponential;
 
     final jitter = _random.nextInt(
       (capped.inMilliseconds ~/ 4).clamp(1, 1 << 30),
@@ -350,6 +413,7 @@ class CloudCountingEngine implements CountingEngine {
     _stopped = true;
     _reconnectTimer?.cancel();
     _reconnectTimer = null;
+    _stopTranscriptionWatchdog();
 
     try {
       await _audioSubscription?.cancel();
@@ -361,6 +425,8 @@ class CloudCountingEngine implements CountingEngine {
       _segmentSubscription = null;
       await _socketStateSubscription?.cancel();
       _socketStateSubscription = null;
+      await _socketActivitySubscription?.cancel();
+      _socketActivitySubscription = null;
     } catch (e) {
       // Teardown is best-effort. Whatever fails, the session is over and the UI
       // must be told so — otherwise the stop button appears not to work.
@@ -370,8 +436,9 @@ class CloudCountingEngine implements CountingEngine {
     }
 
     final now = DateTime.now();
-    final duration =
-        _startTime != null ? now.difference(_startTime!) : Duration.zero;
+    final duration = _startTime != null
+        ? now.difference(_startTime!)
+        : Duration.zero;
 
     return SessionSummary(
       voiceCount: _voiceCount,

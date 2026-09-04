@@ -1,6 +1,5 @@
 import 'dart:async';
 import 'dart:convert';
-import 'dart:typed_data';
 import 'package:flutter/foundation.dart';
 import 'package:web_socket_channel/io.dart';
 import 'package:web_socket_channel/web_socket_channel.dart';
@@ -18,6 +17,8 @@ class DeepgramSocket implements SpeechSocket {
       StreamController<TranscriptSegment>.broadcast();
   final StreamController<SocketState> _stateController =
       StreamController<SocketState>.broadcast();
+  final StreamController<void> _activityController =
+      StreamController<void>.broadcast();
 
   SocketState _state = SocketState.disconnected;
   DateTime _lastAudioSentAt = DateTime.now();
@@ -32,6 +33,8 @@ class DeepgramSocket implements SpeechSocket {
   @override
   Stream<SocketState> get state => _stateController.stream;
   @override
+  Stream<void> get activity => _activityController.stream;
+  @override
   SocketState get currentState => _state;
   @override
   String? get closeDescription => _closeDescription;
@@ -44,9 +47,7 @@ class DeepgramSocket implements SpeechSocket {
   }
 
   /// Construct the WebSocket URI for Deepgram Nova-3 listen endpoint cleanly via Uri.parse.
-  static Uri buildUri({
-    required PhraseSpec? phrase,
-  }) {
+  static Uri buildUri({required PhraseSpec? phrase}) {
     final queryComponents = <String>[
       'model=nova-3',
       'language=${Uri.encodeComponent(phrase?.languageCode ?? 'en')}',
@@ -83,7 +84,7 @@ class DeepgramSocket implements SpeechSocket {
     required String apiKeyOrToken,
     PhraseSpec? phrase,
     WebSocketChannel Function(Uri uri, Map<String, dynamic> headers)?
-        channelFactory,
+    channelFactory,
   }) async {
     if (_state == SocketState.connected || _state == SocketState.connecting) {
       return;
@@ -106,6 +107,7 @@ class DeepgramSocket implements SpeechSocket {
         }
       }
 
+      await _channel!.ready;
       _setState(SocketState.connected);
       _startKeepAliveTimer();
 
@@ -143,16 +145,21 @@ class DeepgramSocket implements SpeechSocket {
     return switch (code) {
       null => detail,
       1000 => null, // Normal closure — nothing to explain.
-      1011 => 'Transcription timed out'
-          '${detail != null ? ' ($detail)' : ' — no audio was reaching the server'}.',
+      1011 =>
+        'Transcription timed out'
+            '${detail != null ? ' ($detail)' : ' — no audio was reaching the server'}.',
       4001 || 4008 || 4009 =>
         'Transcription rejected the API key${detail != null ? ' ($detail)' : ''}.',
-      _ => 'Transcription closed (code $code)'
-          '${detail != null ? ': $detail' : '.'}',
+      _ =>
+        'Transcription closed (code $code)'
+            '${detail != null ? ': $detail' : '.'}',
     };
   }
 
   void _handleMessage(dynamic message) {
+    if (!_activityController.isClosed) {
+      _activityController.add(null);
+    }
     if (message is! String) return;
 
     try {
@@ -179,7 +186,8 @@ class DeepgramSocket implements SpeechSocket {
 
     final elapsed = DateTime.now().difference(startedAt);
     final audioPosition = Duration(
-      microseconds: (segment.endOffset * Duration.microsecondsPerSecond).round(),
+      microseconds: (segment.endOffset * Duration.microsecondsPerSecond)
+          .round(),
     );
 
     final lag = elapsed - audioPosition;
@@ -251,5 +259,6 @@ class DeepgramSocket implements SpeechSocket {
 
     if (!_segmentController.isClosed) await _segmentController.close();
     if (!_stateController.isClosed) await _stateController.close();
+    if (!_activityController.isClosed) await _activityController.close();
   }
 }

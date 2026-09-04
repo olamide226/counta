@@ -5,13 +5,7 @@ import 'counting_engine.dart';
 import 'transcript_segment.dart';
 
 /// Connection state of a streaming speech recognition socket.
-enum SocketState {
-  disconnected,
-  connecting,
-  connected,
-  closing,
-  error,
-}
+enum SocketState { disconnected, connecting, connected, closing, error }
 
 /// Abstract contract for streaming speech-to-text WebSocket clients.
 ///
@@ -24,6 +18,11 @@ abstract class SpeechSocket {
   /// Stream of socket connection state changes.
   Stream<SocketState> get state;
 
+  /// Emits whenever the transcription service sends any message, including an
+  /// empty result. Used to detect a connection that looks open but has stopped
+  /// responding.
+  Stream<void> get activity;
+
   /// Current connection state.
   SocketState get currentState;
 
@@ -35,10 +34,7 @@ abstract class SpeechSocket {
   String? get closeDescription;
 
   /// Connect to the provider's streaming endpoint with an API key/token and target phrase parameters.
-  Future<void> connect({
-    required String apiKeyOrToken,
-    PhraseSpec? phrase,
-  });
+  Future<void> connect({required String apiKeyOrToken, PhraseSpec? phrase});
 
   /// Stream binary PCM16 audio frames to the socket.
   void sendAudio(Uint8List pcmFrames);

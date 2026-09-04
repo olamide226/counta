@@ -12,6 +12,7 @@ import 'package:counta/core/services/counting/audio_source.dart';
 class FakeSpeechSocket implements SpeechSocket {
   final _segmentsController = StreamController<TranscriptSegment>.broadcast();
   final _stateController = StreamController<SocketState>.broadcast();
+  final _activityController = StreamController<void>.broadcast();
   SocketState _currentState = SocketState.disconnected;
 
   @override
@@ -21,13 +22,19 @@ class FakeSpeechSocket implements SpeechSocket {
   Stream<SocketState> get state => _stateController.stream;
 
   @override
+  Stream<void> get activity => _activityController.stream;
+
+  @override
   SocketState get currentState => _currentState;
 
   @override
   String? closeDescription;
 
   @override
-  Future<void> connect({required String apiKeyOrToken, PhraseSpec? phrase}) async {
+  Future<void> connect({
+    required String apiKeyOrToken,
+    PhraseSpec? phrase,
+  }) async {
     _currentState = SocketState.connected;
     _stateController.add(_currentState);
   }
@@ -40,8 +47,11 @@ class FakeSpeechSocket implements SpeechSocket {
   }
 
   void emitSegment(TranscriptSegment segment) {
+    _activityController.add(null);
     _segmentsController.add(segment);
   }
+
+  void emitActivity() => _activityController.add(null);
 
   @override
   void sendAudio(Uint8List pcmFrames) {}
@@ -56,6 +66,7 @@ class FakeSpeechSocket implements SpeechSocket {
   Future<void> dispose() async {
     await _segmentsController.close();
     await _stateController.close();
+    await _activityController.close();
   }
 }
 
@@ -79,6 +90,10 @@ class FakeAudioSource implements AudioSource {
   /// Simulates iOS pausing capture without closing the stream.
   void emitStall() {
     _controller?.addError(const AudioSourceStalled(Duration(seconds: 3)));
+  }
+
+  void emitFrame() {
+    _controller?.add(Uint8List(320));
   }
 
   @override
@@ -115,58 +130,70 @@ void main() {
     });
 
     test('start transitions status to connecting then live', () async {
-      await engine.start(const PhraseSpec(
-        raw: "I'm rich in wisdom",
-        normalisedTokens: ['i', 'am', 'rich', 'in', 'wisdom'],
-      ));
+      await engine.start(
+        const PhraseSpec(
+          raw: "I'm rich in wisdom",
+          normalisedTokens: ['i', 'am', 'rich', 'in', 'wisdom'],
+        ),
+      );
 
       expect(engine.currentStatus, EngineStatus.live);
     });
 
-    test('emits CountEvent on phrase detection from transcript stream', () async {
-      final events = <CountEvent>[];
-      final sub = engine.counts.listen(events.add);
+    test(
+      'emits CountEvent on phrase detection from transcript stream',
+      () async {
+        final events = <CountEvent>[];
+        final sub = engine.counts.listen(events.add);
 
-      await engine.start(const PhraseSpec(
-        raw: "I'm rich in wisdom",
-        normalisedTokens: ['i', 'am', 'rich', 'in', 'wisdom'],
-      ));
+        await engine.start(
+          const PhraseSpec(
+            raw: "I'm rich in wisdom",
+            normalisedTokens: ['i', 'am', 'rich', 'in', 'wisdom'],
+          ),
+        );
 
-      // Emit matching segment
-      fakeSocket.emitSegment(TranscriptSegment(
-        text: "I'm rich in wisdom",
-        start: 1.0,
-        duration: 2.0,
-        isFinal: true,
-        confidence: 0.99,
-      ));
+        // Emit matching segment
+        fakeSocket.emitSegment(
+          TranscriptSegment(
+            text: "I'm rich in wisdom",
+            start: 1.0,
+            duration: 2.0,
+            isFinal: true,
+            confidence: 0.99,
+          ),
+        );
 
-      await pumpEventQueue();
+        await pumpEventQueue();
 
-      expect(events.length, 1);
-      expect(events.first.source, CountSource.voice);
-      expect(engine.voiceCount, 1);
-      expect(engine.totalCount, 1);
+        expect(events.length, 1);
+        expect(events.first.source, CountSource.voice);
+        expect(engine.voiceCount, 1);
+        expect(engine.totalCount, 1);
 
-      await sub.cancel();
-    });
+        await sub.cancel();
+      },
+    );
 
-    test('incrementManual increments manual count and emits CountSource.manual event', () async {
-      final events = <CountEvent>[];
-      final sub = engine.counts.listen(events.add);
+    test(
+      'incrementManual increments manual count and emits CountSource.manual event',
+      () async {
+        final events = <CountEvent>[];
+        final sub = engine.counts.listen(events.add);
 
-      await engine.start();
-      engine.incrementManual();
+        await engine.start();
+        engine.incrementManual();
 
-      await pumpEventQueue();
+        await pumpEventQueue();
 
-      expect(events.length, 1);
-      expect(events.first.source, CountSource.manual);
-      expect(engine.manualCount, 1);
-      expect(engine.totalCount, 1);
+        expect(events.length, 1);
+        expect(events.first.source, CountSource.manual);
+        expect(engine.manualCount, 1);
+        expect(engine.totalCount, 1);
 
-      await sub.cancel();
-    });
+        await sub.cancel();
+      },
+    );
 
     test('stop always lands on idle, even if teardown throws', () async {
       final throwingSocket = _ThrowingCloseSocket();
@@ -185,39 +212,100 @@ void main() {
       expect(summary.totalCount, 0);
     });
 
-    test('an unrequested drop reports why, instead of going quietly idle',
-        () async {
-      final reasons = <String>[];
-      final statuses = <EngineStatus>[];
-      final diagSub = engine.diagnostics.listen(reasons.add);
-      final statusSub = engine.status.listen(statuses.add);
+    test(
+      'an unrequested drop reports why, instead of going quietly idle',
+      () async {
+        final reasons = <String>[];
+        final statuses = <EngineStatus>[];
+        final diagSub = engine.diagnostics.listen(reasons.add);
+        final statusSub = engine.status.listen(statuses.add);
 
-      await engine.start();
-      fakeSocket.emitDrop(reason: 'Transcription timed out.');
-      await pumpEventQueue();
+        await engine.start();
+        fakeSocket.emitDrop(reason: 'Transcription timed out.');
+        await pumpEventQueue();
 
-      expect(reasons, contains('Transcription timed out.'));
-      expect(engine.currentStatus, EngineStatus.reconnecting);
-      expect(statuses, isNot(contains(EngineStatus.idle)));
+        expect(reasons, contains('Transcription timed out.'));
+        expect(engine.currentStatus, EngineStatus.reconnecting);
+        expect(statuses, isNot(contains(EngineStatus.idle)));
 
-      await diagSub.cancel();
-      await statusSub.cancel();
-    });
+        await diagSub.cancel();
+        await statusSub.cancel();
+      },
+    );
 
-    test('a microphone stall triggers a reconnect rather than silent death',
-        () async {
-      final reasons = <String>[];
-      final sub = engine.diagnostics.listen(reasons.add);
+    test(
+      'a microphone stall triggers a reconnect rather than silent death',
+      () async {
+        final reasons = <String>[];
+        final sub = engine.diagnostics.listen(reasons.add);
 
-      await engine.start();
-      fakeAudio.emitStall();
-      await pumpEventQueue();
+        await engine.start();
+        fakeAudio.emitStall();
+        await pumpEventQueue();
 
-      expect(reasons.single, contains('Microphone stopped delivering audio'));
-      expect(engine.currentStatus, EngineStatus.reconnecting);
+        expect(reasons.single, contains('Microphone stopped delivering audio'));
+        expect(engine.currentStatus, EngineStatus.reconnecting);
 
-      await sub.cancel();
-    });
+        await sub.cancel();
+      },
+    );
+
+    test(
+      'a silent transcription connection is detected and reconnected',
+      () async {
+        final reasons = <String>[];
+        final localSocket = FakeSpeechSocket();
+        final localAudio = FakeAudioSource();
+        final localEngine = CloudCountingEngine(
+          speechSocket: localSocket,
+          audioSource: localAudio,
+          transcriptionSilenceTimeout: const Duration(milliseconds: 80),
+          transcriptionWatchdogInterval: const Duration(milliseconds: 10),
+          maxReconnectBackoff: const Duration(milliseconds: 10),
+        );
+        final sub = localEngine.diagnostics.listen(reasons.add);
+
+        await localEngine.start();
+        localAudio.emitFrame();
+        await Future<void>.delayed(const Duration(milliseconds: 130));
+
+        expect(
+          reasons,
+          contains('Transcription stopped responding. Reconnecting.'),
+        );
+        expect(localEngine.totalReconnects, 1);
+
+        await sub.cancel();
+        await localEngine.dispose();
+      },
+    );
+
+    test(
+      'server activity keeps a healthy transcription connection open',
+      () async {
+        final localSocket = FakeSpeechSocket();
+        final localAudio = FakeAudioSource();
+        final localEngine = CloudCountingEngine(
+          speechSocket: localSocket,
+          audioSource: localAudio,
+          transcriptionSilenceTimeout: const Duration(milliseconds: 70),
+          transcriptionWatchdogInterval: const Duration(milliseconds: 10),
+          maxReconnectBackoff: const Duration(milliseconds: 10),
+        );
+
+        await localEngine.start();
+        localAudio.emitFrame();
+        await Future<void>.delayed(const Duration(milliseconds: 45));
+        localSocket.emitActivity();
+        localAudio.emitFrame();
+        await Future<void>.delayed(const Duration(milliseconds: 45));
+
+        expect(localEngine.totalReconnects, 0);
+        expect(localEngine.currentStatus, EngineStatus.live);
+
+        await localEngine.dispose();
+      },
+    );
 
     test('keeps retrying well past a handful of attempts', () async {
       // The point of the retry budget being time-based: a 30-second outage in
@@ -278,34 +366,38 @@ void main() {
       expect(fakeAudio.startCount, startsBefore);
     });
 
-    test('a recovered drop banks downtime and resets the retry budget',
-        () async {
-      await engine.start();
+    test(
+      'a recovered drop banks downtime and resets the retry budget',
+      () async {
+        await engine.start();
 
-      fakeSocket.emitDrop(reason: 'blip');
-      await Future<void>.delayed(const Duration(milliseconds: 900));
+        fakeSocket.emitDrop(reason: 'blip');
+        await Future<void>.delayed(const Duration(milliseconds: 900));
 
-      expect(engine.currentStatus, EngineStatus.live);
-      expect(engine.totalReconnects, 1);
-      expect(engine.downtime, greaterThan(Duration.zero));
-    });
+        expect(engine.currentStatus, EngineStatus.live);
+        expect(engine.totalReconnects, 1);
+        expect(engine.downtime, greaterThan(Duration.zero));
+      },
+    );
 
-    test('stopping during a pending reconnect does not resurrect the session',
-        () async {
-      await engine.start();
-      fakeAudio.emitStall();
-      await pumpEventQueue();
-      expect(engine.currentStatus, EngineStatus.reconnecting);
+    test(
+      'stopping during a pending reconnect does not resurrect the session',
+      () async {
+        await engine.start();
+        fakeAudio.emitStall();
+        await pumpEventQueue();
+        expect(engine.currentStatus, EngineStatus.reconnecting);
 
-      await engine.stop();
-      final startsAtStop = fakeAudio.startCount;
+        await engine.stop();
+        final startsAtStop = fakeAudio.startCount;
 
-      // Let the backoff timer's deadline pass.
-      await Future<void>.delayed(const Duration(milliseconds: 1200));
+        // Let the backoff timer's deadline pass.
+        await Future<void>.delayed(const Duration(milliseconds: 1200));
 
-      expect(engine.currentStatus, EngineStatus.idle);
-      expect(fakeAudio.startCount, startsAtStop);
-    });
+        expect(engine.currentStatus, EngineStatus.idle);
+        expect(fakeAudio.startCount, startsAtStop);
+      },
+    );
   });
 }
 
