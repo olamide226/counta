@@ -32,8 +32,8 @@ class MatcherConfig {
 
   const MatcherConfig({
     this.threshold = 0.80,
-    this.refractoryMultiplier = 0.60,
-    this.refractoryFloorMs = 1200,
+    this.refractoryMultiplier = 0.0,
+    this.refractoryFloorMs = 0,
     this.windowSlack = 1.5,
     this.homophones = PhraseNormaliser.defaultHomophones,
     this.contractions = PhraseNormaliser.defaultContractions,
@@ -49,6 +49,18 @@ class TokenWithOffset {
     required this.token,
     required this.startSec,
     required this.endSec,
+  });
+}
+
+class _MatchCandidate {
+  final int startIndex;
+  final int length;
+  final double score;
+
+  const _MatchCandidate({
+    required this.startIndex,
+    required this.length,
+    required this.score,
   });
 }
 
@@ -75,20 +87,23 @@ class PhraseMatcher {
   int _detectionsCount = 0;
   double? _lastMatchEndMs;
 
-  PhraseMatcher({
-    required this.target,
-    this.config = const MatcherConfig(),
-  });
+  PhraseMatcher({required this.target, this.config = const MatcherConfig()});
 
   MatcherStats get stats => MatcherStats(
-        detectionsCount: _detectionsCount,
-        windowsEvaluated: _windowsEvaluated,
-        medianUtteranceMs: _calculateMedianUtteranceMs(),
-      );
+    detectionsCount: _detectionsCount,
+    windowsEvaluated: _windowsEvaluated,
+    medianUtteranceMs: _calculateMedianUtteranceMs(),
+  );
 
   late final PhraseNormaliser _normaliser = PhraseNormaliser(
     homophones: config.homophones,
     contractions: config.contractions,
+  );
+
+  late final List<String> _normalisedTarget = List.unmodifiable(
+    target.normalisedTokens.isNotEmpty
+        ? target.normalisedTokens
+        : normaliseText(target.raw),
   );
 
   /// Normalises a string using the config contraction, homophone, punctuation, and lowercase rules.
@@ -96,7 +111,9 @@ class PhraseMatcher {
 
   /// Calculates token-level Levenshtein similarity ratio in [0, 1].
   double calculateTokenSimilarity(
-      List<String> candidate, List<String> targetTokens) {
+    List<String> candidate,
+    List<String> targetTokens,
+  ) {
     if (candidate.isEmpty && targetTokens.isEmpty) return 1.0;
     if (candidate.isEmpty || targetTokens.isEmpty) return 0.0;
 
@@ -108,21 +125,24 @@ class PhraseMatcher {
   int _levenshteinDistance(List<String> a, List<String> b) {
     final m = a.length;
     final n = b.length;
-    final dp = List.generate(m + 1, (_) => List<int>.filled(n + 1, 0));
-
-    for (int i = 0; i <= m; i++) dp[i][0] = i;
-    for (int j = 0; j <= n; j++) dp[0][j] = j;
+    var previous = List<int>.generate(n + 1, (index) => index);
+    var current = List<int>.filled(n + 1, 0);
 
     for (int i = 1; i <= m; i++) {
+      current[0] = i;
       for (int j = 1; j <= n; j++) {
         final cost = a[i - 1] == b[j - 1] ? 0 : 1;
-        dp[i][j] = min(
-          min(dp[i - 1][j] + 1, dp[i][j - 1] + 1),
-          dp[i - 1][j - 1] + cost,
+        current[j] = min(
+          min(previous[j] + 1, current[j - 1] + 1),
+          previous[j - 1] + cost,
         );
       }
+
+      final swap = previous;
+      previous = current;
+      current = swap;
     }
-    return dp[m][n];
+    return previous[n];
   }
 
   /// Calculates current adaptive refractory period in milliseconds.
@@ -180,9 +200,7 @@ class PhraseMatcher {
     if (!segment.isFinal) return [];
 
     final detections = <Detection>[];
-    final normalisedTarget = target.normalisedTokens.isNotEmpty
-        ? target.normalisedTokens
-        : normaliseText(target.raw);
+    final normalisedTarget = _normalisedTarget;
 
     if (normalisedTarget.isEmpty) return [];
 
@@ -192,11 +210,9 @@ class PhraseMatcher {
       for (final w in segment.words) {
         final normWords = normaliseText(w.word);
         for (final nw in normWords) {
-          newTokens.add(TokenWithOffset(
-            token: nw,
-            startSec: w.start,
-            endSec: w.end,
-          ));
+          newTokens.add(
+            TokenWithOffset(token: nw, startSec: w.start, endSec: w.end),
+          );
         }
       }
     } else {
@@ -207,82 +223,131 @@ class PhraseMatcher {
       for (int i = 0; i < normWords.length; i++) {
         final startSec = segment.start + (i * durationPerToken);
         final endSec = startSec + durationPerToken;
-        newTokens.add(TokenWithOffset(
-          token: normWords[i],
-          startSec: startSec,
-          endSec: endSec,
-        ));
+        newTokens.add(
+          TokenWithOffset(
+            token: normWords[i],
+            startSec: startSec,
+            endSec: endSec,
+          ),
+        );
       }
     }
 
     _window.addAll(newTokens);
 
     // Limit window size using windowSlack
-    final maxWindowLen = (normalisedTarget.length * config.windowSlack).ceil() + 3;
+    final maxWindowLen =
+        (normalisedTarget.length * config.windowSlack).ceil() + 3;
     if (_window.length > maxWindowLen) {
       _window.removeRange(0, _window.length - maxWindowLen);
     }
 
-    // Evaluate sliding window candidate slices, longest first
+    // Evaluate candidate slices and choose the closest match. Searching by
+    // length alone let a target plus one noise word beat an exact target.
     final targetLen = normalisedTarget.length;
     final minSliceLen = max(1, (targetLen * 0.7).floor());
     final maxSliceLen = (targetLen * config.windowSlack).ceil();
 
-    bool matchedInPass = false;
-    do {
-      matchedInPass = false;
+    while (_window.isNotEmpty) {
+      _MatchCandidate? best;
 
-      for (int sliceLen = min(maxSliceLen, _window.length);
-          sliceLen >= minSliceLen;
-          sliceLen--) {
-        for (int startIdx = 0; startIdx <= _window.length - sliceLen; startIdx++) {
+      for (
+        int sliceLen = min(maxSliceLen, _window.length);
+        sliceLen >= minSliceLen;
+        sliceLen--
+      ) {
+        for (
+          int startIdx = 0;
+          startIdx <= _window.length - sliceLen;
+          startIdx++
+        ) {
           _windowsEvaluated++;
-          final candidateTokens =
-              _window.sublist(startIdx, startIdx + sliceLen);
-          final candidateStringList = candidateTokens.map((t) => t.token).toList();
+          final candidateTokens = _window.sublist(
+            startIdx,
+            startIdx + sliceLen,
+          );
+          final candidateStringList = candidateTokens
+              .map((t) => t.token)
+              .toList();
 
-          final similarity =
-              calculateTokenSimilarity(candidateStringList, normalisedTarget);
+          final similarity = calculateTokenSimilarity(
+            candidateStringList,
+            normalisedTarget,
+          );
 
-          if (similarity >= config.threshold) {
-            final candidateStartMs = candidateTokens.first.startSec * 1000.0;
-            final candidateEndMs = candidateTokens.last.endSec * 1000.0;
-            final utteranceDurationMs = max(100.0, candidateEndMs - candidateStartMs);
+          if (similarity < config.threshold) continue;
 
-            // Refractory suppression check
-            if (_lastMatchEndMs != null) {
-              final elapsedSinceLastMatch = candidateStartMs - _lastMatchEndMs!;
-              if (elapsedSinceLastMatch < currentRefractoryMs) {
-                // Suppress match due to refractory period
-                continue;
-              }
-            }
-
-            // Accepted match
-            _detectionsCount++;
-            _lastMatchEndMs = candidateEndMs;
-            _observeUtterance(utteranceDurationMs);
-
-            final matchedText = candidateStringList.join(' ');
-            final audioOffset = Duration(milliseconds: candidateStartMs.round());
-
-            detections.add(Detection(
-              score: similarity,
-              audioOffset: audioOffset,
-              matchedText: matchedText,
-            ));
-
-            // Token consumption: remove matched tokens from window
-            _window.removeRange(0, startIdx + sliceLen);
-            matchedInPass = true;
-            break;
+          final candidate = _MatchCandidate(
+            startIndex: startIdx,
+            length: sliceLen,
+            score: similarity,
+          );
+          if (_isBetterCandidate(candidate, best, targetLen)) {
+            best = candidate;
           }
         }
-        if (matchedInPass) break;
       }
-    } while (matchedInPass && _window.isNotEmpty);
+
+      if (best == null) break;
+
+      final candidateTokens = _window.sublist(
+        best.startIndex,
+        best.startIndex + best.length,
+      );
+      final candidateStartMs = candidateTokens.first.startSec * 1000.0;
+      final candidateEndMs = candidateTokens.last.endSec * 1000.0;
+      final utteranceDurationMs = max(100.0, candidateEndMs - candidateStartMs);
+
+      if (_lastMatchEndMs != null) {
+        final elapsedSinceLastMatch = candidateStartMs - _lastMatchEndMs!;
+        if (elapsedSinceLastMatch < currentRefractoryMs) {
+          // This candidate is a duplicate. Retire its tokens so they cannot
+          // join the next real repetition and create a cross-boundary match.
+          _window.removeRange(0, best.startIndex + best.length);
+          continue;
+        }
+      }
+
+      _detectionsCount++;
+      _lastMatchEndMs = candidateEndMs;
+      if (best.length == targetLen) {
+        _observeUtterance(utteranceDurationMs);
+      }
+
+      final matchedText = candidateTokens.map((t) => t.token).join(' ');
+      final audioOffset = Duration(milliseconds: candidateStartMs.round());
+
+      detections.add(
+        Detection(
+          score: best.score,
+          audioOffset: audioOffset,
+          matchedText: matchedText,
+        ),
+      );
+
+      _window.removeRange(0, best.startIndex + best.length);
+    }
 
     return detections;
+  }
+
+  bool _isBetterCandidate(
+    _MatchCandidate candidate,
+    _MatchCandidate? current,
+    int targetLen,
+  ) {
+    if (current == null) return true;
+    if (candidate.score != current.score) {
+      return candidate.score > current.score;
+    }
+
+    final candidateLengthDifference = (candidate.length - targetLen).abs();
+    final currentLengthDifference = (current.length - targetLen).abs();
+    if (candidateLengthDifference != currentLengthDifference) {
+      return candidateLengthDifference < currentLengthDifference;
+    }
+
+    return candidate.startIndex < current.startIndex;
   }
 
   void reset() {

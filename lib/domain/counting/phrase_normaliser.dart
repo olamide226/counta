@@ -42,13 +42,14 @@ class PhraseNormaliser {
   /// of every transcript segment.
   static final RegExp _punctuation = RegExp(r'[^\w\s]');
   static final RegExp _whitespace = RegExp(r'\s+');
+  static final RegExp _curlyApostrophes = RegExp(r'[\u2018\u2019\u02BC\uFF07]');
 
   /// Lowercases, expands contractions, strips punctuation, tokenises, and
   /// maps homophones.
   List<String> call(String text) {
     if (text.trim().isEmpty) return const [];
 
-    var str = text.toLowerCase();
+    var str = text.toLowerCase().replaceAll(_curlyApostrophes, "'");
 
     for (final entry in _contractionPatterns) {
       str = str.replaceAll(entry.pattern, entry.expansion);
@@ -79,6 +80,9 @@ class PhraseNormaliser {
         ],
       );
 
-  static final Map<Map<String, String>,
-      List<({RegExp pattern, String expansion})>> _patternCache = {};
+  static final Map<
+    Map<String, String>,
+    List<({RegExp pattern, String expansion})>
+  >
+  _patternCache = {};
 }
