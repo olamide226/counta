@@ -45,6 +45,7 @@ class _StreamingDebugScreenState extends State<StreamingDebugScreen> {
   bool _isStreaming = false;
   SocketState _socketState = SocketState.disconnected;
   final List<TranscriptSegment> _segments = [];
+  final List<TranscriptSegment> _interimSegments = [];
   String? _lastExportPath;
 
   /// The in-flight interim result, shown in place rather than appended. Every
@@ -62,6 +63,7 @@ class _StreamingDebugScreenState extends State<StreamingDebugScreen> {
   /// unbounded list reached tens of thousands of entries within an hour — and
   /// every rebuild sorted all of them.
   static const int _maxLagSamples = 500;
+  static const int _maxExportedInterimSegments = 10000;
 
   LatencyStats _interimStats = LatencyStats.empty;
   LatencyStats _finalStats = LatencyStats.empty;
@@ -97,6 +99,12 @@ class _StreamingDebugScreenState extends State<StreamingDebugScreen> {
       _segments.add(segment);
       _liveInterim = null;
     } else {
+      if (segment.text.trim().isNotEmpty) {
+        _interimSegments.add(segment);
+        if (_interimSegments.length > _maxExportedInterimSegments) {
+          _interimSegments.removeAt(0);
+        }
+      }
       _liveInterim = segment;
     }
   }
@@ -123,6 +131,7 @@ class _StreamingDebugScreenState extends State<StreamingDebugScreen> {
 
     setState(() {
       _segments.clear();
+      _interimSegments.clear();
       _liveInterim = null;
       _interimLags.clear();
       _finalLags.clear();
@@ -271,12 +280,14 @@ class _StreamingDebugScreenState extends State<StreamingDebugScreen> {
         // file is committable as-is, rather than hand-labelled afterwards.
         'true_count': trueCount,
         'segment_count': _segments.length,
+        'interim_segment_count': _interimSegments.length,
         'latency': {
           'time_to_first_result_ms': _timeToFirstResult?.inMilliseconds,
           'interim': _statsToJson(_interimStats),
           'final': _statsToJson(_finalStats),
         },
         'segments': _segments.map((s) => s.toJson()).toList(),
+        'interim_segments': _interimSegments.map((s) => s.toJson()).toList(),
       });
 
       await file.writeAsString(jsonContent);
