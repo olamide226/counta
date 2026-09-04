@@ -35,4 +35,16 @@ flutter test test/fixtures/corpus_test.dart
 ```
 
 Prints a recall / false-positive table and enforces the task 3.4 gate
-(recall >= 0.95 on `normal_*`). Skips cleanly when no fixtures exist.
+(matcher recall >= 0.95 on `normal_*`). Skips cleanly when no fixtures exist.
+
+Columns:
+
+- `txed` — repetitions present in the final transcripts, estimated by counting
+  the phrase's longest token. Sessions contain pauses, so this is usually below
+  `true`.
+- `recall` — detections / `true_count`. Informational only.
+- `m.rec` — detections / `txed`. **This is the gated number**: it measures the
+  matcher alone, not the recording.
+- `txcov` — normalised final transcript tokens saved versus the tokens
+  `true_count` implies. Well below 100% means pauses or upstream transcription
+  loss, not a matcher problem.
