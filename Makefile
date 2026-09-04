@@ -142,10 +142,11 @@ run:
 	@echo "🚀 Running app..."
 	flutter run $(DART_DEFINES)
 
-# Run on iOS
+# Run on iOS (default device selector: iphone or pass DEVICE=<id>)
+DEVICE ?= iphone
 run-ios:
-	@echo "🍎 Running on iOS..."
-	flutter run -d ios $(DART_DEFINES)
+	@echo "🍎 Running on iOS ($(DEVICE))..."
+	flutter run -d $(DEVICE) $(DART_DEFINES)
 
 # Run on Android
 run-android:
