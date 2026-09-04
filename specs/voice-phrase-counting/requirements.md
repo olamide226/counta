@@ -52,6 +52,7 @@ The system has no backend today. This feature introduces exactly one server-side
 1.4. IF the submitted phrase normalises to more than 12 tokens THEN the system SHALL reject it and display guidance that long phrases exceed the matching window.
 1.5. WHEN a phrase is accepted THEN the system SHALL persist it to the local phrase history, deduplicated by normalised form.
 1.6. WHEN a session starts THEN the system SHALL supply the target phrase tokens to Deepgram as `keyterm` parameters to bias recognition.
+1.7. WHEN voice capture is paused and resumed within the same counting session THEN the system SHALL keep the most recently selected phrase and prefill it on the resume screen.
 
 ### Requirement 2: Voice counting session
 
@@ -65,7 +66,7 @@ The system has no backend today. This feature introduces exactly one server-side
 2.4. WHEN the matcher accepts a detection THEN the system SHALL increment the session count within 1500 ms of the utterance ending.
 2.5. WHEN the session count increments THEN the system SHALL fire a short haptic pulse.
 2.6. WHILE a voice session is active THE system SHALL display the current count, the elapsed session time, and the remaining credit balance.
-2.7. WHEN a detection occurs THEN the system SHALL suppress further detections for a refractory period derived from the observed median utterance duration, defaulting to 1200 ms before any observation exists.
+2.7. WHEN a detection occurs THEN the system SHALL suppress a later detection whose matched audio overlaps the already-counted audio. An additional adaptive waiting period MAY be enabled through matcher configuration, but SHALL default to zero so rapid non-overlapping repetitions are counted.
 2.8. WHEN no audio is transmitted for 5 seconds THEN the system SHALL send a Deepgram `KeepAlive` message to prevent idle disconnection.
 2.9. WHEN the user stops the session THEN the system SHALL send `CloseStream`, wait up to 2000 ms for final results, apply any late detections, and then close the socket.
 
@@ -108,12 +109,13 @@ The system has no backend today. This feature introduces exactly one server-side
 
 #### Acceptance Criteria
 
-5.1. WHEN the Deepgram connection drops unexpectedly THEN the system SHALL preserve the current count, display a reconnecting state, and attempt reconnection with exponential backoff starting at 500 ms and capped at 8 seconds.
+5.1. WHEN the Deepgram connection drops unexpectedly or stops responding while audio is still flowing THEN the system SHALL preserve the current count, display a reconnecting state, and attempt reconnection with exponential backoff starting at 500 ms and capped at 8 seconds.
 5.2. WHILE the system is in the reconnecting state THE tap counter SHALL remain enabled and SHALL contribute to the same session total.
 5.3. IF reconnection does not succeed within 60 seconds THEN the system SHALL transition to the degraded state, stop audio capture, and inform the user that voice counting has paused.
 5.4. WHEN reconnection succeeds within the current block THEN the system SHALL resume streaming without requesting a new block.
 5.5. IF the device is offline when the user attempts to start a voice session THEN the system SHALL block the start, explain that voice counting requires a connection, and SHALL NOT consume credits.
 5.6. WHEN the app is backgrounded during an active session THEN the system SHALL pause audio capture, close the Deepgram connection, preserve the count, and display a resume prompt on return.
+5.7. WHILE audio frames are flowing, IF Deepgram sends no message for 20 seconds THEN the system SHALL treat the connection as unresponsive and reconnect it without restarting healthy microphone capture.
 
 ### Requirement 6: Manual correction and tap coexistence
 
@@ -146,7 +148,7 @@ The system has no backend today. This feature introduces exactly one server-side
 
 8.1. WHEN the app starts THEN it SHALL fetch matcher configuration from a remote source, comprising at minimum the fuzzy match threshold, refractory multiplier, and normalisation rules.
 8.2. IF the remote configuration fetch fails THEN the system SHALL use the last cached configuration, or compiled-in defaults if no cache exists.
-8.3. The matcher SHALL treat as equivalent all of: contraction and expanded forms, punctuation variants, and casing variants of the target phrase.
+8.3. The matcher SHALL treat as equivalent all of: contraction and expanded forms, straight and curly apostrophes, punctuation variants, and casing variants of the target phrase.
 8.4. The matcher SHALL accept a candidate window when its token-level similarity to the target meets or exceeds the configured threshold, defaulting to 0.80.
 8.5. The matcher SHALL operate only on finalised transcript segments and SHALL NOT count from interim results.
 8.6. WHEN a window is accepted THEN the matcher SHALL consume the matched tokens so they cannot contribute to a subsequent match.

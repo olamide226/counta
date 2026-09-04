@@ -34,9 +34,9 @@ Each task is scoped to be completable in isolation and leaves the app in a worki
 - [ ] **4. Implement the phrase matcher**
   - [x] 4.1 Implement the normalisation pipeline: lowercase, punctuation strip, contraction expansion, homophone mapping, whitespace collapse and tokenise
   - [x] 4.2 Implement token-level Levenshtein similarity returning a ratio in [0, 1]
-  - [x] 4.3 Implement the sliding window with `windowSlack` sizing and longest-first candidate evaluation
+  - [x] 4.3 Implement the sliding window with `windowSlack` sizing and best-score candidate evaluation, preferring the target length and then the earliest occurrence
   - [x] 4.4 Implement token consumption on accepted match so matched tokens cannot contribute again
-  - [x] 4.5 Implement the adaptive refractory period: floor at `refractoryFloorMs`, switching to `median utterance * refractoryMultiplier` after five observations
+  - [x] 4.5 Suppress overlapping duplicate audio and retain the optional adaptive waiting period for corpus tuning, defaulting it to zero
   - [x] 4.6 Write the full unit test suite: exact match, contraction variance, refractory suppression, rapid repetition, near-miss rejection, cross-segment phrase, double-count prevention, adaptive convergence
   - [ ] 4.7 Run against all six fixtures and tune `threshold` until recall and false positive targets are met
   - _Requirements: 8.3, 8.4, 8.5, 8.6, 2.7_

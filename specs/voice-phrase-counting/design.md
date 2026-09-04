@@ -228,8 +228,8 @@ class PhraseMatcher {
 
 class MatcherConfig {
   final double threshold;            // default 0.80
-  final double refractoryMultiplier; // default 0.60 of median utterance
-  final int    refractoryFloorMs;    // default 1200
+  final double refractoryMultiplier; // default 0; optional corpus tuning
+  final int    refractoryFloorMs;    // default 0; optional corpus tuning
   final double windowSlack;          // default 1.5 x target token count
   final Map<String, String> homophones;
   final Map<String, String> contractions;
@@ -244,30 +244,31 @@ ingest(segment):
   window.addAll(tokens with their audio offsets)
   trim window to (target.length * windowSlack) tokens
 
-  for each candidate slice in window, longest first:
-      score := tokenSimilarity(candidate, target)
-      if score >= config.threshold:
-          if now - lastMatchAt < refractoryPeriod: skip
-          emit Detection(score, candidate.audioOffset)
-          consume candidate tokens from window
-          lastMatchAt := now
-          record utterance duration, update median
-          break
+  candidates := every slice whose tokenSimilarity meets the threshold
+  best := highest score, then closest target length, then earliest occurrence
+
+  if best overlaps the last accepted audio span:
+      consume best as a duplicate
+  else:
+      emit Detection(best.score, best.audioOffset)
+      consume best so it cannot match again
+      record utterance duration for optional tuning statistics
 ```
 
 **Normalisation pipeline**, applied identically to target and to incoming text:
 
 1. Lowercase
-2. Strip punctuation and non-word characters
+2. Convert curly apostrophes to straight apostrophes
 3. Expand contractions from config map (`i'm` to `i am`, `don't` to `do not`)
-4. Apply homophone map from config
-5. Collapse whitespace, split on whitespace
+4. Strip punctuation and non-word characters
+5. Apply homophone map from config
+6. Collapse whitespace, split on whitespace
 
 This is why `"I'm rich in wisdom"`, `"im rich in wisdom"`, and `"i am rich in wisdom"` all score as the same phrase. Deepgram will produce all three across a single session.
 
 **Similarity** is token-level Levenshtein distance normalised to a ratio in [0, 1], not exact string equality. Exact matching fails on the first dropped article.
 
-**The refractory period is the single most important guard.** A sliding window over a token stream will fire two or three times for one utterance without it, inflating counts by 2x to 3x and destroying trust in the number. The period adapts: it starts at `refractoryFloorMs` and, once five utterances have been observed, becomes `median utterance duration * refractoryMultiplier`.
+**Duplicate protection uses audio overlap by default.** A candidate whose audio begins before the previous accepted phrase ends is discarded and its tokens are consumed. Non-overlapping phrases are accepted even when spoken rapidly. The matcher retains optional `refractoryFloorMs` and `refractoryMultiplier` controls for future corpus experiments, but both default to zero because the recorded fixtures showed that a mandatory pause suppressed real repetitions.
 
 ### `SessionController`
 
@@ -400,6 +401,7 @@ Refund eligibility is asserted by the client but validated server-side against `
 | Edge Function 409 | HTTP status | Treat stale block as recoverable: wait for expiry or force-release |
 | Deepgram grant fails post-debit | Edge Function catch | Refund debit, return 503 (3.6) |
 | WebSocket drop mid-block | Socket state | Preserve count, backoff reconnect, tap stays live (5.1, 5.2) |
+| WebSocket stays open but stops responding | No server message for 20s while audio flows | Show reconnecting and replace the socket without restarting healthy capture (5.1, 5.7) |
 | Reconnect exhausted (60s) | Backoff timer | `degraded`, stop capture, inform user (5.3) |
 | App backgrounded | Lifecycle observer | Pause capture, close socket, preserve count (5.6) |
 | Send buffer overflow | Buffer depth check | Drop oldest frames, record in diagnostics |
