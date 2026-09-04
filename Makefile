@@ -1,4 +1,4 @@
-.PHONY: help setup format lint analyze test test-coverage build-runner clean build-ios build-ios-ipa build-android build-macos build-web run run-ios run-android run-web doctor icons
+.PHONY: help setup format lint analyze test test-corpus test-coverage build-runner clean build-ios build-ios-ipa build-android build-macos build-web run run-ios run-android run-web doctor icons pull-fixtures
 
 # Environment Configuration
 # Automatically loads variables from .env file if present, or CLI overrides
@@ -18,9 +18,11 @@ help:
 	@echo "  make lint           - Run linter (dart analyze)"
 	@echo "  make analyze        - Run static analysis"
 	@echo "  make test           - Run all unit tests"
+	@echo "  make test-corpus    - Evaluate transcript fixture corpus recall gates"
 	@echo "  make test-coverage  - Run tests with coverage report"
 	@echo "  make build-runner   - Generate code for Hive models"
 	@echo "  make clean          - Clean build artifacts"
+
 	@echo ""
 	@echo "Build commands (supports DEEPGRAM_API_KEY=...):"
 	@echo "  make build-ios      - Build iOS app (debug/ad-hoc)"
@@ -72,6 +74,12 @@ test:
 	@echo "🧪 Running tests..."
 	flutter test
 	@echo "✅ Tests complete!"
+
+# Evaluate transcript fixture corpus recall gates
+test-corpus:
+	@echo "📊 Evaluating transcript corpus recall gates..."
+	flutter test test/fixtures/corpus_test.dart
+
 
 # Run tests with coverage
 test-coverage:
@@ -169,6 +177,16 @@ doctor:
 check: format lint test
 	@echo "✅ All checks passed!"
 
+# Pull exported transcript debug logs/fixtures from connected iPhone
+pull-fixtures:
+	@echo "📥 Pulling exported transcript fixtures from iPhone..."
+	mkdir -p test/fixtures/transcripts
+	xcrun devicectl device copy from --device 00008150-00184D340EB8401C --domain-type appDataContainer --domain-identifier com.ruach-tech.counta.dev --source Documents --destination test/fixtures/transcripts/
+	@rm -f test/fixtures/transcripts/*.hive test/fixtures/transcripts/*.lock
+	@echo "✅ JSON transcript fixtures copied to test/fixtures/transcripts/"
+
+
 # Prepare for commit
 pre-commit: format lint test
 	@echo "✅ Ready to commit!"
+

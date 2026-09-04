@@ -1,0 +1,452 @@
+{
+  "exported_at": "2026-08-07T13:58:43.019617",
+  "fixture_name": "normal_10",
+  "phrase_raw": "I'm rich in wisdom",
+  "true_count": 10,
+  "segment_count": 11,
+  "latency": {
+    "time_to_first_result_ms": 22162,
+    "interim": {
+      "count": 16,
+      "last_ms": 18,
+      "median_ms": 6,
+      "p95_ms": 21,
+      "worst_ms": 21
+    },
+    "final": {
+      "count": 11,
+      "last_ms": 113,
+      "median_ms": 46,
+      "p95_ms": 1495,
+      "worst_ms": 1495
+    }
+  },
+  "segments": [
+    {
+      "text": "i'm rich in wisdom",
+      "start": 20.31,
+      "duration": 2.08,
+      "is_final": true,
+      "confidence": 0.9880371,
+      "speech_final": true,
+      "words": [
+        {
+          "word": "i'm",
+          "start": 20.71,
+          "end": 21.109999,
+          "confidence": 0.9880371
+        },
+        {
+          "word": "rich",
+          "start": 21.109999,
+          "end": 21.349998,
+          "confidence": 0.8520508
+        },
+        {
+          "word": "in",
+          "start": 21.349998,
+          "end": 21.51,
+          "confidence": 0.99902344
+        },
+        {
+          "word": "wisdom",
+          "start": 21.51,
+          "end": 21.91,
+          "confidence": 0.7279053
+        }
+      ],
+      "received_at": "2026-08-07T13:57:53.751159",
+      "lag_ms": 13
+    },
+    {
+      "text": "i'm rich in wisdom",
+      "start": 22.39,
+      "duration": 2.4500008,
+      "is_final": true,
+      "confidence": 0.9980469,
+      "speech_final": true,
+      "words": [
+        {
+          "word": "i'm",
+          "start": 23.189999,
+          "end": 23.59,
+          "confidence": 0.99902344
+        },
+        {
+          "word": "rich",
+          "start": 23.59,
+          "end": 23.83,
+          "confidence": 0.9980469
+        },
+        {
+          "word": "in",
+          "start": 23.83,
+          "end": 23.99,
+          "confidence": 0.9980469
+        },
+        {
+          "word": "wisdom",
+          "start": 23.99,
+          "end": 24.39,
+          "confidence": 0.9794922
+        }
+      ],
+      "received_at": "2026-08-07T13:57:56.239309",
+      "lag_ms": 51
+    },
+    {
+      "text": "i'm rich in wisdom",
+      "start": 24.84,
+      "duration": 2.3099995,
+      "is_final": true,
+      "confidence": 0.9995117,
+      "speech_final": true,
+      "words": [
+        {
+          "word": "i'm",
+          "start": 25.4,
+          "end": 25.880001,
+          "confidence": 0.9995117
+        },
+        {
+          "word": "rich",
+          "start": 25.880001,
+          "end": 26.12,
+          "confidence": 1.0
+        },
+        {
+          "word": "in",
+          "start": 26.12,
+          "end": 26.28,
+          "confidence": 0.98535156
+        },
+        {
+          "word": "wisdom",
+          "start": 26.28,
+          "end": 26.6,
+          "confidence": 0.9951172
+        }
+      ],
+      "received_at": "2026-08-07T13:57:58.536278",
+      "lag_ms": 38
+    },
+    {
+      "text": "i'm rich in wisdom",
+      "start": 27.15,
+      "duration": 2.5300007,
+      "is_final": true,
+      "confidence": 0.99902344,
+      "speech_final": true,
+      "words": [
+        {
+          "word": "i'm",
+          "start": 27.949999,
+          "end": 28.35,
+          "confidence": 0.9995117
+        },
+        {
+          "word": "rich",
+          "start": 28.35,
+          "end": 28.59,
+          "confidence": 0.99902344
+        },
+        {
+          "word": "in",
+          "start": 28.59,
+          "end": 28.75,
+          "confidence": 0.9980469
+        },
+        {
+          "word": "wisdom",
+          "start": 28.75,
+          "end": 29.07,
+          "confidence": 0.99560547
+        }
+      ],
+      "received_at": "2026-08-07T13:58:01.051589",
+      "lag_ms": 24
+    },
+    {
+      "text": "i'm rich in wisdom",
+      "start": 29.68,
+      "duration": 2.2999992,
+      "is_final": true,
+      "confidence": 0.99902344,
+      "speech_final": true,
+      "words": [
+        {
+          "word": "i'm",
+          "start": 30.32,
+          "end": 30.720001,
+          "confidence": 0.99902344
+        },
+        {
+          "word": "rich",
+          "start": 30.720001,
+          "end": 30.960001,
+          "confidence": 1.0
+        },
+        {
+          "word": "in",
+          "start": 30.960001,
+          "end": 31.12,
+          "confidence": 0.99902344
+        },
+        {
+          "word": "wisdom",
+          "start": 31.12,
+          "end": 31.44,
+          "confidence": 0.9980469
+        }
+      ],
+      "received_at": "2026-08-07T13:58:03.358834",
+      "lag_ms": 31
+    },
+    {
+      "text": "i'm rich in wisdom shout out like i have",
+      "start": 31.98,
+      "duration": 3.5299988,
+      "is_final": true,
+      "confidence": 0.97631836,
+      "speech_final": false,
+      "words": [
+        {
+          "word": "i'm",
+          "start": 32.62,
+          "end": 33.02,
+          "confidence": 0.9995117
+        },
+        {
+          "word": "rich",
+          "start": 33.02,
+          "end": 33.26,
+          "confidence": 1.0
+        },
+        {
+          "word": "in",
+          "start": 33.26,
+          "end": 33.34,
+          "confidence": 1.0
+        },
+        {
+          "word": "wisdom",
+          "start": 33.34,
+          "end": 34.059998,
+          "confidence": 0.97631836
+        },
+        {
+          "word": "shout",
+          "start": 34.14,
+          "end": 34.54,
+          "confidence": 0.84814453
+        },
+        {
+          "word": "out",
+          "start": 34.54,
+          "end": 34.7,
+          "confidence": 0.2861328
+        },
+        {
+          "word": "like",
+          "start": 34.7,
+          "end": 35.02,
+          "confidence": 0.60546875
+        },
+        {
+          "word": "i",
+          "start": 35.02,
+          "end": 35.26,
+          "confidence": 0.98291016
+        },
+        {
+          "word": "have",
+          "start": 35.26,
+          "end": 35.42,
+          "confidence": 0.90283203
+        }
+      ],
+      "received_at": "2026-08-07T13:58:08.353241",
+      "lag_ms": 1495
+    },
+    {
+      "text": "i'm rich in wisdom",
+      "start": 35.51,
+      "duration": 3.6599998,
+      "is_final": true,
+      "confidence": 0.9980469,
+      "speech_final": true,
+      "words": [
+        {
+          "word": "i'm",
+          "start": 37.51,
+          "end": 37.829998,
+          "confidence": 0.8408203
+        },
+        {
+          "word": "rich",
+          "start": 37.829998,
+          "end": 38.07,
+          "confidence": 0.9980469
+        },
+        {
+          "word": "in",
+          "start": 38.07,
+          "end": 38.23,
+          "confidence": 0.99902344
+        },
+        {
+          "word": "wisdom",
+          "start": 38.23,
+          "end": 38.629997,
+          "confidence": 0.9238281
+        }
+      ],
+      "received_at": "2026-08-07T13:58:10.564307",
+      "lag_ms": 46
+    },
+    {
+      "text": "i'm rich in wisdom",
+      "start": 39.17,
+      "duration": 2.25,
+      "is_final": true,
+      "confidence": 0.99902344,
+      "speech_final": true,
+      "words": [
+        {
+          "word": "i'm",
+          "start": 39.73,
+          "end": 40.129997,
+          "confidence": 0.9980469
+        },
+        {
+          "word": "rich",
+          "start": 40.129997,
+          "end": 40.289997,
+          "confidence": 1.0
+        },
+        {
+          "word": "in",
+          "start": 40.289997,
+          "end": 40.449997,
+          "confidence": 0.99902344
+        },
+        {
+          "word": "wisdom",
+          "start": 40.449997,
+          "end": 40.85,
+          "confidence": 0.97094727
+        }
+      ],
+      "received_at": "2026-08-07T13:58:12.871069",
+      "lag_ms": 103
+    },
+    {
+      "text": "i'm rich in wisdom",
+      "start": 41.42,
+      "duration": 2.4900017,
+      "is_final": true,
+      "confidence": 0.99902344,
+      "speech_final": true,
+      "words": [
+        {
+          "word": "i'm",
+          "start": 42.059998,
+          "end": 42.539997,
+          "confidence": 0.99902344
+        },
+        {
+          "word": "rich",
+          "start": 42.539997,
+          "end": 42.78,
+          "confidence": 1.0
+        },
+        {
+          "word": "in",
+          "start": 42.78,
+          "end": 42.94,
+          "confidence": 0.99902344
+        },
+        {
+          "word": "wisdom",
+          "start": 42.94,
+          "end": 43.26,
+          "confidence": 0.9970703
+        }
+      ],
+      "received_at": "2026-08-07T13:58:15.355286",
+      "lag_ms": 97
+    },
+    {
+      "text": "i'm rich in wisdom",
+      "start": 43.91,
+      "duration": 2.170002,
+      "is_final": true,
+      "confidence": 1.0,
+      "speech_final": true,
+      "words": [
+        {
+          "word": "i'm",
+          "start": 44.31,
+          "end": 44.71,
+          "confidence": 0.9975586
+        },
+        {
+          "word": "rich",
+          "start": 44.71,
+          "end": 44.95,
+          "confidence": 1.0
+        },
+        {
+          "word": "in",
+          "start": 44.95,
+          "end": 45.11,
+          "confidence": 1.0
+        },
+        {
+          "word": "wisdom",
+          "start": 45.11,
+          "end": 45.51,
+          "confidence": 0.9970703
+        }
+      ],
+      "received_at": "2026-08-07T13:58:17.446435",
+      "lag_ms": 18
+    },
+    {
+      "text": "i'm rich in wisdom",
+      "start": 46.08,
+      "duration": 2.2299995,
+      "is_final": true,
+      "confidence": 0.99853516,
+      "speech_final": true,
+      "words": [
+        {
+          "word": "i'm",
+          "start": 46.4,
+          "end": 46.88,
+          "confidence": 0.99853516
+        },
+        {
+          "word": "rich",
+          "start": 46.88,
+          "end": 47.120003,
+          "confidence": 1.0
+        },
+        {
+          "word": "in",
+          "start": 47.120003,
+          "end": 47.36,
+          "confidence": 0.9980469
+        },
+        {
+          "word": "wisdom",
+          "start": 47.36,
+          "end": 47.68,
+          "confidence": 0.99853516
+        }
+      ],
+      "received_at": "2026-08-07T13:58:19.771381",
+      "lag_ms": 113
+    }
+  ]
+}

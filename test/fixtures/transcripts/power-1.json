@@ -1,0 +1,518 @@
+{
+  "exported_at": "2026-08-07T14:18:31.085913",
+  "fixture_name": "power-1",
+  "phrase_raw": "I’m full of power",
+  "true_count": 11,
+  "segment_count": 11,
+  "latency": {
+    "time_to_first_result_ms": 2358,
+    "interim": {
+      "count": 29,
+      "last_ms": 0,
+      "median_ms": 17,
+      "p95_ms": 37,
+      "worst_ms": 42
+    },
+    "final": {
+      "count": 11,
+      "last_ms": 118,
+      "median_ms": 118,
+      "p95_ms": 1510,
+      "worst_ms": 1510
+    }
+  },
+  "segments": [
+    {
+      "text": "i'm full of power i'm full of power",
+      "start": 0.0,
+      "duration": 4.97,
+      "is_final": true,
+      "confidence": 1.0,
+      "speech_final": false,
+      "words": [
+        {
+          "word": "i'm",
+          "start": 0.96,
+          "end": 1.36,
+          "confidence": 0.9975586
+        },
+        {
+          "word": "full",
+          "start": 1.36,
+          "end": 1.5999999,
+          "confidence": 1.0
+        },
+        {
+          "word": "of",
+          "start": 1.5999999,
+          "end": 1.8399999,
+          "confidence": 1.0
+        },
+        {
+          "word": "power",
+          "start": 1.8399999,
+          "end": 2.56,
+          "confidence": 0.99853516
+        },
+        {
+          "word": "i'm",
+          "start": 3.4399998,
+          "end": 3.84,
+          "confidence": 0.99902344
+        },
+        {
+          "word": "full",
+          "start": 3.84,
+          "end": 4.16,
+          "confidence": 1.0
+        },
+        {
+          "word": "of",
+          "start": 4.16,
+          "end": 4.4,
+          "confidence": 1.0
+        },
+        {
+          "word": "power",
+          "start": 4.4,
+          "end": 4.72,
+          "confidence": 0.9812012
+        }
+      ],
+      "received_at": "2026-08-07T14:17:29.889326",
+      "lag_ms": 155
+    },
+    {
+      "text": "i'm full of power",
+      "start": 4.97,
+      "duration": 2.69,
+      "is_final": true,
+      "confidence": 1.0,
+      "speech_final": true,
+      "words": [
+        {
+          "word": "i'm",
+          "start": 6.0099998,
+          "end": 6.41,
+          "confidence": 0.99902344
+        },
+        {
+          "word": "full",
+          "start": 6.41,
+          "end": 6.6499996,
+          "confidence": 1.0
+        },
+        {
+          "word": "of",
+          "start": 6.6499996,
+          "end": 6.89,
+          "confidence": 1.0
+        },
+        {
+          "word": "power",
+          "start": 6.89,
+          "end": 7.21,
+          "confidence": 0.9914551
+        }
+      ],
+      "received_at": "2026-08-07T14:17:32.489036",
+      "lag_ms": 65
+    },
+    {
+      "text": "i'm full of",
+      "start": 7.66,
+      "duration": 4.9700003,
+      "is_final": true,
+      "confidence": 0.9980469,
+      "speech_final": false,
+      "words": [
+        {
+          "word": "i'm",
+          "start": 7.8999996,
+          "end": 12.059999,
+          "confidence": 0.91625977
+        },
+        {
+          "word": "full",
+          "start": 12.059999,
+          "end": 12.299999,
+          "confidence": 1.0
+        },
+        {
+          "word": "of",
+          "start": 12.299999,
+          "end": 12.459999,
+          "confidence": 0.9980469
+        }
+      ],
+      "received_at": "2026-08-07T14:17:37.472076",
+      "lag_ms": 78
+    },
+    {
+      "text": "power",
+      "start": 12.63,
+      "duration": 0.8699999,
+      "is_final": true,
+      "confidence": 0.953125,
+      "speech_final": true,
+      "words": [
+        {
+          "word": "power",
+          "start": 12.63,
+          "end": 12.87,
+          "confidence": 0.953125
+        }
+      ],
+      "received_at": "2026-08-07T14:17:38.379947",
+      "lag_ms": 115
+    },
+    {
+      "text": "i'm full of power i d",
+      "start": 22.33,
+      "duration": 3.5900002,
+      "is_final": true,
+      "confidence": 0.9707031,
+      "speech_final": false,
+      "words": [
+        {
+          "word": "i'm",
+          "start": 22.33,
+          "end": 22.57,
+          "confidence": 0.81274414
+        },
+        {
+          "word": "full",
+          "start": 22.57,
+          "end": 22.89,
+          "confidence": 1.0
+        },
+        {
+          "word": "of",
+          "start": 22.89,
+          "end": 23.05,
+          "confidence": 0.99902344
+        },
+        {
+          "word": "power",
+          "start": 23.05,
+          "end": 23.689999,
+          "confidence": 0.9707031
+        },
+        {
+          "word": "i",
+          "start": 25.369999,
+          "end": 25.61,
+          "confidence": 0.57421875
+        },
+        {
+          "word": "d",
+          "start": 25.61,
+          "end": 25.77,
+          "confidence": 0.2800293
+        }
+      ],
+      "received_at": "2026-08-07T14:17:52.194894",
+      "lag_ms": 1510
+    },
+    {
+      "text": "declare i declare i declare i'm full of power",
+      "start": 25.92,
+      "duration": 3.6499996,
+      "is_final": true,
+      "confidence": 0.9975586,
+      "speech_final": true,
+      "words": [
+        {
+          "word": "declare",
+          "start": 25.92,
+          "end": 26.32,
+          "confidence": 0.970459
+        },
+        {
+          "word": "i",
+          "start": 26.32,
+          "end": 26.56,
+          "confidence": 0.99902344
+        },
+        {
+          "word": "declare",
+          "start": 26.56,
+          "end": 27.04,
+          "confidence": 0.99658203
+        },
+        {
+          "word": "i",
+          "start": 27.04,
+          "end": 27.2,
+          "confidence": 0.99902344
+        },
+        {
+          "word": "declare",
+          "start": 27.2,
+          "end": 27.92,
+          "confidence": 0.9760742
+        },
+        {
+          "word": "i'm",
+          "start": 28.08,
+          "end": 28.32,
+          "confidence": 0.9975586
+        },
+        {
+          "word": "full",
+          "start": 28.32,
+          "end": 28.56,
+          "confidence": 1.0
+        },
+        {
+          "word": "of",
+          "start": 28.56,
+          "end": 28.8,
+          "confidence": 1.0
+        },
+        {
+          "word": "power",
+          "start": 28.8,
+          "end": 29.04,
+          "confidence": 0.9890137
+        }
+      ],
+      "received_at": "2026-08-07T14:17:54.385103",
+      "lag_ms": 51
+    },
+    {
+      "text": "i'm full of power",
+      "start": 29.57,
+      "duration": 1.8600006,
+      "is_final": true,
+      "confidence": 1.0,
+      "speech_final": true,
+      "words": [
+        {
+          "word": "i'm",
+          "start": 29.73,
+          "end": 30.13,
+          "confidence": 0.99902344
+        },
+        {
+          "word": "full",
+          "start": 30.13,
+          "end": 30.369999,
+          "confidence": 1.0
+        },
+        {
+          "word": "of",
+          "start": 30.369999,
+          "end": 30.61,
+          "confidence": 1.0
+        },
+        {
+          "word": "power",
+          "start": 30.61,
+          "end": 30.85,
+          "confidence": 0.99365234
+        }
+      ],
+      "received_at": "2026-08-07T14:17:56.301536",
+      "lag_ms": 107
+    },
+    {
+      "text": "oh i'm full of power i'm so full of power",
+      "start": 31.43,
+      "duration": 4.0999985,
+      "is_final": true,
+      "confidence": 1.0,
+      "speech_final": false,
+      "words": [
+        {
+          "word": "oh",
+          "start": 31.43,
+          "end": 31.83,
+          "confidence": 0.99560547
+        },
+        {
+          "word": "i'm",
+          "start": 31.83,
+          "end": 32.15,
+          "confidence": 1.0
+        },
+        {
+          "word": "full",
+          "start": 32.15,
+          "end": 32.47,
+          "confidence": 1.0
+        },
+        {
+          "word": "of",
+          "start": 32.47,
+          "end": 32.63,
+          "confidence": 1.0
+        },
+        {
+          "word": "power",
+          "start": 32.63,
+          "end": 33.27,
+          "confidence": 1.0
+        },
+        {
+          "word": "i'm",
+          "start": 33.59,
+          "end": 33.91,
+          "confidence": 1.0
+        },
+        {
+          "word": "so",
+          "start": 33.91,
+          "end": 34.15,
+          "confidence": 1.0
+        },
+        {
+          "word": "full",
+          "start": 34.15,
+          "end": 34.47,
+          "confidence": 1.0
+        },
+        {
+          "word": "of",
+          "start": 34.47,
+          "end": 34.71,
+          "confidence": 1.0
+        },
+        {
+          "word": "power",
+          "start": 34.71,
+          "end": 34.95,
+          "confidence": 0.99365234
+        }
+      ],
+      "received_at": "2026-08-07T14:18:01.286341",
+      "lag_ms": 992
+    },
+    {
+      "text": "i declare i'm",
+      "start": 35.53,
+      "duration": 4.16,
+      "is_final": true,
+      "confidence": 0.9633789,
+      "speech_final": false,
+      "words": [
+        {
+          "word": "i",
+          "start": 35.53,
+          "end": 36.329998,
+          "confidence": 0.7988281
+        },
+        {
+          "word": "declare",
+          "start": 38.89,
+          "end": 39.289997,
+          "confidence": 0.98535156
+        },
+        {
+          "word": "i'm",
+          "start": 39.289997,
+          "end": 39.53,
+          "confidence": 0.9633789
+        }
+      ],
+      "received_at": "2026-08-07T14:18:05.393081",
+      "lag_ms": 939
+    },
+    {
+      "text": "full of power i'm full of power",
+      "start": 39.69,
+      "duration": 3.420002,
+      "is_final": true,
+      "confidence": 0.99902344,
+      "speech_final": true,
+      "words": [
+        {
+          "word": "full",
+          "start": 39.69,
+          "end": 40.01,
+          "confidence": 1.0
+        },
+        {
+          "word": "of",
+          "start": 40.01,
+          "end": 40.25,
+          "confidence": 0.99902344
+        },
+        {
+          "word": "power",
+          "start": 40.25,
+          "end": 40.809998,
+          "confidence": 0.99658203
+        },
+        {
+          "word": "i'm",
+          "start": 41.37,
+          "end": 41.609997,
+          "confidence": 0.99853516
+        },
+        {
+          "word": "full",
+          "start": 41.609997,
+          "end": 41.93,
+          "confidence": 1.0
+        },
+        {
+          "word": "of",
+          "start": 41.93,
+          "end": 42.17,
+          "confidence": 0.99902344
+        },
+        {
+          "word": "power",
+          "start": 42.17,
+          "end": 42.41,
+          "confidence": 0.97924805
+        }
+      ],
+      "received_at": "2026-08-07T14:18:07.996463",
+      "lag_ms": 122
+    },
+    {
+      "text": "i am full of power",
+      "start": 56.37,
+      "duration": 2.4400024,
+      "is_final": true,
+      "confidence": 1.0,
+      "speech_final": true,
+      "words": [
+        {
+          "word": "i",
+          "start": 56.69,
+          "end": 57.01,
+          "confidence": 0.9970703
+        },
+        {
+          "word": "am",
+          "start": 57.01,
+          "end": 57.25,
+          "confidence": 1.0
+        },
+        {
+          "word": "full",
+          "start": 57.25,
+          "end": 57.73,
+          "confidence": 1.0
+        },
+        {
+          "word": "of",
+          "start": 57.73,
+          "end": 57.969997,
+          "confidence": 1.0
+        },
+        {
+          "word": "power",
+          "start": 57.969997,
+          "end": 58.289997,
+          "confidence": 0.9785156
+        }
+      ],
+      "received_at": "2026-08-07T14:18:23.692793",
+      "lag_ms": 118
+    }
+  ]
+}

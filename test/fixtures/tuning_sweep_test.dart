@@ -21,11 +21,11 @@ void main() {
   test('parameter sweep across the fixture corpus', () {
     final files = dir.existsSync()
         ? (dir
-            .listSync()
-            .whereType<File>()
-            .where((f) => f.path.endsWith('.json'))
-            .toList()
-          ..sort((a, b) => a.path.compareTo(b.path)))
+              .listSync()
+              .whereType<File>()
+              .where((f) => f.path.endsWith('.json'))
+              .toList()
+            ..sort((a, b) => a.path.compareTo(b.path)))
         : <File>[];
 
     if (files.isEmpty) {
@@ -55,20 +55,33 @@ void main() {
       }
     }
 
-    sweep<int>(
-      'refractoryFloorMs (recall)',
-      const [1200, 1000, 800, 600, 400, 300],
-      (v) => MatcherConfig(refractoryFloorMs: v),
-    );
+    sweep<int>('refractoryFloorMs (recall)', const [
+      1200,
+      1000,
+      800,
+      600,
+      400,
+      300,
+    ], (v) => MatcherConfig(refractoryFloorMs: v));
+
+    sweep<double>('threshold (recall)', const [
+      0.90,
+      0.85,
+      0.80,
+      0.75,
+      0.70,
+    ], (v) => MatcherConfig(threshold: v));
 
     sweep<double>(
-      'threshold (recall)',
-      const [0.90, 0.85, 0.80, 0.75, 0.70],
-      (v) => MatcherConfig(threshold: v),
+      'refractoryMultiplier with no floor (recall)',
+      const [0.0, 0.20, 0.40, 0.60],
+      (v) => MatcherConfig(refractoryFloorMs: 0, refractoryMultiplier: v),
     );
 
     // ignore: avoid_print
-    print('\nRecall above 100% means false positives — check the gate table in '
-        'corpus_test.dart for the FP/10min figure before lowering a value.\n');
+    print(
+      '\nRecall above 100% means false positives — check the gate table in '
+      'corpus_test.dart for the FP/10min figure before lowering a value.\n',
+    );
   });
 }

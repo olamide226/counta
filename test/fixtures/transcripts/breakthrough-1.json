@@ -1,0 +1,350 @@
+{
+  "exported_at": "2026-08-07T14:05:27.460046",
+  "fixture_name": "breakthrough-1",
+  "phrase_raw": "I breakthrough ",
+  "true_count": 10,
+  "segment_count": 10,
+  "latency": {
+    "time_to_first_result_ms": 3671,
+    "interim": {
+      "count": 20,
+      "last_ms": 102,
+      "median_ms": 77,
+      "p95_ms": 102,
+      "worst_ms": 109
+    },
+    "final": {
+      "count": 10,
+      "last_ms": 114,
+      "median_ms": 145,
+      "p95_ms": 2074,
+      "worst_ms": 2074
+    }
+  },
+  "segments": [
+    {
+      "text": "i breakthrough",
+      "start": 5.81,
+      "duration": 2.1399999,
+      "is_final": true,
+      "confidence": 0.9172363,
+      "speech_final": true,
+      "words": [
+        {
+          "word": "i",
+          "start": 6.45,
+          "end": 6.77,
+          "confidence": 0.5839844
+        },
+        {
+          "word": "breakthrough",
+          "start": 6.77,
+          "end": 7.33,
+          "confidence": 0.9172363
+        }
+      ],
+      "received_at": "2026-08-07T14:04:11.769629",
+      "lag_ms": 107
+    },
+    {
+      "text": "i breakthrough",
+      "start": 7.95,
+      "duration": 4.34,
+      "is_final": true,
+      "confidence": 0.9790039,
+      "speech_final": false,
+      "words": [
+        {
+          "word": "i",
+          "start": 8.83,
+          "end": 9.07,
+          "confidence": 0.9790039
+        },
+        {
+          "word": "breakthrough",
+          "start": 9.07,
+          "end": 9.63,
+          "confidence": 0.94799805
+        }
+      ],
+      "received_at": "2026-08-07T14:04:16.829761",
+      "lag_ms": 827
+    },
+    {
+      "text": "oh i breakthrough",
+      "start": 12.29,
+      "duration": 4.62,
+      "is_final": true,
+      "confidence": 0.9812012,
+      "speech_final": true,
+      "words": [
+        {
+          "word": "oh",
+          "start": 15.49,
+          "end": 15.889999,
+          "confidence": 0.87890625
+        },
+        {
+          "word": "i",
+          "start": 15.889999,
+          "end": 15.969999,
+          "confidence": 0.99609375
+        },
+        {
+          "word": "breakthrough",
+          "start": 15.969999,
+          "end": 16.45,
+          "confidence": 0.9812012
+        }
+      ],
+      "received_at": "2026-08-07T14:04:20.776244",
+      "lag_ms": 154
+    },
+    {
+      "text": "i breakthrough",
+      "start": 16.91,
+      "duration": 1.9099998,
+      "is_final": true,
+      "confidence": 0.9970703,
+      "speech_final": true,
+      "words": [
+        {
+          "word": "i",
+          "start": 17.47,
+          "end": 17.71,
+          "confidence": 0.9970703
+        },
+        {
+          "word": "breakthrough",
+          "start": 17.71,
+          "end": 18.11,
+          "confidence": 0.9831543
+        }
+      ],
+      "received_at": "2026-08-07T14:04:22.677939",
+      "lag_ms": 145
+    },
+    {
+      "text": "oh yes oh yes i breakthrough i breakthrough",
+      "start": 18.82,
+      "duration": 4.800001,
+      "is_final": true,
+      "confidence": 0.9995117,
+      "speech_final": true,
+      "words": [
+        {
+          "word": "oh",
+          "start": 19.3,
+          "end": 19.619999,
+          "confidence": 0.9941406
+        },
+        {
+          "word": "yes",
+          "start": 19.619999,
+          "end": 19.94,
+          "confidence": 1.0
+        },
+        {
+          "word": "oh",
+          "start": 19.94,
+          "end": 20.18,
+          "confidence": 0.9995117
+        },
+        {
+          "word": "yes",
+          "start": 20.18,
+          "end": 20.5,
+          "confidence": 0.9995117
+        },
+        {
+          "word": "i",
+          "start": 20.5,
+          "end": 20.74,
+          "confidence": 1.0
+        },
+        {
+          "word": "breakthrough",
+          "start": 20.74,
+          "end": 21.539999,
+          "confidence": 0.99365234
+        },
+        {
+          "word": "i",
+          "start": 22.34,
+          "end": 22.66,
+          "confidence": 1.0
+        },
+        {
+          "word": "breakthrough",
+          "start": 22.66,
+          "end": 22.98,
+          "confidence": 0.99316406
+        }
+      ],
+      "received_at": "2026-08-07T14:04:27.529440",
+      "lag_ms": 197
+    },
+    {
+      "text": "i breakthrough",
+      "start": 23.62,
+      "duration": 2.9499989,
+      "is_final": true,
+      "confidence": 1.0,
+      "speech_final": true,
+      "words": [
+        {
+          "word": "i",
+          "start": 25.300001,
+          "end": 25.54,
+          "confidence": 1.0
+        },
+        {
+          "word": "breakthrough",
+          "start": 25.54,
+          "end": 25.86,
+          "confidence": 0.9941406
+        }
+      ],
+      "received_at": "2026-08-07T14:04:30.428307",
+      "lag_ms": 146
+    },
+    {
+      "text": "oh yes i breakthrough",
+      "start": 52.92,
+      "duration": 2.8600006,
+      "is_final": true,
+      "confidence": 0.9765625,
+      "speech_final": true,
+      "words": [
+        {
+          "word": "oh",
+          "start": 53.879997,
+          "end": 54.12,
+          "confidence": 0.9765625
+        },
+        {
+          "word": "yes",
+          "start": 54.12,
+          "end": 54.44,
+          "confidence": 0.99365234
+        },
+        {
+          "word": "i",
+          "start": 54.44,
+          "end": 54.6,
+          "confidence": 0.6870117
+        },
+        {
+          "word": "breakthrough",
+          "start": 54.6,
+          "end": 55.079998,
+          "confidence": 0.94677734
+        }
+      ],
+      "received_at": "2026-08-07T14:04:59.594083",
+      "lag_ms": 102
+    },
+    {
+      "text": "i breakthrough she",
+      "start": 55.78,
+      "duration": 3.0200005,
+      "is_final": true,
+      "confidence": 0.9448242,
+      "speech_final": false,
+      "words": [
+        {
+          "word": "i",
+          "start": 57.46,
+          "end": 57.78,
+          "confidence": 1.0
+        },
+        {
+          "word": "breakthrough",
+          "start": 57.78,
+          "end": 58.579998,
+          "confidence": 0.9448242
+        },
+        {
+          "word": "she",
+          "start": 58.579998,
+          "end": 58.739998,
+          "confidence": 0.78808594
+        }
+      ],
+      "received_at": "2026-08-07T14:05:04.586730",
+      "lag_ms": 2074
+    },
+    {
+      "text": "i breakthrough",
+      "start": 62.87,
+      "duration": 1.8600044,
+      "is_final": true,
+      "confidence": 0.9411621,
+      "speech_final": true,
+      "words": [
+        {
+          "word": "i",
+          "start": 63.59,
+          "end": 63.75,
+          "confidence": 0.7714844
+        },
+        {
+          "word": "breakthrough",
+          "start": 63.75,
+          "end": 64.15,
+          "confidence": 0.9411621
+        }
+      ],
+      "received_at": "2026-08-07T14:05:08.567504",
+      "lag_ms": 125
+    },
+    {
+      "text": "the name of jesus i breakthrough",
+      "start": 67.56,
+      "duration": 3.3199997,
+      "is_final": true,
+      "confidence": 1.0,
+      "speech_final": true,
+      "words": [
+        {
+          "word": "the",
+          "start": 68.439995,
+          "end": 68.84,
+          "confidence": 0.6743164
+        },
+        {
+          "word": "name",
+          "start": 68.84,
+          "end": 69.079994,
+          "confidence": 1.0
+        },
+        {
+          "word": "of",
+          "start": 69.079994,
+          "end": 69.24,
+          "confidence": 1.0
+        },
+        {
+          "word": "jesus",
+          "start": 69.24,
+          "end": 69.88,
+          "confidence": 0.8354492
+        },
+        {
+          "word": "i",
+          "start": 69.88,
+          "end": 70.04,
+          "confidence": 1.0
+        },
+        {
+          "word": "breakthrough",
+          "start": 70.04,
+          "end": 70.439995,
+          "confidence": 0.9760742
+        }
+      ],
+      "received_at": "2026-08-07T14:05:14.706414",
+      "lag_ms": 114
+    }
+  ]
+}
