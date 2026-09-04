@@ -56,10 +56,14 @@ class _CounterScreenState extends ConsumerState<CounterScreen>
     ref.read(appLifecycleProvider.notifier).handleLifecycleChange(state);
   }
 
-  void _openPhraseSetup(BuildContext context, SessionController sessionController) {
+  void _openPhraseSetup(
+    BuildContext context,
+    SessionController sessionController,
+  ) {
     Navigator.of(context).push(
       MaterialPageRoute(
         builder: (_) => PhraseSetupScreen(
+          initialPhrase: sessionController.activePhrase?.raw,
           onStartSession: (phraseSpec) async {
             sessionController.setEngine(ref.read(voiceEngineFactoryProvider)());
             await sessionController.startSession(phraseSpec);
@@ -91,7 +95,6 @@ class _CounterScreenState extends ConsumerState<CounterScreen>
         duration: Duration(seconds: 2),
       ),
     );
-
   }
 
   @override
@@ -122,7 +125,9 @@ class _CounterScreenState extends ConsumerState<CounterScreen>
         actions: [
           IconButton(
             icon: Icon(
-              isVoiceActive ? Icons.stop_circle_outlined : Icons.mic_none_rounded,
+              isVoiceActive
+                  ? Icons.stop_circle_outlined
+                  : Icons.mic_none_rounded,
               color: isVoiceActive ? scheme.error : null,
             ),
             tooltip: isVoiceActive
@@ -148,15 +153,15 @@ class _CounterScreenState extends ConsumerState<CounterScreen>
             ),
           IconButton(
             icon: const Icon(Icons.history),
-            onPressed: () => Navigator.of(context).push(
-              MaterialPageRoute(builder: (_) => const SessionsScreen()),
-            ),
+            onPressed: () => Navigator.of(
+              context,
+            ).push(MaterialPageRoute(builder: (_) => const SessionsScreen())),
           ),
           IconButton(
             icon: const Icon(Icons.settings),
-            onPressed: () => Navigator.of(context).push(
-              MaterialPageRoute(builder: (_) => const SettingsScreen()),
-            ),
+            onPressed: () => Navigator.of(
+              context,
+            ).push(MaterialPageRoute(builder: (_) => const SettingsScreen())),
           ),
         ],
       ),
@@ -188,7 +193,11 @@ class _CounterScreenState extends ConsumerState<CounterScreen>
                       const SizedBox(height: 16),
                       QuickControlsBar(
                         onReset: () => _handleReset(
-                            context, ref, sessionController, settings.confirmReset),
+                          context,
+                          ref,
+                          sessionController,
+                          settings.confirmReset,
+                        ),
                         onUndo: () =>
                             ref.read(counterProvider.notifier).decrement(),
                         onSave: () => showSaveSessionSheet(context),
@@ -238,5 +247,4 @@ class _CounterScreenState extends ConsumerState<CounterScreen>
       ref.read(counterProvider.notifier).reset();
     }
   }
-
 }

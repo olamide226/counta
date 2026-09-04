@@ -24,11 +24,10 @@ class SessionController extends ChangeNotifier {
   SessionController({
     CountingEngine? engine,
     LiveActivityService? liveActivityService,
-  })  : _engine = engine ?? TapCountingEngine(),
-        _liveActivityService = liveActivityService {
+  }) : _engine = engine ?? TapCountingEngine(),
+       _liveActivityService = liveActivityService {
     _attachEngineListeners();
   }
-
 
   int get total => _voiceCount + _manualCount;
   int get voiceCount => _voiceCount;
@@ -44,12 +43,12 @@ class SessionController extends ChangeNotifier {
 
   /// Whether a voice session is currently running or trying to run.
   bool get isVoiceActive => const {
-        EngineStatus.connecting,
-        EngineStatus.live,
-        EngineStatus.reconnecting,
-        EngineStatus.degraded,
-        EngineStatus.requestingBlock,
-      }.contains(_status);
+    EngineStatus.connecting,
+    EngineStatus.live,
+    EngineStatus.reconnecting,
+    EngineStatus.degraded,
+    EngineStatus.requestingBlock,
+  }.contains(_status);
 
   Duration get elapsed {
     if (_sessionStart == null) return Duration.zero;
@@ -88,8 +87,6 @@ class SessionController extends ChangeNotifier {
     );
   }
 
-
-
   void _handleCountEvent(CountEvent event) {
     // Manual events are deliberately ignored here: incrementManual() has
     // already counted them locally, so counting the echo would double up.
@@ -113,13 +110,14 @@ class SessionController extends ChangeNotifier {
 
   /// Start or resume voice counting mid-session without wiping current count.
   Future<void> startSession([PhraseSpec? phrase]) async {
-    _activePhrase = phrase;
+    final targetPhrase = phrase ?? _activePhrase;
+    _activePhrase = targetPhrase;
     _lastDiagnostic = null;
     _sessionStart ??= DateTime.now();
-    await _engine.start(phrase);
+    await _engine.start(targetPhrase);
 
     await _liveActivityService?.startActivity(
-      phrase: phrase?.raw ?? '',
+      phrase: targetPhrase?.raw ?? '',
       count: total,
       voiceCount: _voiceCount,
       manualCount: _manualCount,
@@ -190,7 +188,6 @@ class SessionController extends ChangeNotifier {
       duration: summary.duration,
     );
   }
-
 
   @override
   void dispose() {

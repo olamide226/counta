@@ -7,10 +7,12 @@ import '../../domain/validation/phrase_validator.dart';
 class PhraseSetupScreen extends StatefulWidget {
   final List<PhraseHistoryEntry> recentPhrases;
   final Function(PhraseSpec spec) onStartSession;
+  final String? initialPhrase;
 
   const PhraseSetupScreen({
     super.key,
     this.recentPhrases = const [],
+    this.initialPhrase,
     required this.onStartSession,
   });
 
@@ -19,8 +21,7 @@ class PhraseSetupScreen extends StatefulWidget {
 }
 
 class _PhraseSetupScreenState extends State<PhraseSetupScreen> {
-  final TextEditingController _controller =
-      TextEditingController(text: "I'm rich in wisdom");
+  late final TextEditingController _controller;
   final PhraseValidator _validator = PhraseValidator();
 
   PhraseValidationResult? _validationResult;
@@ -28,6 +29,9 @@ class _PhraseSetupScreenState extends State<PhraseSetupScreen> {
   @override
   void initState() {
     super.initState();
+    _controller = TextEditingController(
+      text: widget.initialPhrase ?? "I'm rich in wisdom",
+    );
     _validateCurrentInput();
     _controller.addListener(_validateCurrentInput);
   }
@@ -121,7 +125,11 @@ class _PhraseSetupScreenState extends State<PhraseSetupScreen> {
               ElevatedButton.icon(
                 onPressed: isValid ? _handleSubmit : null,
                 icon: const Icon(Icons.mic),
-                label: const Text('Start Voice Session'),
+                label: Text(
+                  widget.initialPhrase == null
+                      ? 'Start Voice Session'
+                      : 'Resume Voice Session',
+                ),
                 style: ElevatedButton.styleFrom(
                   padding: const EdgeInsets.symmetric(vertical: 16),
                   backgroundColor: Colors.deepPurple,

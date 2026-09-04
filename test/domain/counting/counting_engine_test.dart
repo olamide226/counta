@@ -133,7 +133,6 @@ void main() {
       expect(controller.voiceCount, 0);
       expect(controller.manualCount, 1);
       expect(controller.status, EngineStatus.live);
-
     });
 
     test('stop returns complete SessionSummary', () async {
@@ -146,6 +145,25 @@ void main() {
       expect(summary.totalCount, 2);
       expect(summary.manualCount, 2);
       expect(summary.voiceCount, 0);
+    });
+
+    test('resuming voice counting keeps the most recent phrase', () async {
+      const phrase = PhraseSpec(
+        raw: 'I am full of power',
+        normalisedTokens: ['i', 'am', 'full', 'of', 'power'],
+      );
+      final firstEngine = _RecordingEngine();
+      controller.setEngine(firstEngine);
+
+      await controller.startSession(phrase);
+      await controller.stop();
+
+      final resumedEngine = _RecordingEngine();
+      controller.setEngine(resumedEngine);
+      await controller.startSession();
+
+      expect(controller.activePhrase, phrase);
+      expect(resumedEngine.lastPhrase, phrase);
     });
 
     test('manual taps reach whichever engine is active', () async {
@@ -188,6 +206,7 @@ class _RecordingEngine implements CountingEngine {
   final _status = StreamController<EngineStatus>.broadcast();
   int increments = 0;
   int decrements = 0;
+  PhraseSpec? lastPhrase;
 
   @override
   Stream<CountEvent> get counts => _counts.stream;
@@ -197,8 +216,10 @@ class _RecordingEngine implements CountingEngine {
   Stream<String> get diagnostics => const Stream<String>.empty();
 
   @override
-  Future<void> start([PhraseSpec? phrase]) async =>
-      _status.add(EngineStatus.live);
+  Future<void> start([PhraseSpec? phrase]) async {
+    lastPhrase = phrase;
+    _status.add(EngineStatus.live);
+  }
 
   @override
   void incrementManual() => increments++;
@@ -208,11 +229,11 @@ class _RecordingEngine implements CountingEngine {
 
   @override
   Future<SessionSummary> stop() async => const SessionSummary(
-        voiceCount: 0,
-        manualCount: 0,
-        totalCount: 0,
-        duration: Duration.zero,
-      );
+    voiceCount: 0,
+    manualCount: 0,
+    totalCount: 0,
+    duration: Duration.zero,
+  );
 
   @override
   Future<void> dispose() async {
