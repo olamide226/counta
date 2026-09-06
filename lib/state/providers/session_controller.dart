@@ -41,6 +41,11 @@ class SessionController extends ChangeNotifier {
   /// while something is actually wrong.
   String? get lastDiagnostic => _lastDiagnostic;
 
+  /// True when the last attempt to start voice counting was refused because
+  /// the user has not granted microphone access. The UI should explain and
+  /// offer the system settings rather than retrying.
+  bool get isPermissionDenied => _status == EngineStatus.permissionDenied;
+
   /// Whether a voice session is currently running or trying to run.
   bool get isVoiceActive => const {
     EngineStatus.connecting,
@@ -115,6 +120,12 @@ class SessionController extends ChangeNotifier {
     _lastDiagnostic = null;
     _sessionStart ??= DateTime.now();
     await _engine.start(targetPhrase);
+
+    // Nothing is running, so there is no session to mirror on the lock screen.
+    if (isPermissionDenied) {
+      notifyListeners();
+      return;
+    }
 
     await _liveActivityService?.startActivity(
       phrase: targetPhrase?.raw ?? '',
