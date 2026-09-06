@@ -61,12 +61,12 @@ Each task is scoped to be completable in isolation and leaves the app in a worki
   - [x] 6.6 Implement the decrement gesture with a floor of zero
   - _Requirements: 2.4, 2.5, 2.6, 6.1, 6.2, 6.3, 6.4, 9.3_
 
-- [ ] **7. Implement session persistence and recovery**
-  - [ ] 7.1 Define `SessionRecord` and the local database schema
-  - [ ] 7.2 Checkpoint the live count to local storage every 10 s and on every state transition
-  - [ ] 7.3 On launch, detect an uncompleted checkpoint and offer to save it as a recovered session
-  - [ ] 7.4 Build the session history screen, reverse chronological, showing phrase, date and total
-  - [ ] 7.5 Build the session summary screen showing the voice and manual breakdown
+- [x] **7. Implement session persistence and recovery**
+  - [x] 7.1 Define `SessionRecord` and the local database schema
+  - [x] 7.2 Checkpoint the live count to local storage every 10 s and on every state transition
+  - [x] 7.3 On launch, detect an uncompleted checkpoint and offer to save it as a recovered session
+  - [x] 7.4 Build the session history screen, reverse chronological, showing phrase, date and total
+  - [x] 7.5 Build the session summary screen showing the voice and manual breakdown
   - _Requirements: 7.1, 7.2, 7.3, 7.4, 6.4_
 
 - [ ] **8. Build the Edge Function and remove the hardcoded key**

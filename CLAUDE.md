@@ -77,9 +77,11 @@ The interface carries `counts`, `status`, `diagnostics`, `incrementManual()` and
 
 ## Hive Persistence
 
-Two Hive boxes: `'settings'` (single `AppSettings` doc) and `'sessions'` (collection of `CountSession` docs). Type IDs: `AppSettings`=0, `CountSession`=1, `SoundMode`=10, `ThemeModeChoice`=11, `AppThemeId`=12.
+Three Hive boxes: `'settings'` (single `AppSettings` doc), `'sessions'` (collection of `CountSession` docs) and `'session_checkpoint'` (at most one `CountSession`: the session in progress). Type IDs: `AppSettings`=0, `CountSession`=1, `SoundMode`=10, `ThemeModeChoice`=11, `AppThemeId`=12.
 
-`CountSession` fields 12–14 (`phrase`, `voiceCount`, `manualCount`) are nullable so sessions saved before voice counting existed still load.
+`CountSession` fields 12–14 (`phrase`, `voiceCount`, `manualCount`) are nullable so sessions saved before voice counting existed still load. Field 15 `completed` defaults to `true` for the same reason; it is `false` on a record recovered from a checkpoint. Field 16 `creditsConsumed` is nullable until block accounting exists.
+
+`SessionCheckpointer` (`state/providers/session_checkpointer.dart`) listens to `SessionController` and writes the checkpoint every 10 s while there is unsaved progress and immediately on every engine status transition. It clears only checkpoints it wrote itself, so a leftover from a crashed run survives until `SessionRecovery` has offered it to the user on the next launch.
 
 ## Testing
 
