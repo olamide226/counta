@@ -30,11 +30,14 @@ class FakeSpeechSocket implements SpeechSocket {
   @override
   String? closeDescription;
 
+  int connectCount = 0;
+
   @override
   Future<void> connect({
     required String apiKeyOrToken,
     PhraseSpec? phrase,
   }) async {
+    connectCount++;
     _currentState = SocketState.connected;
     _stateController.add(_currentState);
   }
@@ -75,8 +78,11 @@ class FakeAudioSource implements AudioSource {
   int startCount = 0;
   int stopCount = 0;
 
+  /// What the OS answers when the engine asks for the microphone.
+  bool permissionGranted = true;
+
   @override
-  Future<bool> hasPermission() async => true;
+  Future<bool> hasPermission() async => permissionGranted;
 
   @override
   Stream<Uint8List> start({int sampleRate = 16000}) {
@@ -127,6 +133,52 @@ void main() {
 
     tearDown(() async {
       await engine.dispose();
+    });
+
+    group('microphone permission', () {
+      test(
+        'denied permission reports permissionDenied and opens no socket',
+        () async {
+          fakeAudio.permissionGranted = false;
+          final statuses = <EngineStatus>[];
+          final diagnostics = <String>[];
+          engine.status.listen(statuses.add);
+          engine.diagnostics.listen(diagnostics.add);
+
+          await engine.start();
+          await Future<void>.delayed(Duration.zero);
+
+          expect(engine.currentStatus, EngineStatus.permissionDenied);
+          expect(statuses, [EngineStatus.permissionDenied]);
+          expect(diagnostics, isNotEmpty);
+          // No streaming time may be spent on a session that cannot capture
+          // audio: neither the socket nor the microphone is touched.
+          expect(fakeSocket.connectCount, 0);
+          expect(fakeAudio.startCount, 0);
+        },
+      );
+
+      test('permission is checked before the socket is opened', () async {
+        await engine.start();
+        await Future<void>.delayed(Duration.zero);
+
+        expect(fakeSocket.connectCount, 1);
+        expect(fakeAudio.startCount, 1);
+        expect(engine.currentStatus, EngineStatus.live);
+      });
+
+      test(
+        'stop after a denied start is clean and returns an empty summary',
+        () async {
+          fakeAudio.permissionGranted = false;
+          await engine.start();
+
+          final summary = await engine.stop();
+
+          expect(summary.totalCount, 0);
+          expect(engine.currentStatus, EngineStatus.idle);
+        },
+      );
     });
 
     test('start transitions status to connecting then live', () async {

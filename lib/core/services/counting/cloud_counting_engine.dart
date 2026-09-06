@@ -151,6 +151,16 @@ class CloudCountingEngine implements CountingEngine {
     _phrase = targetPhrase;
     _matcher = PhraseMatcher(target: targetPhrase, config: matcherConfig);
 
+    // Ask for the microphone before anything else. Opening the socket first
+    // would spend streaming time (and, once credits exist, money) on a session
+    // that can never deliver audio.
+    if (!await _audioSource.hasPermission()) {
+      _report('Microphone access is needed for voice counting.');
+      _setStatus(EngineStatus.permissionDenied);
+      return;
+    }
+    if (_stopped) return;
+
     _setStatus(EngineStatus.connecting);
 
     // Attach socket state listener

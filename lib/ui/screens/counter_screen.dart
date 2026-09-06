@@ -12,9 +12,11 @@ import '../../state/providers/session_checkpointer.dart';
 import '../../state/providers/session_recovery.dart';
 import '../../state/providers/settings_provider.dart';
 import '../sheets/alert_config_sheet.dart';
+import '../sheets/microphone_denied_dialog.dart';
 import '../sheets/recover_session_sheet.dart';
 import '../sheets/save_session_sheet.dart';
 import '../sheets/sound_mode_sheet.dart';
+import '../sheets/voice_disclosure_sheet.dart';
 import '../widgets/count_display.dart';
 import '../widgets/quick_controls_bar.dart';
 import '../widgets/resizable_tap_layout.dart';
@@ -68,10 +70,20 @@ class _CounterScreenState extends ConsumerState<CounterScreen>
     ref.read(appLifecycleProvider.notifier).handleLifecycleChange(state);
   }
 
-  void _openPhraseSetup(
+  Future<void> _openPhraseSetup(
     BuildContext context,
     SessionController sessionController,
-  ) {
+  ) async {
+    // The third-party audio disclosure gates the very first voice session.
+    // It is shown before phrase setup so accepting it is a deliberate step,
+    // not something buried behind the start button.
+    if (!ref.read(settingsProvider).voiceDisclosureSeen) {
+      final accepted = await showVoiceDisclosureSheet(context);
+      if (!accepted || !mounted) return;
+      await ref.read(settingsProvider.notifier).markVoiceDisclosureSeen();
+    }
+    if (!context.mounted) return;
+
     Navigator.of(context).push(
       MaterialPageRoute(
         builder: (_) => PhraseSetupScreen(
@@ -79,9 +91,27 @@ class _CounterScreenState extends ConsumerState<CounterScreen>
           onStartSession: (phraseSpec) async {
             sessionController.setEngine(ref.read(voiceEngineFactoryProvider)());
             await sessionController.startSession(phraseSpec);
+            if (sessionController.isPermissionDenied) {
+              await _handleMicrophoneDenied(sessionController);
+            }
           },
         ),
       ),
+    );
+  }
+
+  /// The engine refused to start because the microphone was not granted. No
+  /// socket was opened, so there is nothing to tear down beyond handing the
+  /// count back to the tap engine and telling the user where the fix lives.
+  Future<void> _handleMicrophoneDenied(
+    SessionController sessionController,
+  ) async {
+    sessionController.setEngine(ref.read(tapEngineFactoryProvider)());
+    if (!mounted) return;
+    await showMicrophoneDeniedDialog(
+      context,
+      onOpenSettings: () =>
+          ref.read(microphonePermissionServiceProvider).openSystemSettings(),
     );
   }
 
