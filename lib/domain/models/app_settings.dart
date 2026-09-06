@@ -30,6 +30,13 @@ class AppSettings {
   @HiveField(7)
   final bool keepScreenOn;
 
+  /// Whether the user has been told that voice sessions stream audio to a
+  /// third-party speech recognition provider. Defaults to false so settings
+  /// documents written before this field existed still load and show the
+  /// disclosure once.
+  @HiveField(8, defaultValue: false)
+  final bool voiceDisclosureSeen;
+
   const AppSettings({
     required this.themeModeChoice,
     required this.themeId,
@@ -39,6 +46,7 @@ class AppSettings {
     required this.tapZoneRatio,
     required this.confirmReset,
     required this.keepScreenOn,
+    this.voiceDisclosureSeen = false,
   });
 
   factory AppSettings.defaults() {
@@ -51,6 +59,7 @@ class AppSettings {
       tapZoneRatio: 0.75,
       confirmReset: true,
       keepScreenOn: false,
+      voiceDisclosureSeen: false,
     );
   }
 
@@ -63,6 +72,7 @@ class AppSettings {
     double? tapZoneRatio,
     bool? confirmReset,
     bool? keepScreenOn,
+    bool? voiceDisclosureSeen,
   }) {
     return AppSettings(
       themeModeChoice: themeModeChoice ?? this.themeModeChoice,
@@ -74,6 +84,7 @@ class AppSettings {
       tapZoneRatio: tapZoneRatio ?? this.tapZoneRatio,
       confirmReset: confirmReset ?? this.confirmReset,
       keepScreenOn: keepScreenOn ?? this.keepScreenOn,
+      voiceDisclosureSeen: voiceDisclosureSeen ?? this.voiceDisclosureSeen,
     );
   }
 }
