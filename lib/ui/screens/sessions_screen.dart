@@ -60,8 +60,19 @@ class SessionsScreen extends ConsumerWidget {
                         : const Icon(Icons.touch_app_outlined),
                     title: Text(session.mantra),
                     subtitle: Text(
-                      '${session.finalCount} counts • ${_formatDate(session.endedAt)}',
+                      [
+                        if (session.phrase != null &&
+                            session.phrase != session.mantra)
+                          '“${session.phrase}”',
+                        '${session.finalCount} counts • '
+                            '${_formatDate(session.endedAt)}',
+                        if (!session.completed) 'Recovered after interruption',
+                      ].join('\n'),
                     ),
+                    isThreeLine:
+                        !session.completed ||
+                        (session.phrase != null &&
+                            session.phrase != session.mantra),
                     trailing: const Icon(Icons.chevron_right),
                     onTap: () {
                       Navigator.of(context).push(

@@ -14,7 +14,7 @@ class SessionDetailScreen extends ConsumerWidget {
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
-    final duration = session.endedAt.difference(session.startedAt);
+    final duration = session.duration;
 
     return Scaffold(
       appBar: AppBar(
@@ -31,6 +31,36 @@ class SessionDetailScreen extends ConsumerWidget {
       body: ListView(
         padding: const EdgeInsets.all(24),
         children: [
+          if (!session.completed) ...[
+            Card(
+              color: Theme.of(context).colorScheme.tertiaryContainer,
+              child: Padding(
+                padding: const EdgeInsets.all(16),
+                child: Row(
+                  children: [
+                    Icon(
+                      Icons.restore,
+                      color: Theme.of(context).colorScheme.onTertiaryContainer,
+                    ),
+                    const SizedBox(width: 16),
+                    Expanded(
+                      child: Text(
+                        'Recovered after the app closed unexpectedly. '
+                        'The end time is the last checkpoint, so the '
+                        'duration may be slightly short.',
+                        style: Theme.of(context).textTheme.bodyMedium?.copyWith(
+                          color: Theme.of(
+                            context,
+                          ).colorScheme.onTertiaryContainer,
+                        ),
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+            ),
+            const SizedBox(height: 16),
+          ],
           _buildStatCard(
             context,
             icon: Icons.numbers,
@@ -52,8 +82,18 @@ class SessionDetailScreen extends ConsumerWidget {
               context,
               icon: Icons.mic_rounded,
               label: 'Voice vs tap',
-              value: '${session.voiceCount ?? 0} by voice · '
+              value:
+                  '${session.voiceCount ?? 0} by voice · '
                   '${session.manualCount ?? 0} by tap',
+            ),
+          ],
+          if (session.creditsConsumed != null) ...[
+            const SizedBox(height: 16),
+            _buildStatCard(
+              context,
+              icon: Icons.toll_outlined,
+              label: 'Voice credits used',
+              value: session.creditsConsumed.toString(),
             ),
           ],
           const SizedBox(height: 16),
@@ -246,6 +286,4 @@ class SessionDetailScreen extends ConsumerWidget {
   String _formatDateTime(DateTime date) {
     return '${date.day}/${date.month}/${date.year} ${date.hour.toString().padLeft(2, '0')}:${date.minute.toString().padLeft(2, '0')}';
   }
-
-
 }
