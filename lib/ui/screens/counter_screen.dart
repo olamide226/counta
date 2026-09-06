@@ -8,8 +8,11 @@ import '../../state/providers/session_controller.dart';
 import '../../state/providers/app_lifecycle_provider.dart';
 import '../../state/providers/counter_provider.dart';
 import '../../state/providers/services_provider.dart';
+import '../../state/providers/session_checkpointer.dart';
+import '../../state/providers/session_recovery.dart';
 import '../../state/providers/settings_provider.dart';
 import '../sheets/alert_config_sheet.dart';
+import '../sheets/recover_session_sheet.dart';
 import '../sheets/save_session_sheet.dart';
 import '../sheets/sound_mode_sheet.dart';
 import '../widgets/count_display.dart';
@@ -39,9 +42,18 @@ class _CounterScreenState extends ConsumerState<CounterScreen>
     // Initialize notification service and clear stale notifications from
     // any previous session that may have been killed or crashed.
     WidgetsBinding.instance.addPostFrameCallback((_) async {
+      // Look for a crashed session before the checkpointer is attached, so
+      // the leftover checkpoint cannot be overwritten by the first tap.
+      final checkpoint = ref.read(sessionRecoveryProvider).pending;
+      ref.read(sessionCheckpointerProvider);
+
       final ns = ref.read(notificationServiceProvider);
       await ns.init();
       await ns.cancelAllNotifications();
+
+      if (checkpoint != null && mounted) {
+        await showRecoverSessionSheet(context, checkpoint);
+      }
     });
   }
 

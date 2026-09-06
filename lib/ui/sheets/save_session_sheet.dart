@@ -3,6 +3,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../domain/models/count_session.dart';
 import '../../state/providers/counter_provider.dart';
+import '../../state/providers/session_checkpointer.dart';
 import '../../state/providers/sessions_provider.dart';
 import '../../state/providers/settings_provider.dart';
 import '../../state/providers/services_provider.dart';
@@ -204,6 +205,9 @@ class _SaveSessionSheetState extends ConsumerState<SaveSessionSheet> {
     );
 
     await ref.read(sessionsProvider.notifier).saveSession(session);
+
+    // Saved cleanly, so there is nothing left to recover on next launch.
+    await ref.read(sessionCheckpointerProvider).clear();
 
     // Clear any lingering notifications now that the session is saved.
     await ref.read(notificationServiceProvider).cancelAllNotifications();
