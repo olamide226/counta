@@ -32,7 +32,6 @@ function buildConfig(): HandlerConfig {
     blockSeconds: intEnv("BLOCK_SECONDS", 300),
     tokenTtlSeconds: Math.min(Math.max(intEnv("DEEPGRAM_TOKEN_TTL_SECONDS", 30), 1), 3600),
     refundWindowSeconds: intEnv("REFUND_WINDOW_SECONDS", 30),
-    renewalOverlapSeconds: intEnv("RENEWAL_OVERLAP_SECONDS", 30),
     rateLimitMax: intEnv("RATE_LIMIT_MAX", 6),
     rateLimitWindowMinutes: intEnv("RATE_LIMIT_WINDOW_MINUTES", 10),
   };

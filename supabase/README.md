@@ -73,7 +73,6 @@ Injected by the runtime (do not set): `SUPABASE_URL`, `SUPABASE_ANON_KEY` or
 | `BLOCK_CREDITS` | 5 | Credits debited per block |
 | `BLOCK_SECONDS` | 300 | Block duration |
 | `REFUND_WINDOW_SECONDS` | 30 | Release within this window with zero detections is refunded |
-| `RENEWAL_OVERLAP_SECONDS` | 30 | A block with at most this much life left does not block a renewal with 409 |
 | `RATE_LIMIT_MAX` | 6 | Max grants per user per window |
 | `RATE_LIMIT_WINDOW_MINUTES` | 10 | Rate-limit window |
 

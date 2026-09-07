@@ -72,29 +72,43 @@ Deno.test("grant: insufficient balance is 402 with balance and required, no mint
   assertEquals(h.balance.calls.map((c) => c.op), ["get"]);
 });
 
-Deno.test("grant: live block for the user is 409 with its expiry", async () => {
+Deno.test("grant: the same session renewing supersedes its own block", async () => {
   const h = harness();
   const first = await call(h.deps, grantReq());
-  assertEquals(first.status, 200);
 
-  h.clock.now = new Date("2026-09-07T12:01:00.000Z");
-  const second = await call(h.deps, grantReq());
-  assertEquals(second.status, 409);
-  assertEquals(second.body, {
-    error: "block_in_flight",
-    expires_at: first.body.expires_at,
-  });
-  assertEquals(h.balance.balances.get(USER), 15);
-});
-
-Deno.test("grant: a block inside its renewal overlap window does not 409", async () => {
-  const h = harness();
-  await call(h.deps, grantReq());
   // 270 s in = 90% of a 300 s block, the renewal point from req 3.9.
   h.clock.now = new Date("2026-09-07T12:04:30.000Z");
   const renewal = await call(h.deps, grantReq());
+
   assertEquals(renewal.status, 200);
   assertEquals(h.blocks.rows.length, 2);
+  // Exactly one live block survives the renewal (req 3.8).
+  assertEquals(h.blocks.rows.filter((r) => !r.reconciled).length, 1);
+  assertEquals(h.blocks.rows[0].id, first.body.block_id);
+  assertEquals(h.blocks.rows[0].reconciled, true);
+  const granted = h.logs.filter((l) => l.event === "block_granted");
+  assertEquals(granted[1].fields.renewal_of, first.body.block_id);
+});
+
+Deno.test("grant: a different session is 409 even inside the renewal window", async () => {
+  const h = harness();
+  const first = await call(h.deps, grantReq());
+
+  // Nearly expired, but a second session must never hold a concurrent block:
+  // remaining life is not what makes a grant a renewal, identity is.
+  h.clock.now = new Date("2026-09-07T12:04:59.000Z");
+  const other = await call(
+    h.deps,
+    grantReq({ session_id: "55555555-5555-4555-8555-555555555555" }),
+  );
+
+  assertEquals(other.status, 409);
+  assertEquals(other.body, {
+    error: "block_in_flight",
+    expires_at: first.body.expires_at,
+  });
+  assertEquals(h.blocks.rows.length, 1);
+  assertEquals(h.balance.balances.get(USER), 15);
 });
 
 Deno.test("grant: mint failure refunds the debit and returns 503", async () => {

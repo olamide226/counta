@@ -86,14 +86,14 @@ async function grant(req: Request, deps: Deps, userId: string): Promise<Response
     return json(429, { error: "rate_limited" });
   }
 
-  // 3.8: one live block per user. A block inside its renewal overlap window is
-  // not "live" for this purpose, otherwise the 90% renewal (3.9) could never
-  // succeed.
-  const liveCutoff = new Date(
-    now.getTime() + config.renewalOverlapSeconds * 1000,
-  );
-  const live = await blocks.findLiveBlock(userId, liveCutoff);
-  if (live) {
+  // 3.8 / 3.9: one live block per user, with renewal identified rather than
+  // guessed. A grant whose session_id matches the live block is that session
+  // renewing itself and supersedes it; a grant from any other session is a
+  // conflict however little life the live block has left. Treating "nearly
+  // expired" as "not live" handed a *second* session a concurrent block for
+  // the whole overlap window — the exact thing 3.8 exists to prevent.
+  const live = await blocks.findLiveBlock(userId, now);
+  if (live && live.session_id !== sessionId) {
     return json(409, { error: "block_in_flight", expires_at: live.expires_at });
   }
 
@@ -131,6 +131,9 @@ async function grant(req: Request, deps: Deps, userId: string): Promise<Response
   const expiresAt = new Date(now.getTime() + config.blockSeconds * 1000);
   let row;
   try {
+    // Retire the block this one renews first: two unreconciled blocks for one
+    // user is the state 3.8 forbids.
+    if (live) await blocks.supersede(live.id);
     row = await blocks.insert({
       id: blockId,
       user_id: userId,
@@ -153,6 +156,7 @@ async function grant(req: Request, deps: Deps, userId: string): Promise<Response
   deps.log("block_granted", {
     user_id: userId,
     block_id: row.id,
+    renewal_of: live?.id ?? null,
     session_id: sessionId,
     credits: config.blockCredits,
     granted_at: row.granted_at,

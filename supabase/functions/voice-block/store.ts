@@ -11,19 +11,28 @@ export class SupabaseBlockStore implements BlockStore {
 
   async findLiveBlock(
     userId: string,
-    notBefore: Date,
+    now: Date,
   ): Promise<VoiceBlockRow | null> {
     const { data, error } = await this.admin
       .from("voice_blocks")
       .select("*")
       .eq("user_id", userId)
       .eq("reconciled", false)
-      .gt("expires_at", notBefore.toISOString())
+      .gt("expires_at", now.toISOString())
       .order("expires_at", { ascending: false })
       .limit(1)
       .maybeSingle();
     if (error) throw new Error(`voice_blocks select: ${error.message}`);
     return (data as VoiceBlockRow | null) ?? null;
+  }
+
+  async supersede(blockId: string): Promise<void> {
+    const { error } = await this.admin
+      .from("voice_blocks")
+      .update({ reconciled: true })
+      .eq("id", blockId)
+      .eq("reconciled", false);
+    if (error) throw new Error(`voice_blocks supersede: ${error.message}`);
   }
 
   async countGrantsSince(userId: string, since: Date): Promise<number> {

@@ -62,8 +62,14 @@ export interface VoiceBlockRow {
 }
 
 export interface BlockStore {
-  /** Unreconciled block for the user that expires after `notBefore`. */
-  findLiveBlock(userId: string, notBefore: Date): Promise<VoiceBlockRow | null>;
+  /** The user's unreconciled, unexpired block, if any. */
+  findLiveBlock(userId: string, now: Date): Promise<VoiceBlockRow | null>;
+  /**
+   * Marks a block reconciled because a renewal has replaced it. Distinct from
+   * `reconcile`, which records a client's usage report; a superseded block was
+   * never released and has no report to record.
+   */
+  supersede(blockId: string): Promise<void>;
   /** Number of blocks granted to the user since `since` (rate limiting). */
   countGrantsSince(userId: string, since: Date): Promise<number>;
   /** Inserts the row under the caller-supplied id (see BalanceProvider.spend). */
@@ -92,7 +98,6 @@ export interface HandlerConfig {
   blockSeconds: number;
   tokenTtlSeconds: number;
   refundWindowSeconds: number;
-  renewalOverlapSeconds: number;
   rateLimitMax: number;
   rateLimitWindowMinutes: number;
 }

@@ -89,14 +89,20 @@ export class MemoryBlockStore implements BlockStore {
   /** When set, every insert rejects with it (the failed-write paths). */
   constructor(private readonly failInsertWith?: Error) {}
 
-  findLiveBlock(userId: string, notBefore: Date): Promise<VoiceBlockRow | null> {
+  findLiveBlock(userId: string, now: Date): Promise<VoiceBlockRow | null> {
     const live = this.rows
       .filter((r) =>
         r.user_id === userId && !r.reconciled &&
-        new Date(r.expires_at).getTime() > notBefore.getTime()
+        new Date(r.expires_at).getTime() > now.getTime()
       )
       .sort((a, b) => b.expires_at.localeCompare(a.expires_at))[0];
     return Promise.resolve(live ?? null);
+  }
+
+  supersede(blockId: string): Promise<void> {
+    const row = this.rows.find((r) => r.id === blockId);
+    if (row) row.reconciled = true;
+    return Promise.resolve();
   }
 
   countGrantsSince(userId: string, since: Date): Promise<number> {
@@ -144,7 +150,6 @@ export const CONFIG: HandlerConfig = {
   blockSeconds: 300,
   tokenTtlSeconds: 30,
   refundWindowSeconds: 30,
-  renewalOverlapSeconds: 30,
   rateLimitMax: 6,
   rateLimitWindowMinutes: 10,
 };

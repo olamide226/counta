@@ -83,8 +83,8 @@ The system has no backend today. This feature introduces exactly one server-side
 3.5. WHEN the balance is sufficient THEN the Edge Function SHALL debit the block cost from the RevenueCat balance BEFORE minting the Deepgram token.
 3.6. IF the Deepgram token grant fails after a successful debit THEN the Edge Function SHALL refund the debit and return HTTP 503.
 3.7. WHEN a block is granted THEN the Edge Function SHALL record it in the `voice_blocks` table with the user id, grant time, and expiry.
-3.8. IF an unexpired block already exists for the caller THEN the Edge Function SHALL return HTTP 409 and SHALL NOT grant a second block.
-3.9. WHEN the client reaches 90% of the block duration THEN it SHALL request the next block and hold both tokens until the new Deepgram connection is confirmed open.
+3.8. IF an unexpired, unreconciled block already exists for the caller AND the request carries a different `session_id` THEN the Edge Function SHALL return HTTP 409 and SHALL NOT grant a second block, however little life the existing block has left.
+3.9. WHEN the client reaches 90% of the block duration THEN it SHALL request the next block for the same `session_id` and hold both tokens until the new Deepgram connection is confirmed open; the Edge Function SHALL treat a matching `session_id` as a renewal, grant the new block, and mark the block it replaces as superseded so that only one block is ever live per user.
 3.10. IF a block renewal fails with HTTP 402 THEN the system SHALL allow the current block to run to completion, then transition the session to the exhausted state.
 3.11. WHEN a session ends within 30 seconds of a block being granted AND no detections occurred in that block THEN the system SHALL credit the block cost back to the user.
 3.12. The Edge Function SHALL never return the Deepgram master API key to a client under any condition.
