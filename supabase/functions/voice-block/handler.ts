@@ -7,7 +7,7 @@ import { Deps, ProviderError } from "./types.ts";
 const UUID_RE =
   /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 
-function json(status: number, body: Record<string, unknown>): Response {
+export function json(status: number, body: Record<string, unknown>): Response {
   return new Response(JSON.stringify(body), {
     status,
     headers: { "Content-Type": "application/json" },
@@ -39,8 +39,7 @@ export async function handleVoiceBlock(
 
   const path = new URL(req.url).pathname.replace(/\/+$/, "");
   const isRelease = path.endsWith("/release");
-  const isGrant = !isRelease && path.endsWith("/voice-block");
-  if (!isGrant && !isRelease) {
+  if (!isRelease && !path.endsWith("/voice-block")) {
     return json(404, { error: "not_found" });
   }
 
@@ -56,20 +55,20 @@ export async function handleVoiceBlock(
       : await grant(req, deps, userId);
   } catch (error) {
     if (error instanceof ProviderError) {
-      deps.log?.("provider_unavailable", {
+      deps.log("provider_unavailable", {
         user_id: userId,
         reason: error.reason,
       });
       return json(503, { error: "provider_unavailable" });
     }
-    deps.log?.("internal_error", { user_id: userId, message: String(error) });
+    deps.log("internal_error", { user_id: userId, message: String(error) });
     return json(500, { error: "internal" });
   }
 }
 
 async function grant(req: Request, deps: Deps, userId: string): Promise<Response> {
   const { config, blocks, balance, minter } = deps;
-  const now = deps.now?.() ?? new Date();
+  const now = deps.now();
 
   const body = await readJson(req);
   const sessionId = body?.session_id;
@@ -83,7 +82,7 @@ async function grant(req: Request, deps: Deps, userId: string): Promise<Response
   );
   const recent = await blocks.countGrantsSince(userId, windowStart);
   if (recent >= config.rateLimitMax) {
-    deps.log?.("rate_limited", { user_id: userId, recent });
+    deps.log("rate_limited", { user_id: userId, recent });
     return json(429, { error: "rate_limited" });
   }
 
@@ -122,14 +121,14 @@ async function grant(req: Request, deps: Deps, userId: string): Promise<Response
     } catch (refundError) {
       // Money is now wrong; say so loudly. The reconciliation query (10.5)
       // is what catches this class of drift.
-      deps.log?.("refund_failed", {
+      deps.log("refund_failed", {
         user_id: userId,
         session_id: sessionId,
         credits: config.blockCredits,
         message: String(refundError),
       });
     }
-    deps.log?.("mint_failed", { user_id: userId, message: String(error) });
+    deps.log("mint_failed", { user_id: userId, message: String(error) });
     return json(503, { error: "provider_unavailable" });
   }
 
@@ -144,7 +143,7 @@ async function grant(req: Request, deps: Deps, userId: string): Promise<Response
   });
 
   // 10.1
-  deps.log?.("block_granted", {
+  deps.log("block_granted", {
     user_id: userId,
     block_id: row.id,
     session_id: sessionId,
@@ -163,7 +162,7 @@ async function grant(req: Request, deps: Deps, userId: string): Promise<Response
 
 async function release(req: Request, deps: Deps, userId: string): Promise<Response> {
   const { config, blocks, balance } = deps;
-  const now = deps.now?.() ?? new Date();
+  const now = deps.now();
 
   const body = await readJson(req);
   const blockId = body?.block_id;
@@ -210,7 +209,7 @@ async function release(req: Request, deps: Deps, userId: string): Promise<Respon
     balanceNow = await balance.getBalance(userId);
   }
 
-  deps.log?.("block_released", {
+  deps.log("block_released", {
     user_id: userId,
     block_id: block.id,
     streamed_secs: streamedSecs,

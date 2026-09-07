@@ -90,6 +90,7 @@ export interface Deps {
   minter: TokenMinter;
   blocks: BlockStore;
   config: HandlerConfig;
-  now?: () => Date;
-  log?: (event: string, fields: Record<string, unknown>) => void;
+  /** Injected so tests control time; both constructors always supply it. */
+  now: () => Date;
+  log: (event: string, fields: Record<string, unknown>) => void;
 }
