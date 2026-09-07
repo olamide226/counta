@@ -4,39 +4,6 @@ import {
   ProviderUnavailableError,
 } from "../types.ts";
 
-/** In-memory balances. Used by tests and by `BALANCE_PROVIDER=fake` for local
- * development before RevenueCat exists (task 10). State lives for the life of
- * the worker only. */
-export class FakeBalanceProvider implements BalanceProvider {
-  readonly balances = new Map<string, number>();
-  readonly calls: Array<{ op: string; userId: string; amount?: number }> = [];
-
-  constructor(private readonly initialBalance = 20) {}
-
-  getBalance(userId: string): Promise<number> {
-    this.calls.push({ op: "get", userId });
-    return Promise.resolve(this.current(userId));
-  }
-
-  spend(userId: string, amount: number): Promise<number> {
-    this.calls.push({ op: "spend", userId, amount });
-    const next = this.current(userId) - amount;
-    this.balances.set(userId, next);
-    return Promise.resolve(next);
-  }
-
-  grant(userId: string, amount: number): Promise<number> {
-    this.calls.push({ op: "grant", userId, amount });
-    const next = this.current(userId) + amount;
-    this.balances.set(userId, next);
-    return Promise.resolve(next);
-  }
-
-  private current(userId: string): number {
-    return this.balances.get(userId) ?? this.initialBalance;
-  }
-}
-
 export interface RevenueCatOptions {
   secretKey: string;
   projectId: string;

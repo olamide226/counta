@@ -1,20 +1,5 @@
 import { MintedToken, ProviderUnavailableError, TokenMinter } from "../types.ts";
 
-/** Hands out obviously-fake tokens. Never talks to Deepgram. */
-export class FakeTokenMinter implements TokenMinter {
-  minted = 0;
-  constructor(private readonly failWith?: Error) {}
-
-  mint(ttlSeconds: number): Promise<MintedToken> {
-    if (this.failWith) return Promise.reject(this.failWith);
-    this.minted++;
-    return Promise.resolve({
-      token: `fake-token-${this.minted}`,
-      expiresInSeconds: ttlSeconds,
-    });
-  }
-}
-
 export interface DeepgramMinterOptions {
   /** Master API key. Read from Deno.env by the entrypoint; never logged. */
   apiKey: string;

@@ -4,13 +4,10 @@
 
 import { createClient } from "@supabase/supabase-js";
 import { handleVoiceBlock } from "./handler.ts";
-import {
-  FakeBalanceProvider,
-  RevenueCatBalanceProvider,
-} from "./providers/balance.ts";
-import { DeepgramTokenMinter, FakeTokenMinter } from "./providers/minter.ts";
+import { RevenueCatBalanceProvider } from "./providers/balance.ts";
+import { DeepgramTokenMinter } from "./providers/minter.ts";
 import { SupabaseAuthenticator, SupabaseBlockStore } from "./store.ts";
-import type { BalanceProvider, Deps, HandlerConfig, TokenMinter } from "./types.ts";
+import type { Deps, HandlerConfig } from "./types.ts";
 
 function env(name: string): string | undefined {
   const value = Deno.env.get(name);
@@ -41,26 +38,6 @@ function buildConfig(): HandlerConfig {
   };
 }
 
-function buildBalanceProvider(): BalanceProvider {
-  if ((env("BALANCE_PROVIDER") ?? "revenuecat") === "fake") {
-    console.warn("voice-block: BALANCE_PROVIDER=fake, balances are in-memory");
-    return new FakeBalanceProvider(intEnv("FAKE_BALANCE_INITIAL", 20));
-  }
-  return new RevenueCatBalanceProvider({
-    secretKey: requireEnv("REVENUECAT_SECRET_KEY"),
-    projectId: requireEnv("REVENUECAT_PROJECT_ID"),
-    currencyCode: env("REVENUECAT_CURRENCY_CODE") ?? "VOICE",
-  });
-}
-
-function buildMinter(): TokenMinter {
-  if ((env("TOKEN_MINTER") ?? "deepgram") === "fake") {
-    console.warn("voice-block: TOKEN_MINTER=fake, tokens will not work against Deepgram");
-    return new FakeTokenMinter();
-  }
-  return new DeepgramTokenMinter({ apiKey: requireEnv("DEEPGRAM_API_KEY") });
-}
-
 // Built once per worker so a warm function does not re-read env per request.
 // Failures here (a missing secret) surface on the first request as a 500 with
 // the message in the function logs rather than crashing worker boot.
@@ -88,8 +65,17 @@ function deps(): Deps {
         })
       ),
       blocks: new SupabaseBlockStore(admin),
-      balance: buildBalanceProvider(),
-      minter: buildMinter(),
+      // Only the real adapters are reachable from here. The fakes live in
+      // testing/ and are never imported by this module, so no environment
+      // variable can turn the deployed function into a free-credit dispenser.
+      balance: new RevenueCatBalanceProvider({
+        secretKey: requireEnv("REVENUECAT_SECRET_KEY"),
+        projectId: requireEnv("REVENUECAT_PROJECT_ID"),
+        currencyCode: env("REVENUECAT_CURRENCY_CODE") ?? "VOICE",
+      }),
+      minter: new DeepgramTokenMinter({
+        apiKey: requireEnv("DEEPGRAM_API_KEY"),
+      }),
       config: buildConfig(),
       log: (event, fields) => console.log(JSON.stringify({ event, ...fields })),
     };

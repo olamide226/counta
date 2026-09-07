@@ -1,163 +1,31 @@
 import { assertEquals, assertStringIncludes } from "@std/assert";
 import { handleVoiceBlock } from "./handler.ts";
+import { RevenueCatBalanceProvider } from "./providers/balance.ts";
 import {
-  FakeBalanceProvider,
-  RevenueCatBalanceProvider,
-} from "./providers/balance.ts";
-import { FakeTokenMinter } from "./providers/minter.ts";
-import {
-  Authenticator,
-  BlockStore,
-  Deps,
-  HandlerConfig,
-  ProviderUnavailableError,
-  VoiceBlockRow,
-} from "./types.ts";
-
-// ---------------------------------------------------------------------------
-// Fakes
-
-const USER = "11111111-1111-4111-8111-111111111111";
-const SESSION = "22222222-2222-4222-8222-222222222222";
-const GOOD_TOKEN = "good-jwt";
-
-class FakeAuth implements Authenticator {
-  userIdForToken(token: string): Promise<string | null> {
-    return Promise.resolve(token === GOOD_TOKEN ? USER : null);
-  }
-}
-
-/** In-memory stand-in for the Supabase-backed store. */
-class MemoryBlockStore implements BlockStore {
-  rows: VoiceBlockRow[] = [];
-  private seq = 0;
-
-  findLiveBlock(userId: string, notBefore: Date): Promise<VoiceBlockRow | null> {
-    const live = this.rows
-      .filter((r) =>
-        r.user_id === userId && !r.reconciled &&
-        new Date(r.expires_at).getTime() > notBefore.getTime()
-      )
-      .sort((a, b) => b.expires_at.localeCompare(a.expires_at))[0];
-    return Promise.resolve(live ?? null);
-  }
-
-  countGrantsSince(userId: string, since: Date): Promise<number> {
-    return Promise.resolve(
-      this.rows.filter((r) =>
-        r.user_id === userId && new Date(r.granted_at).getTime() >= since.getTime()
-      ).length,
-    );
-  }
-
-  insert(
-    row: Omit<VoiceBlockRow, "id" | "reconciled" | "streamed_secs" | "detections">,
-  ): Promise<VoiceBlockRow> {
-    this.seq++;
-    const full: VoiceBlockRow = {
-      ...row,
-      id: `33333333-3333-4333-8333-${String(this.seq).padStart(12, "0")}`,
-      reconciled: false,
-      streamed_secs: null,
-      detections: null,
-    };
-    this.rows.push(full);
-    return Promise.resolve(full);
-  }
-
-  findById(blockId: string, userId: string): Promise<VoiceBlockRow | null> {
-    return Promise.resolve(
-      this.rows.find((r) => r.id === blockId && r.user_id === userId) ?? null,
-    );
-  }
-
-  reconcile(
-    blockId: string,
-    patch: { streamed_secs: number; detections: number },
-  ): Promise<boolean> {
-    const row = this.rows.find((r) => r.id === blockId);
-    if (!row || row.reconciled) return Promise.resolve(false);
-    Object.assign(row, patch, { reconciled: true });
-    return Promise.resolve(true);
-  }
-}
-
-const CONFIG: HandlerConfig = {
-  blockCredits: 5,
-  blockSeconds: 300,
-  tokenTtlSeconds: 30,
-  refundWindowSeconds: 30,
-  renewalOverlapSeconds: 30,
-  rateLimitMax: 6,
-  rateLimitWindowMinutes: 10,
-};
-
-interface Harness {
-  deps: Deps;
-  balance: FakeBalanceProvider;
-  minter: FakeTokenMinter;
-  blocks: MemoryBlockStore;
-  logs: Array<{ event: string; fields: Record<string, unknown> }>;
-  clock: { now: Date };
-}
-
-function harness(overrides: Partial<Deps> = {}, initialBalance = 20): Harness {
-  const balance = new FakeBalanceProvider(initialBalance);
-  const minter = new FakeTokenMinter();
-  const blocks = new MemoryBlockStore();
-  const logs: Harness["logs"] = [];
-  const clock = { now: new Date("2026-09-07T12:00:00.000Z") };
-  const deps: Deps = {
-    auth: new FakeAuth(),
-    balance,
-    minter,
-    blocks,
-    config: CONFIG,
-    now: () => clock.now,
-    log: (event, fields) => logs.push({ event, fields }),
-    ...overrides,
-  };
-  return { deps, balance, minter, blocks, logs, clock };
-}
-
-const BASE = "http://localhost:54321/functions/v1";
-
-function grantRequest(
-  body: unknown = { session_id: SESSION },
-  token: string | null = GOOD_TOKEN,
-): Request {
-  return new Request(`${BASE}/voice-block`, {
-    method: "POST",
-    headers: {
-      "Content-Type": "application/json",
-      ...(token ? { Authorization: `Bearer ${token}` } : {}),
-    },
-    body: JSON.stringify(body),
-  });
-}
-
-function releaseRequest(body: unknown, token: string | null = GOOD_TOKEN): Request {
-  return new Request(`${BASE}/voice-block/release`, {
-    method: "POST",
-    headers: {
-      "Content-Type": "application/json",
-      ...(token ? { Authorization: `Bearer ${token}` } : {}),
-    },
-    body: JSON.stringify(body),
-  });
-}
+  CONFIG,
+  FakeTokenMinter,
+  GOOD_TOKEN,
+  grantReq,
+  harness,
+  releaseReq,
+  SESSION,
+  USER,
+} from "./testing/fakes.ts";
+import { Deps, ProviderUnavailableError } from "./types.ts";
 
 async function call(deps: Deps, req: Request) {
   const res = await handleVoiceBlock(req, deps);
   return { status: res.status, body: await res.json() };
 }
 
+const BASE = "http://localhost:54321/functions/v1";
+
 // ---------------------------------------------------------------------------
 // Grant
 
 Deno.test("grant: happy path debits, mints, records and logs", async () => {
   const h = harness();
-  const { status, body } = await call(h.deps, grantRequest());
+  const { status, body } = await call(h.deps, grantReq());
 
   assertEquals(status, 200);
   assertEquals(body.token, "fake-token-1");
@@ -180,8 +48,8 @@ Deno.test("grant: happy path debits, mints, records and logs", async () => {
 
 Deno.test("grant: missing or invalid JWT is 401 and touches nothing", async () => {
   const h = harness();
-  assertEquals((await call(h.deps, grantRequest(undefined, null))).status, 401);
-  const bad = await call(h.deps, grantRequest(undefined, "nope"));
+  assertEquals((await call(h.deps, grantReq(undefined, null))).status, 401);
+  const bad = await call(h.deps, grantReq(undefined, "nope"));
   assertEquals(bad.status, 401);
   assertEquals(bad.body.error, "unauthenticated");
   assertEquals(h.balance.calls.length, 0);
@@ -189,8 +57,8 @@ Deno.test("grant: missing or invalid JWT is 401 and touches nothing", async () =
 });
 
 Deno.test("grant: insufficient balance is 402 with balance and required, no mint", async () => {
-  const h = harness({}, 2);
-  const { status, body } = await call(h.deps, grantRequest());
+  const h = harness({ initialBalance: 2 });
+  const { status, body } = await call(h.deps, grantReq());
   assertEquals(status, 402);
   assertEquals(body, { error: "insufficient_credit", balance: 2, required: 5 });
   assertEquals(h.minter.minted, 0);
@@ -199,11 +67,11 @@ Deno.test("grant: insufficient balance is 402 with balance and required, no mint
 
 Deno.test("grant: live block for the user is 409 with its expiry", async () => {
   const h = harness();
-  const first = await call(h.deps, grantRequest());
+  const first = await call(h.deps, grantReq());
   assertEquals(first.status, 200);
 
   h.clock.now = new Date("2026-09-07T12:01:00.000Z");
-  const second = await call(h.deps, grantRequest());
+  const second = await call(h.deps, grantReq());
   assertEquals(second.status, 409);
   assertEquals(second.body, {
     error: "block_in_flight",
@@ -214,10 +82,10 @@ Deno.test("grant: live block for the user is 409 with its expiry", async () => {
 
 Deno.test("grant: a block inside its renewal overlap window does not 409", async () => {
   const h = harness();
-  await call(h.deps, grantRequest());
+  await call(h.deps, grantReq());
   // 270 s in = 90% of a 300 s block, the renewal point from req 3.9.
   h.clock.now = new Date("2026-09-07T12:04:30.000Z");
-  const renewal = await call(h.deps, grantRequest());
+  const renewal = await call(h.deps, grantReq());
   assertEquals(renewal.status, 200);
   assertEquals(h.blocks.rows.length, 2);
 });
@@ -225,7 +93,7 @@ Deno.test("grant: a block inside its renewal overlap window does not 409", async
 Deno.test("grant: mint failure refunds the debit and returns 503", async () => {
   const minter = new FakeTokenMinter(new ProviderUnavailableError("deepgram down"));
   const h = harness({ minter });
-  const { status, body } = await call(h.deps, grantRequest());
+  const { status, body } = await call(h.deps, grantReq());
 
   assertEquals(status, 503);
   assertEquals(body, { error: "provider_unavailable" });
@@ -253,7 +121,7 @@ Deno.test("grant: RevenueCat 429 on every attempt maps to 503 after at most 2 re
     },
   });
   const h = harness({ balance });
-  const { status, body } = await call(h.deps, grantRequest());
+  const { status, body } = await call(h.deps, grantReq());
 
   assertEquals(status, 503);
   assertEquals(body, { error: "provider_unavailable" });
@@ -303,30 +171,30 @@ Deno.test("RevenueCat provider: recovers after a single 429 and parses the balan
 
 Deno.test("grant: per-user rate limit returns 429", async () => {
   // Enough credit that the limiter, not the balance, is what stops us.
-  const h = harness({}, 100);
+  const h = harness({ initialBalance: 100 });
   for (let i = 0; i < CONFIG.rateLimitMax; i++) {
-    const res = await call(h.deps, grantRequest());
+    const res = await call(h.deps, grantReq());
     assertEquals(res.status, 200, `grant ${i}`);
     // Reconcile immediately so the next grant is not a 409.
     await call(
       h.deps,
-      releaseRequest({ block_id: res.body.block_id, streamed_secs: 10, detections: 3 }),
+      releaseReq({ block_id: res.body.block_id, streamed_secs: 10, detections: 3 }),
     );
     h.clock.now = new Date(h.clock.now.getTime() + 30_000);
   }
 
-  const limited = await call(h.deps, grantRequest());
+  const limited = await call(h.deps, grantReq());
   assertEquals(limited.status, 429);
   assertEquals(limited.body, { error: "rate_limited" });
 
   // Outside the window the limit lifts.
   h.clock.now = new Date(h.clock.now.getTime() + CONFIG.rateLimitWindowMinutes * 60_000);
-  assertEquals((await call(h.deps, grantRequest())).status, 200);
+  assertEquals((await call(h.deps, grantReq())).status, 200);
 });
 
 Deno.test("grant: malformed session_id is 400 before any provider call", async () => {
   const h = harness();
-  const { status, body } = await call(h.deps, grantRequest({ session_id: "abc" }));
+  const { status, body } = await call(h.deps, grantReq({ session_id: "abc" }));
   assertEquals(status, 400);
   assertEquals(body.error, "invalid_session_id");
   assertEquals(h.balance.calls.length, 0);
@@ -337,12 +205,12 @@ Deno.test("grant: malformed session_id is 400 before any provider call", async (
 
 Deno.test("release: within 30 s with zero detections refunds", async () => {
   const h = harness();
-  const granted = await call(h.deps, grantRequest());
+  const granted = await call(h.deps, grantReq());
 
   h.clock.now = new Date("2026-09-07T12:00:20.000Z");
   const { status, body } = await call(
     h.deps,
-    releaseRequest({
+    releaseReq({
       block_id: granted.body.block_id,
       streamed_secs: 18,
       detections: 0,
@@ -360,12 +228,12 @@ Deno.test("release: within 30 s with zero detections refunds", async () => {
 
 Deno.test("release: client assertion is ignored when detections > 0", async () => {
   const h = harness();
-  const granted = await call(h.deps, grantRequest());
+  const granted = await call(h.deps, grantReq());
 
   h.clock.now = new Date("2026-09-07T12:00:10.000Z");
   const { status, body } = await call(
     h.deps,
-    releaseRequest({
+    releaseReq({
       block_id: granted.body.block_id,
       streamed_secs: 9,
       detections: 2,
@@ -380,12 +248,12 @@ Deno.test("release: client assertion is ignored when detections > 0", async () =
 
 Deno.test("release: after the 30 s window is not refunded even with zero detections", async () => {
   const h = harness();
-  const granted = await call(h.deps, grantRequest());
+  const granted = await call(h.deps, grantReq());
 
   h.clock.now = new Date("2026-09-07T12:00:31.000Z");
   const { body } = await call(
     h.deps,
-    releaseRequest({
+    releaseReq({
       block_id: granted.body.block_id,
       streamed_secs: 31,
       detections: 0,
@@ -397,10 +265,10 @@ Deno.test("release: after the 30 s window is not refunded even with zero detecti
 
 Deno.test("release: is idempotent, a second release never refunds again", async () => {
   const h = harness();
-  const granted = await call(h.deps, grantRequest());
+  const granted = await call(h.deps, grantReq());
   h.clock.now = new Date("2026-09-07T12:00:05.000Z");
   const req = () =>
-    releaseRequest({ block_id: granted.body.block_id, streamed_secs: 5, detections: 0 });
+    releaseReq({ block_id: granted.body.block_id, streamed_secs: 5, detections: 0 });
 
   assertEquals((await call(h.deps, req())).body, { refunded: true, balance: 20 });
   assertEquals((await call(h.deps, req())).body, { refunded: false, balance: 20 });
@@ -410,11 +278,11 @@ Deno.test("release: unknown or foreign block is 404, unauthenticated is 401", as
   const h = harness();
   const unknown = await call(
     h.deps,
-    releaseRequest({ block_id: "44444444-4444-4444-8444-444444444444", streamed_secs: 0, detections: 0 }),
+    releaseReq({ block_id: "44444444-4444-4444-8444-444444444444", streamed_secs: 0, detections: 0 }),
   );
   assertEquals(unknown.status, 404);
 
-  const anon = await call(h.deps, releaseRequest({ block_id: SESSION }, null));
+  const anon = await call(h.deps, releaseReq({ block_id: SESSION }, null));
   assertEquals(anon.status, 401);
 });
 

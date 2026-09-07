@@ -16,8 +16,9 @@ supabase/
     handler.ts                      pure handler (request + deps -> Response)
     types.ts                        ports: BalanceProvider, TokenMinter, BlockStore
     store.ts                        Supabase-backed BlockStore + JWT authenticator
-    providers/balance.ts            RevenueCatBalanceProvider, FakeBalanceProvider
-    providers/minter.ts             DeepgramTokenMinter, FakeTokenMinter
+    providers/balance.ts            RevenueCatBalanceProvider
+    providers/minter.ts             DeepgramTokenMinter
+    testing/fakes.ts                test doubles; never imported by index.ts
     index_test.ts                   Deno tests, no network
   .env.example                      every secret/setting the function reads
 ```
@@ -29,16 +30,16 @@ Requires the Supabase CLI, Docker and Deno.
 ```bash
 make supabase-test        # deno tests, nothing else needed
 make supabase-start       # docker stack; applies supabase/migrations
-cp supabase/.env.example supabase/.env   # fill in, or use the fake providers
+cp supabase/.env.example supabase/.env   # fill in real credentials
 make supabase-serve       # serves functions with supabase/.env
 ```
 
-For a first run without RevenueCat or a Deepgram key, set in `supabase/.env`:
-
-```
-BALANCE_PROVIDER=fake
-TOKEN_MINTER=fake
-```
+There is no fake-provider mode. The test doubles live in
+`functions/voice-block/testing/fakes.ts`, are imported only by `index_test.ts`,
+and are therefore absent from the deployed bundle — a provider that hands out
+credits must never be one environment-variable typo away from production. Every
+behaviour they used to exercise by hand is covered by `make supabase-test`;
+serving the function locally needs real RevenueCat and Deepgram credentials.
 
 Point the app at the local stack by putting the URL and anon key printed by
 `supabase start` into the repo `.env` as `SUPABASE_URL` and
@@ -64,14 +65,11 @@ Injected by the runtime (do not set): `SUPABASE_URL`, `SUPABASE_ANON_KEY` or
 
 | Variable | Default | Purpose |
 |---|---|---|
-| `DEEPGRAM_API_KEY` | required unless `TOKEN_MINTER=fake` | Master key used only to call `/v1/auth/grant` |
+| `DEEPGRAM_API_KEY` | required | Master key used only to call `/v1/auth/grant` |
 | `DEEPGRAM_TOKEN_TTL_SECONDS` | 30 | TTL of the temporary token (1..3600) |
-| `REVENUECAT_SECRET_KEY` | required unless `BALANCE_PROVIDER=fake` | Developer API v2 key, `customer_information:purchases:read_write` |
-| `REVENUECAT_PROJECT_ID` | required unless fake | RevenueCat project id |
+| `REVENUECAT_SECRET_KEY` | required | Developer API v2 key, `customer_information:purchases:read_write` |
+| `REVENUECAT_PROJECT_ID` | required | RevenueCat project id |
 | `REVENUECAT_CURRENCY_CODE` | `VOICE` | Virtual currency code for voice credits |
-| `BALANCE_PROVIDER` | `revenuecat` | `revenuecat` or `fake` (in-memory) |
-| `TOKEN_MINTER` | `deepgram` | `deepgram` or `fake` |
-| `FAKE_BALANCE_INITIAL` | 20 | Starting balance for the fake provider |
 | `BLOCK_CREDITS` | 5 | Credits debited per block |
 | `BLOCK_SECONDS` | 300 | Block duration |
 | `REFUND_WINDOW_SECONDS` | 30 | Release within this window with zero detections is refunded |
