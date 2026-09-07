@@ -13,18 +13,18 @@ class TranscriptWord {
   });
 
   Map<String, dynamic> toJson() => {
-        'word': word,
-        'start': start,
-        'end': end,
-        'confidence': confidence,
-      };
+    'word': word,
+    'start': start,
+    'end': end,
+    'confidence': confidence,
+  };
 
   factory TranscriptWord.fromJson(Map<String, dynamic> json) => TranscriptWord(
-        word: json['word'] as String? ?? '',
-        start: (json['start'] as num?)?.toDouble() ?? 0.0,
-        end: (json['end'] as num?)?.toDouble() ?? 0.0,
-        confidence: (json['confidence'] as num?)?.toDouble() ?? 0.0,
-      );
+    word: json['word'] as String? ?? '',
+    start: (json['start'] as num?)?.toDouble() ?? 0.0,
+    end: (json['end'] as num?)?.toDouble() ?? 0.0,
+    confidence: (json['confidence'] as num?)?.toDouble() ?? 0.0,
+  );
 }
 
 /// Represents a transcript segment emitted by Deepgram.
@@ -64,31 +64,32 @@ class TranscriptSegment {
   }) : receivedAt = receivedAt ?? DateTime.now();
 
   TranscriptSegment copyWith({Duration? lag}) => TranscriptSegment(
-        text: text,
-        start: start,
-        duration: duration,
-        isFinal: isFinal,
-        confidence: confidence,
-        speechFinal: speechFinal,
-        words: words,
-        lag: lag ?? this.lag,
-        receivedAt: receivedAt,
-      );
+    text: text,
+    start: start,
+    duration: duration,
+    isFinal: isFinal,
+    confidence: confidence,
+    speechFinal: speechFinal,
+    words: words,
+    lag: lag ?? this.lag,
+    receivedAt: receivedAt,
+  );
 
   Map<String, dynamic> toJson() => {
-        'text': text,
-        'start': start,
-        'duration': duration,
-        'is_final': isFinal,
-        'confidence': confidence,
-        'speech_final': speechFinal,
-        'words': words.map((w) => w.toJson()).toList(),
-        'received_at': receivedAt.toIso8601String(),
-        'lag_ms': lag?.inMilliseconds,
-      };
+    'text': text,
+    'start': start,
+    'duration': duration,
+    'is_final': isFinal,
+    'confidence': confidence,
+    'speech_final': speechFinal,
+    'words': words.map((w) => w.toJson()).toList(),
+    'received_at': receivedAt.toIso8601String(),
+    'lag_ms': lag?.inMilliseconds,
+  };
 
   factory TranscriptSegment.fromJson(Map<String, dynamic> json) {
-    final wordsList = (json['words'] as List<dynamic>?)
+    final wordsList =
+        (json['words'] as List<dynamic>?)
             ?.map((w) => TranscriptWord.fromJson(w as Map<String, dynamic>))
             .toList() ??
         [];
@@ -135,8 +136,9 @@ class TranscriptSegment {
     // segments before reading `words`, and the debug UI shows text only. At ~5
     // interims/sec, parsing them anyway burned hundreds of thousands of
     // throwaway objects per session.
-    final rawWords =
-        isFinal ? primaryAlt['words'] as List<dynamic>? ?? const [] : const [];
+    final rawWords = isFinal
+        ? primaryAlt['words'] as List<dynamic>? ?? const []
+        : const [];
     final words = rawWords
         .map((w) => TranscriptWord.fromJson(w as Map<String, dynamic>))
         .toList();

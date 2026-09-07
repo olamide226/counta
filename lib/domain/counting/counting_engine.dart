@@ -18,10 +18,7 @@ enum EngineStatus {
 }
 
 /// Source of a count event (voice detection or manual tap).
-enum CountSource {
-  voice,
-  manual,
-}
+enum CountSource { voice, manual }
 
 /// Event emitted whenever a count increment occurs.
 class CountEvent {

@@ -41,7 +41,10 @@ class ResizableTapLayout extends ConsumerWidget {
     // Clamp so a tall handle on a short viewport cannot produce a negative
     // extent, which SizedBox asserts on.
     final tapHeight = (maxHeight * ratio).clamp(0.0, maxHeight);
-    final infoHeight = (maxHeight - tapHeight - handleExtent).clamp(0.0, maxHeight);
+    final infoHeight = (maxHeight - tapHeight - handleExtent).clamp(
+      0.0,
+      maxHeight,
+    );
 
     return Column(
       children: [

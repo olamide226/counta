@@ -28,6 +28,13 @@ class InMemoryCheckpointStore implements SessionCheckpointStore {
     current = null;
     clears++;
   }
+
+  @override
+  Future<CountSession?> take() async {
+    final checkpoint = current;
+    current = null;
+    return checkpoint;
+  }
 }
 
 CountSession snapshot(SessionController controller, String id) {

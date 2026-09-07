@@ -22,6 +22,13 @@ class InMemoryCheckpointStore implements SessionCheckpointStore {
 
   @override
   Future<void> clear() async => current = null;
+
+  @override
+  Future<CountSession?> take() async {
+    final checkpoint = current;
+    current = null;
+    return checkpoint;
+  }
 }
 
 class InMemorySessionsRepository {

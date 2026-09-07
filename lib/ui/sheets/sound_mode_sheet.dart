@@ -40,8 +40,6 @@ class SoundModeSheet extends ConsumerWidget {
       ),
     );
   }
-
-
 }
 
 Future<void> showSoundModeSheet(BuildContext context) {

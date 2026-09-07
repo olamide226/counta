@@ -25,9 +25,7 @@ void main() {
     });
 
     test('computes nearest-rank quantiles', () {
-      final samples = [
-        for (var i = 1; i <= 100; i++) ms(i * 10),
-      ]..shuffle();
+      final samples = [for (var i = 1; i <= 100; i++) ms(i * 10)]..shuffle();
 
       final stats = LatencyStats.from(samples);
 

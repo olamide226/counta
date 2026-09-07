@@ -5,8 +5,9 @@ import 'package:counta/ui/screens/debug/streaming_debug_screen.dart';
 
 void main() {
   group('StreamingDebugScreen', () {
-    testWidgets('does not overflow at the reported viewport height',
-        (tester) async {
+    testWidgets('does not overflow at the reported viewport height', (
+      tester,
+    ) async {
       // 388x551 is the body constraint from the RenderFlex overflow: the fixed
       // header (two text fields, the fixture row, controls, latency panel and
       // live-interim strip) was taller than the viewport.
@@ -14,15 +15,14 @@ void main() {
       tester.view.devicePixelRatio = 1.0;
       addTearDown(tester.view.reset);
 
-      await tester.pumpWidget(
-        const MaterialApp(home: StreamingDebugScreen()),
-      );
+      await tester.pumpWidget(const MaterialApp(home: StreamingDebugScreen()));
 
       expect(tester.takeException(), isNull);
     });
 
-    testWidgets('survives a short viewport, as with the keyboard up',
-        (tester) async {
+    testWidgets('survives a short viewport, as with the keyboard up', (
+      tester,
+    ) async {
       for (final height in <double>[320, 400, 551, 700, 1000]) {
         tester.view.physicalSize = Size(388, height);
         tester.view.devicePixelRatio = 1.0;
@@ -45,18 +45,13 @@ void main() {
       tester.view.devicePixelRatio = 1.0;
       addTearDown(tester.view.reset);
 
-      await tester.pumpWidget(
-        const MaterialApp(home: StreamingDebugScreen()),
-      );
+      await tester.pumpWidget(const MaterialApp(home: StreamingDebugScreen()));
 
       expect(find.text('Fixture name'), findsOneWidget);
 
       // The empty-state row sits below the fold at this height, so the page
       // must scroll rather than clip it.
-      await tester.drag(
-        find.byType(CustomScrollView),
-        const Offset(0, -300),
-      );
+      await tester.drag(find.byType(CustomScrollView), const Offset(0, -300));
       await tester.pump();
 
       expect(find.text('No final transcripts yet'), findsOneWidget);

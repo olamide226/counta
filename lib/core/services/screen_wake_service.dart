@@ -11,7 +11,7 @@ class ScreenWakeService {
   /// [toggle] exists so tests can exercise the acquire/release bookkeeping
   /// without standing up the plugin's platform channel.
   ScreenWakeService({Future<void> Function(bool enable)? toggle})
-      : _toggle = toggle ?? _defaultToggle;
+    : _toggle = toggle ?? _defaultToggle;
 
   final Future<void> Function(bool enable) _toggle;
 
@@ -48,8 +48,7 @@ class ScreenWakeService {
   }
 
   /// Mirrors the wakelock to whether a session is active.
-  Future<void> setActive(bool active) =>
-      active ? acquire() : release();
+  Future<void> setActive(bool active) => active ? acquire() : release();
 
   void dispose() {
     // Fire and forget: the app is going away, but leaving a wakelock held

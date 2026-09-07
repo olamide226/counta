@@ -15,7 +15,6 @@ final sessionControllerProvider = ChangeNotifierProvider<SessionController>(
   ),
 );
 
-
 /// Builds the engine for a voice session.
 ///
 /// Exists so screens never construct a microphone + WebSocket stack
@@ -42,7 +41,7 @@ class CounterNotifier extends StateNotifier<CounterState> {
   final SessionController sessionController;
 
   CounterNotifier(this._ref, {required this.sessionController})
-      : super(CounterState(count: 0, sessionStart: DateTime.now())) {
+    : super(CounterState(count: 0, sessionStart: DateTime.now())) {
     _initFromSettings();
     sessionController.addListener(_onSessionChanged);
   }

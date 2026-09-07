@@ -26,11 +26,11 @@ class PhraseHistoryEntry {
   }
 
   Map<String, dynamic> toJson() => {
-        'normalised': normalised,
-        'raw': raw,
-        'lastUsedAt': lastUsedAt.toIso8601String(),
-        'useCount': useCount,
-      };
+    'normalised': normalised,
+    'raw': raw,
+    'lastUsedAt': lastUsedAt.toIso8601String(),
+    'useCount': useCount,
+  };
 
   factory PhraseHistoryEntry.fromJson(Map<String, dynamic> json) =>
       PhraseHistoryEntry(

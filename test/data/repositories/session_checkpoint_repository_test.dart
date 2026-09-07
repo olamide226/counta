@@ -4,7 +4,6 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:hive/hive.dart';
 
 import 'package:counta/data/repositories/session_checkpoint_repository.dart';
-import 'package:counta/data/repositories/sessions_repository.dart';
 import 'package:counta/domain/models/count_session.dart';
 import 'package:counta/domain/models/enums.dart';
 
@@ -35,7 +34,6 @@ CountSession sample({
 void main() {
   late Directory dir;
   late Box<CountSession> checkpointBox;
-  late Box<CountSession> sessionsBox;
 
   setUpAll(() {
     Hive.registerAdapter(SoundModeAdapter());
@@ -48,7 +46,6 @@ void main() {
     dir = await Directory.systemTemp.createTemp('counta_hive_');
     Hive.init(dir.path);
     checkpointBox = await Hive.openBox<CountSession>('checkpoint_test');
-    sessionsBox = await Hive.openBox<CountSession>('sessions_test');
   });
 
   tearDown(() async {
@@ -104,34 +101,24 @@ void main() {
       expect(checkpointBox.isEmpty, isTrue);
     });
 
-    test('survives closing and reopening the box', () async {
-      await SessionCheckpointRepository(checkpointBox).write(sample());
-      await checkpointBox.close();
+    test('take returns the checkpoint and empties the store', () async {
+      final repo = SessionCheckpointRepository(checkpointBox);
+      await repo.write(sample());
 
-      final reopened = await Hive.openBox<CountSession>('checkpoint_test');
-      final read = SessionCheckpointRepository(reopened).read();
-      expect(read?.finalCount, 42);
-      expect(read?.completed, isFalse);
+      final taken = await repo.take();
+
+      expect(taken?.id, 'cp-1');
+      expect(taken?.finalCount, 42);
+      // The whole point: recovery owns it now, so a session starting in the
+      // same launch cannot overwrite what the crash left behind.
+      expect(repo.read(), isNull);
+      expect(checkpointBox.isEmpty, isTrue);
     });
-  });
 
-  group('SessionsRepository', () {
-    test('persists the completed flag and lists newest first', () async {
-      final repo = SessionsRepository(sessionsBox);
-      await repo.saveSession(
-        sample(id: 'old', completed: true, endedAt: DateTime(2026, 1, 1)),
-      );
-      await repo.saveSession(
-        sample(id: 'recovered', endedAt: DateTime(2026, 2, 1)),
-      );
-      await repo.saveSession(
-        sample(id: 'new', completed: true, endedAt: DateTime(2026, 3, 1)),
-      );
-
-      final all = repo.getAllSessions();
-      expect(all.map((s) => s.id), ['new', 'recovered', 'old']);
-      expect(repo.getSession('recovered')?.completed, isFalse);
-      expect(repo.getSession('new')?.completed, isTrue);
+    test('take on an empty store returns null without throwing', () async {
+      final repo = SessionCheckpointRepository(checkpointBox);
+      expect(await repo.take(), isNull);
+      expect(repo.read(), isNull);
     });
   });
 }

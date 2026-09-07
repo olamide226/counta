@@ -60,10 +60,7 @@ class _SaveSessionSheetState extends ConsumerState<SaveSessionSheet> {
             style: Theme.of(context).textTheme.headlineSmall,
           ),
           const SizedBox(height: 8),
-          Text(
-            'Count: ${counter.count}',
-            style: theme.textTheme.titleMedium,
-          ),
+          Text('Count: ${counter.count}', style: theme.textTheme.titleMedium),
           if (phrase != null) ...[
             const SizedBox(height: 12),
             Container(
