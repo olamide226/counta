@@ -1,4 +1,4 @@
-import { Deps, ProviderError } from "./types.ts";
+import { BlockConflictError, Deps, ProviderError } from "./types.ts";
 
 // Pure request handler for POST /voice-block and POST /voice-block/release.
 // No Deno.env, no network: everything arrives through `deps`, which is what
@@ -131,9 +131,15 @@ async function grant(req: Request, deps: Deps, userId: string): Promise<Response
   const expiresAt = new Date(now.getTime() + config.blockSeconds * 1000);
   let row;
   try {
-    // Retire the block this one renews first: two unreconciled blocks for one
-    // user is the state 3.8 forbids.
-    if (live) await blocks.supersede(live.id);
+    if (live) {
+      // Retire the block this one renews: two unreconciled blocks for one user
+      // is the state 3.8 forbids, and the unique index would reject the row.
+      await blocks.supersede(live.id);
+    } else {
+      // A client that died mid-block never released its row; left alone it
+      // would collide with the unique index for ever.
+      await blocks.retireExpired(userId, now);
+    }
     row = await blocks.insert({
       id: blockId,
       user_id: userId,
@@ -144,6 +150,17 @@ async function grant(req: Request, deps: Deps, userId: string): Promise<Response
     });
   } catch (error) {
     await refundQuietly(deps, userId, blockId, config.blockCredits);
+    if (error instanceof BlockConflictError) {
+      // Another request for this user won the race between the check above and
+      // this insert. The database is the authority on 3.8, so honour its
+      // answer with the same 409 the pre-check would have returned.
+      const winner = await blocks.findLiveBlock(userId, now);
+      deps.log("block_in_flight", { user_id: userId, block_id: blockId });
+      return json(409, {
+        error: "block_in_flight",
+        ...(winner ? { expires_at: winner.expires_at } : {}),
+      });
+    }
     deps.log("block_insert_failed", {
       user_id: userId,
       block_id: blockId,

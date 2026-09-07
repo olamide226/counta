@@ -5,6 +5,7 @@
 // streaming, so the deployed function can only ever construct the real
 // adapters. Nothing outside index_test.ts should import this file.
 
+import { BlockConflictError } from "../types.ts";
 import type {
   Authenticator,
   BalanceProvider,
@@ -99,6 +100,18 @@ export class MemoryBlockStore implements BlockStore {
     return Promise.resolve(live ?? null);
   }
 
+  retireExpired(userId: string, now: Date): Promise<void> {
+    for (const row of this.rows) {
+      if (
+        row.user_id === userId && !row.reconciled &&
+        new Date(row.expires_at).getTime() <= now.getTime()
+      ) {
+        row.reconciled = true;
+      }
+    }
+    return Promise.resolve();
+  }
+
   supersede(blockId: string): Promise<void> {
     const row = this.rows.find((r) => r.id === blockId);
     if (row) row.reconciled = true;
@@ -118,6 +131,10 @@ export class MemoryBlockStore implements BlockStore {
     row: Omit<VoiceBlockRow, "reconciled" | "streamed_secs" | "detections">,
   ): Promise<VoiceBlockRow> {
     if (this.failInsertWith) return Promise.reject(this.failInsertWith);
+    // Mirrors the partial unique index on (user_id) where not reconciled.
+    if (this.rows.some((r) => r.user_id === row.user_id && !r.reconciled)) {
+      return Promise.reject(new BlockConflictError());
+    }
     const full: VoiceBlockRow = {
       ...row,
       reconciled: false,

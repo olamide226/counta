@@ -1,5 +1,8 @@
 -- Voice phrase counting: block ledger, trial grants, remote matcher config.
 -- See specs/voice-phrase-counting/design.md, "Supabase schema".
+--
+-- Re-runnable: every object is guarded, so a migration that failed halfway can
+-- be applied again without hand-editing.
 
 create table if not exists public.voice_blocks (
   id             uuid primary key default gen_random_uuid(),
@@ -13,17 +16,24 @@ create table if not exists public.voice_blocks (
   detections     int
 );
 
+-- Rate-limit lookup: grants for one user inside a time window.
 create index if not exists voice_blocks_user_granted_idx
   on public.voice_blocks (user_id, granted_at desc);
 
--- The design sketches `create index ... where expires_at > now()`; Postgres
--- rejects that because now() is not IMMUTABLE. A plain composite index serves
--- the same in-flight lookup (user_id = ? and expires_at > now()).
-create index if not exists voice_blocks_user_expires_idx
-  on public.voice_blocks (user_id, expires_at desc);
+-- One live block per user (req 3.8), enforced by the database rather than by
+-- the Edge Function's read-then-write, which two concurrent requests can both
+-- pass. The design sketches `where expires_at > now()`; Postgres rejects that
+-- because now() is not IMMUTABLE, but `not reconciled` is immutable and is the
+-- predicate that actually matters: the function reconciles a block when it is
+-- released, superseded by a renewal, or found expired, so the unreconciled set
+-- is exactly the set that must stay unique.
+drop index if exists public.voice_blocks_user_expires_idx;
+create unique index if not exists voice_blocks_user_live_uniq
+  on public.voice_blocks (user_id) where not reconciled;
 
 alter table public.voice_blocks enable row level security;
 
+drop policy if exists "own blocks readable" on public.voice_blocks;
 create policy "own blocks readable" on public.voice_blocks
   for select using ((select auth.uid()) = user_id);
 -- No client insert or update policy: writes come from the Edge Function using
@@ -48,43 +58,11 @@ create table if not exists public.matcher_config (
 
 alter table public.matcher_config enable row level security;
 
+drop policy if exists "config readable by all authed" on public.matcher_config;
 create policy "config readable by all authed" on public.matcher_config
   for select using ((select auth.role()) = 'authenticated');
 
--- Seed the singleton with the compiled MatcherConfig defaults
--- (lib/domain/counting/phrase_matcher.dart, lib/domain/counting/phrase_normaliser.dart)
--- so a fresh project matches the app's built-in behaviour until tuned.
-insert into public.matcher_config (id, config)
-values (
-  1,
-  '{
-    "threshold": 0.80,
-    "anchoredThreshold": 0.65,
-    "refractoryMultiplier": 0,
-    "refractoryFloorMs": 0,
-    "windowSlack": 1.5,
-    "homophones": {
-      "won": "one",
-      "too": "two",
-      "to": "two",
-      "for": "four"
-    },
-    "contractions": {
-      "i''m": "i am",
-      "im": "i am",
-      "don''t": "do not",
-      "dont": "do not",
-      "can''t": "cannot",
-      "cant": "cannot",
-      "it''s": "it is",
-      "its": "it is",
-      "you''re": "you are",
-      "youre": "you are",
-      "we''re": "we are",
-      "were": "we are",
-      "they''re": "they are",
-      "theyre": "they are"
-    }
-  }'::jsonb
-)
-on conflict (id) do nothing;
+-- Deliberately unseeded. An absent row already means "use the compiled
+-- MatcherConfig defaults" (lib/domain/counting/phrase_matcher.dart), and the
+-- reader is task 14; a hand-copied duplicate of those defaults here would only
+-- be a second source of truth to drift.

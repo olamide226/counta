@@ -26,6 +26,7 @@ async function call(deps: Deps, req: Request) {
 
 const BASE = "http://localhost:54321/functions/v1";
 const BLOCK = "33333333-3333-4333-8333-000000000001";
+const OTHER_SESSION = "55555555-5555-4555-8555-555555555555";
 
 // ---------------------------------------------------------------------------
 // Grant
@@ -99,7 +100,7 @@ Deno.test("grant: a different session is 409 even inside the renewal window", as
   h.clock.now = new Date("2026-09-07T12:04:59.000Z");
   const other = await call(
     h.deps,
-    grantReq({ session_id: "55555555-5555-4555-8555-555555555555" }),
+    grantReq({ session_id: OTHER_SESSION }),
   );
 
   assertEquals(other.status, 409);
@@ -109,6 +110,37 @@ Deno.test("grant: a different session is 409 even inside the renewal window", as
   });
   assertEquals(h.blocks.rows.length, 1);
   assertEquals(h.balance.balances.get(USER), 15);
+});
+
+Deno.test("grant: concurrent grants cannot both pass the one-live-block rule", async () => {
+  const h = harness();
+
+  // Both requests read "no live block" before either inserts; only the unique
+  // index can break the tie.
+  const [first, second] = await Promise.all([
+    call(h.deps, grantReq({ session_id: SESSION })),
+    call(h.deps, grantReq({ session_id: OTHER_SESSION })),
+  ]);
+
+  assertEquals([first.status, second.status].sort(), [200, 409]);
+  assertEquals(h.blocks.rows.filter((r) => !r.reconciled).length, 1);
+  // The loser's debit came back, so exactly one block was paid for.
+  assertEquals(h.balance.balances.get(USER), 15);
+  assertEquals(h.balance.calls.filter((c) => c.op === "refund").length, 1);
+});
+
+Deno.test("grant: an abandoned block stops blocking once it expires", async () => {
+  const h = harness();
+  // A client that was killed mid-block never calls /release, so its row stays
+  // unreconciled; without retiring it the unique index would 409 for ever.
+  await call(h.deps, grantReq());
+
+  h.clock.now = new Date("2026-09-07T12:10:00.000Z");
+  const next = await call(h.deps, grantReq({ session_id: OTHER_SESSION }));
+
+  assertEquals(next.status, 200);
+  assertEquals(h.blocks.rows.length, 2);
+  assertEquals(h.blocks.rows.filter((r) => !r.reconciled).length, 1);
 });
 
 Deno.test("grant: mint failure refunds the debit and returns 503", async () => {

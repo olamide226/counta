@@ -99,9 +99,11 @@ here can bound cost once a client holds an open socket.
 ## Notes on the schema
 
 - The design's partial index `where expires_at > now()` is not valid Postgres
-  (`now()` is not immutable); a composite `(user_id, expires_at desc)` index
-  serves the in-flight lookup instead.
+  (`now()` is not immutable). A partial **unique** index on
+  `(user_id) where not reconciled` takes its place: it serves the in-flight
+  lookup and enforces one live block per user (req 3.8) even when two requests
+  race past the function's own check.
 - `voice_blocks` and `trial_grants` have no client write policy; all writes go
   through the service-role client inside the function.
-- `matcher_config` is seeded with the compiled `MatcherConfig` defaults. Task 14
-  makes the app fetch it.
+- `matcher_config` is created empty. An absent row means "use the compiled
+  `MatcherConfig` defaults"; task 14 makes the app fetch it.

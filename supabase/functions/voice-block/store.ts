@@ -1,5 +1,10 @@
 import type { SupabaseClient } from "@supabase/supabase-js";
-import { Authenticator, BlockStore, VoiceBlockRow } from "./types.ts";
+import {
+  Authenticator,
+  BlockConflictError,
+  BlockStore,
+  VoiceBlockRow,
+} from "./types.ts";
 
 /**
  * `voice_blocks` access through a service-role client. RLS grants clients
@@ -45,6 +50,16 @@ export class SupabaseBlockStore implements BlockStore {
     return count ?? 0;
   }
 
+  async retireExpired(userId: string, now: Date): Promise<void> {
+    const { error } = await this.admin
+      .from("voice_blocks")
+      .update({ reconciled: true })
+      .eq("user_id", userId)
+      .eq("reconciled", false)
+      .lte("expires_at", now.toISOString());
+    if (error) throw new Error(`voice_blocks retire: ${error.message}`);
+  }
+
   async insert(
     row: Omit<VoiceBlockRow, "reconciled" | "streamed_secs" | "detections">,
   ): Promise<VoiceBlockRow> {
@@ -53,7 +68,11 @@ export class SupabaseBlockStore implements BlockStore {
       .insert(row)
       .select("*")
       .single();
-    if (error) throw new Error(`voice_blocks insert: ${error.message}`);
+    if (error) {
+      // 23505: the partial unique index on (user_id) where not reconciled.
+      if (error.code === "23505") throw new BlockConflictError(error.message);
+      throw new Error(`voice_blocks insert: ${error.message}`);
+    }
     return data as VoiceBlockRow;
   }
 

@@ -23,6 +23,18 @@ export class ProviderError extends Error {
   }
 }
 
+/**
+ * Thrown by BlockStore.insert when the database's one-live-block unique index
+ * rejects the row: another request won the race. Distinct from a ProviderError
+ * because the caller's answer is 409, not 503.
+ */
+export class BlockConflictError extends Error {
+  constructor(message = "block already in flight") {
+    super(message);
+    this.name = "BlockConflictError";
+  }
+}
+
 export interface BalanceProvider {
   /** Current credit balance for the user. */
   getBalance(userId: string): Promise<number>;
@@ -72,7 +84,19 @@ export interface BlockStore {
   supersede(blockId: string): Promise<void>;
   /** Number of blocks granted to the user since `since` (rate limiting). */
   countGrantsSince(userId: string, since: Date): Promise<number>;
-  /** Inserts the row under the caller-supplied id (see BalanceProvider.spend). */
+  /**
+   * Reconciles the user's unreconciled blocks that have already expired.
+   *
+   * A client that died mid-block never called /release, so its row stays
+   * unreconciled and would collide with the one-live-block unique index for
+   * ever. Nothing is refundable by then — an expired block is far outside the
+   * refund window — so retiring it is safe.
+   */
+  retireExpired(userId: string, now: Date): Promise<void>;
+  /**
+   * Inserts the row under the caller-supplied id (see BalanceProvider.spend).
+   * Rejects with BlockConflictError when the user already has a live block.
+   */
   insert(
     row: Omit<VoiceBlockRow, "reconciled" | "streamed_secs" | "detections">,
   ): Promise<VoiceBlockRow>;
