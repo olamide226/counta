@@ -64,6 +64,8 @@ The interface carries `counts`, `status`, `diagnostics`, `incrementManual()` and
 
 **Platform requirements:** iOS declares `UIBackgroundModes: audio` so sessions survive backgrounding, and `AudioSource` sets `allowHapticsAndSystemSoundsDuringRecording` — without it the app's own tap sounds raise an audio-session interruption that permanently pauses recording. Android background recording is **not** supported yet: it needs a foreground service, which `record_android` does not provide.
 
+**Credentials:** `CloudCountingEngine` takes a required `tokenProvider` and never reads `DEEPGRAM_API_KEY` itself. The only reader of that define is `core/config/dev_secrets.dart`, which throws unless `BuildConfig.showDebugTools` is on. Production tokens come from the `voice-block` Supabase Edge Function under `supabase/` (see `supabase/README.md`; `make supabase-test` runs its Deno tests).
+
 ## Key Provider Structure
 
 - `counterProvider` — `StateNotifierProvider<CounterNotifier, CounterState>`: active counting session (increment, decrement, reset, threshold, alerts)
@@ -73,6 +75,7 @@ The interface carries `counts`, `status`, `diagnostics`, `incrementManual()` and
 - `sessionsProvider` — saved session list from Hive
 - `screenWakeServiceProvider` — holds the wakelock while a voice session is in the foreground
 - `hiveInitProvider` — `FutureProvider` for async Hive initialization at startup
+- `supabaseSessionProvider` — `FutureProvider<Session?>`: initialises Supabase from `SUPABASE_URL` / `SUPABASE_PUBLISHABLE_KEY` dart-defines and signs in anonymously; null when the build has no backend config. `deepgramTokenProviderProvider` supplies the engine's credential (dev key via `DevSecrets` in dev builds only; the block client in task 9 replaces it)
 - `appLifecycleProvider` — handles background/foreground transitions; shows an ongoing notification for a backgrounded voice session instead of a resume prompt
 
 ## Hive Persistence
