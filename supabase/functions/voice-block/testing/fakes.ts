@@ -86,6 +86,9 @@ export class FakeBalanceProvider implements BalanceProvider {
 export class MemoryBlockStore implements BlockStore {
   rows: VoiceBlockRow[] = [];
 
+  /** When set, every insert rejects with it (the failed-write paths). */
+  constructor(private readonly failInsertWith?: Error) {}
+
   findLiveBlock(userId: string, notBefore: Date): Promise<VoiceBlockRow | null> {
     const live = this.rows
       .filter((r) =>
@@ -108,6 +111,7 @@ export class MemoryBlockStore implements BlockStore {
   insert(
     row: Omit<VoiceBlockRow, "reconciled" | "streamed_secs" | "detections">,
   ): Promise<VoiceBlockRow> {
+    if (this.failInsertWith) return Promise.reject(this.failInsertWith);
     const full: VoiceBlockRow = {
       ...row,
       reconciled: false,

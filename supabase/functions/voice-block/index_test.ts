@@ -9,6 +9,7 @@ import { DeepgramTokenMinter } from "./providers/minter.ts";
 import {
   CONFIG,
   FakeTokenMinter,
+  MemoryBlockStore,
   GOOD_TOKEN,
   grantReq,
   harness,
@@ -107,6 +108,21 @@ Deno.test("grant: mint failure refunds the debit and returns 503", async () => {
   assertEquals(h.balance.calls.map((c) => c.op), ["get", "spend", "refund"]);
   assertEquals(h.blocks.rows.length, 0);
   assertEquals(h.logs.some((l) => l.event === "mint_failed"), true);
+});
+
+Deno.test("grant: a failed block insert refunds the debit and returns 503", async () => {
+  const blocks = new MemoryBlockStore(new Error("voice_blocks insert: boom"));
+  const h = harness({ blocks });
+  const { status, body } = await call(h.deps, grantReq());
+
+  assertEquals(status, 503);
+  assertEquals(body, { error: "provider_unavailable" });
+  // Charged and handed nothing: without a row there is no block_id to return
+  // and nothing to /release, so the debit has to come back here.
+  assertEquals(h.balance.balances.get(USER), 20);
+  assertEquals(h.balance.calls.map((c) => c.op), ["get", "spend", "refund"]);
+  assertEquals(blocks.rows.length, 0);
+  assertEquals(h.logs.some((l) => l.event === "block_insert_failed"), true);
 });
 
 Deno.test("grant: a rate-limited balance read fails fast to 503 without sleeping", async () => {

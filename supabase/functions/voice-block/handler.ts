@@ -124,16 +124,30 @@ async function grant(req: Request, deps: Deps, userId: string): Promise<Response
     return json(503, { error: "provider_unavailable" });
   }
 
-  // 3.7
+  // 3.7. A failed insert must refund on exactly the path a failed mint does:
+  // without a row there is no block_id to return and no block to /release, so
+  // letting this fall through to the outer 500 would charge the user for
+  // nothing they could ever use or reclaim.
   const expiresAt = new Date(now.getTime() + config.blockSeconds * 1000);
-  const row = await blocks.insert({
-    id: blockId,
-    user_id: userId,
-    session_id: sessionId,
-    credits: config.blockCredits,
-    granted_at: now.toISOString(),
-    expires_at: expiresAt.toISOString(),
-  });
+  let row;
+  try {
+    row = await blocks.insert({
+      id: blockId,
+      user_id: userId,
+      session_id: sessionId,
+      credits: config.blockCredits,
+      granted_at: now.toISOString(),
+      expires_at: expiresAt.toISOString(),
+    });
+  } catch (error) {
+    await refundQuietly(deps, userId, blockId, config.blockCredits);
+    deps.log("block_insert_failed", {
+      user_id: userId,
+      block_id: blockId,
+      message: String(error),
+    });
+    return json(503, { error: "provider_unavailable" });
+  }
 
   // 10.1
   deps.log("block_granted", {
