@@ -197,8 +197,17 @@ async function release(req: Request, deps: Deps, userId: string): Promise<Respon
   if (typeof blockId !== "string" || !UUID_RE.test(blockId)) {
     return json(400, { error: "invalid_block_id" });
   }
-  const streamedSecs = clampInt(body?.streamed_secs);
-  const detections = clampInt(body?.detections);
+  // A refund costs real money, so it may only be granted on a count the client
+  // actually reported. clampInt() turned a missing or garbage `detections`
+  // into 0, which meant "omit the field" was a reliable way to be refunded.
+  const streamedSecs = parseCount(body?.streamed_secs);
+  const detections = parseCount(body?.detections);
+  if (streamedSecs === INVALID) {
+    return json(400, { error: "invalid_streamed_secs" });
+  }
+  if (detections === INVALID) {
+    return json(400, { error: "invalid_detections" });
+  }
   // The client's own assertion is recorded for observability but never trusted.
   const clientClaimsRefund = body?.eligible_for_refund === true;
 
@@ -212,9 +221,11 @@ async function release(req: Request, deps: Deps, userId: string): Promise<Respon
     return json(200, { refunded: false, balance: await balance.getBalance(userId) });
   }
 
-  // 3.11, validated server-side against granted_at.
+  // 3.11, validated server-side against granted_at. An absent `detections` is
+  // not "zero detections" — it is no report at all, so it is not refundable.
   const ageMs = now.getTime() - new Date(block.granted_at).getTime();
-  const eligible = ageMs <= config.refundWindowSeconds * 1000 && detections === 0;
+  const eligible = ageMs <= config.refundWindowSeconds * 1000 &&
+    detections === 0;
 
   const flipped = await blocks.reconcile(block.id, {
     streamed_secs: streamedSecs,
@@ -269,8 +280,18 @@ async function refundQuietly(
   }
 }
 
-function clampInt(value: unknown): number {
-  const n = typeof value === "number" ? value : Number(value);
-  if (!Number.isFinite(n) || n < 0) return 0;
-  return Math.floor(n);
+/** Marks a count the client sent but that is not a count. */
+const INVALID = Symbol("invalid_count");
+
+/**
+ * Reads an optional usage count from a release body. Absent is null (recorded
+ * as unknown, never treated as zero); present but not a non-negative integer
+ * is a client bug and earns a 400 rather than a silently substituted value.
+ */
+function parseCount(value: unknown): number | null | typeof INVALID {
+  if (value === undefined || value === null) return null;
+  if (typeof value !== "number" || !Number.isInteger(value) || value < 0) {
+    return INVALID;
+  }
+  return value;
 }

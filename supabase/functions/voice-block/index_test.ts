@@ -415,6 +415,42 @@ Deno.test("release: after the 30 s window is not refunded even with zero detecti
   assertEquals(body, { refunded: false, balance: 15 });
 });
 
+Deno.test("release: a missing detections count is not a refundable zero", async () => {
+  const h = harness();
+  const granted = await call(h.deps, grantReq());
+
+  h.clock.now = new Date("2026-09-07T12:00:10.000Z");
+  const { status, body } = await call(
+    h.deps,
+    releaseReq({
+      block_id: granted.body.block_id,
+      eligible_for_refund: true,
+    }),
+  );
+
+  assertEquals(status, 200);
+  assertEquals(body.refunded, false);
+  assertEquals(h.balance.balances.get(USER), 15);
+  assertEquals(h.blocks.rows[0].detections, null);
+});
+
+Deno.test("release: a detections value that is not a count is 400", async () => {
+  const h = harness();
+  const granted = await call(h.deps, grantReq());
+
+  for (const detections of ["0", -1, 1.5, true]) {
+    const { status, body } = await call(
+      h.deps,
+      releaseReq({ block_id: granted.body.block_id, detections }),
+    );
+    assertEquals(status, 400, `detections=${detections}`);
+    assertEquals(body.error, "invalid_detections");
+  }
+  // Nothing was reconciled or refunded by a rejected report.
+  assertEquals(h.blocks.rows[0].reconciled, false);
+  assertEquals(h.balance.balances.get(USER), 15);
+});
+
 Deno.test("release: is idempotent, a second release never refunds again", async () => {
   const h = harness();
   const granted = await call(h.deps, grantReq());

@@ -108,7 +108,7 @@ export interface BlockStore {
    */
   reconcile(
     blockId: string,
-    patch: { streamed_secs: number; detections: number },
+    patch: { streamed_secs: number | null; detections: number | null },
   ): Promise<boolean>;
 }
 

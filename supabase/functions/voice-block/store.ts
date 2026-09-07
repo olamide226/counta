@@ -92,7 +92,7 @@ export class SupabaseBlockStore implements BlockStore {
 
   async reconcile(
     blockId: string,
-    patch: { streamed_secs: number; detections: number },
+    patch: { streamed_secs: number | null; detections: number | null },
   ): Promise<boolean> {
     const { data, error } = await this.admin
       .from("voice_blocks")

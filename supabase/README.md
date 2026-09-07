@@ -58,6 +58,13 @@ curl -X POST http://127.0.0.1:54321/functions/v1/voice-block/release \
   -d '{"block_id":"<from grant>","streamed_secs":12,"detections":0,"eligible_for_refund":true}'
 ```
 
+`streamed_secs` and `detections` must be non-negative integers when present
+(anything else is a 400). A refund needs `detections` to be present and zero:
+an omitted count is no report at all, not a report of zero.
+
+```bash
+```
+
 ## Environment the function reads
 
 Injected by the runtime (do not set): `SUPABASE_URL`, `SUPABASE_ANON_KEY` or
