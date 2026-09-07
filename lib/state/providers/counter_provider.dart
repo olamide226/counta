@@ -12,6 +12,8 @@ import 'settings_provider.dart';
 final sessionControllerProvider = ChangeNotifierProvider<SessionController>(
   (ref) => SessionController(
     liveActivityService: ref.watch(liveActivityServiceProvider),
+    voiceEngineFactory: ref.watch(voiceEngineFactoryProvider),
+    tapEngineFactory: ref.watch(tapEngineFactoryProvider),
   ),
 );
 
