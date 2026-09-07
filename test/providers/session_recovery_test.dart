@@ -32,85 +32,103 @@ CountSession checkpoint({int count = 17}) {
 void main() {
   TestWidgetsFlutterBinding.ensureInitialized();
 
-  group('pendingRecovery', () {
-    test('is null when no checkpoint exists', () {
-      expect(pendingRecovery(InMemoryCheckpointStore()), isNull);
+  late InMemoryCheckpointStore store;
+  late InMemorySessionsRepository sessions;
+  late ProviderContainer container;
+
+  ProviderContainer build() {
+    sessions = InMemorySessionsRepository();
+    return ProviderContainer(
+      overrides: [
+        sessionCheckpointRepositoryProvider.overrideWithValue(store),
+        sessionsProvider.overrideWith((ref) => SessionsNotifier(sessions)),
+        settingsProvider.overrideWith(
+          (ref) => SettingsNotifier(MockSettingsRepository()),
+        ),
+      ],
+    );
+  }
+
+  tearDown(() => container.dispose());
+
+  group('sessionStartupProvider', () {
+    test('is null when no checkpoint exists', () async {
+      store = InMemoryCheckpointStore();
+      container = build();
+
+      expect(await container.read(sessionStartupProvider.future), isNull);
     });
 
-    test('ignores a checkpoint at zero', () {
-      final store = InMemoryCheckpointStore()..current = checkpoint(count: 0);
-      expect(pendingRecovery(store), isNull);
+    test('ignores a checkpoint at zero', () async {
+      store = InMemoryCheckpointStore()..current = checkpoint(count: 0);
+      container = build();
+
+      expect(await container.read(sessionStartupProvider.future), isNull);
     });
 
-    test('returns a checkpoint with progress', () {
-      final store = InMemoryCheckpointStore()..current = checkpoint();
-      expect(pendingRecovery(store)?.finalCount, 17);
+    test('surfaces a checkpoint with progress', () async {
+      store = InMemoryCheckpointStore()..current = checkpoint();
+      container = build();
+
+      final pending = await container.read(sessionStartupProvider.future);
+      expect(pending?.id, 'cp');
+      expect(pending?.finalCount, 17);
+    });
+
+    test('empties the store, so a later write cannot clobber it', () async {
+      store = InMemoryCheckpointStore()..current = checkpoint();
+      container = build();
+
+      await container.read(sessionStartupProvider.future);
+
+      // Regression: recovery used to only read the checkpoint, so the first
+      // count of this launch overwrote the crashed run's record before the
+      // user had decided anything.
+      expect(store.takes, 1);
+      expect(store.current, isNull);
+      expect(store.read(), isNull);
+    });
+
+    test('a count landing right after startup does not resurrect it', () async {
+      store = InMemoryCheckpointStore()..current = checkpoint();
+      container = build();
+
+      final pending = await container.read(sessionStartupProvider.future);
+      container.read(sessionControllerProvider).incrementManual();
+      await Future<void>.delayed(Duration.zero);
+
+      // Whatever the live session writes now is its own record, not the one
+      // the user is still being asked about.
+      expect(pending?.id, 'cp');
+      expect(store.current?.id, isNot('cp'));
     });
   });
 
   group('SessionRecovery', () {
-    late InMemoryCheckpointStore store;
-    late InMemorySessionsRepository sessions;
-    late ProviderContainer container;
-
     setUp(() {
       store = InMemoryCheckpointStore()..current = checkpoint();
-      sessions = InMemorySessionsRepository();
-      container = ProviderContainer(
-        overrides: [
-          sessionCheckpointRepositoryProvider.overrideWithValue(store),
-          sessionsProvider.overrideWith((ref) => SessionsNotifier(sessions)),
-          settingsProvider.overrideWith(
-            (ref) => SettingsNotifier(MockSettingsRepository()),
-          ),
-        ],
-      );
+      container = build();
     });
 
-    tearDown(() => container.dispose());
-
-    test('pending surfaces the stored checkpoint', () {
-      expect(container.read(sessionRecoveryProvider).pending?.id, 'cp');
-    });
-
-    test('save writes a recovered record to history and clears', () async {
-      final recovery = container.read(sessionRecoveryProvider);
-      await recovery.save(recovery.pending!);
+    test('save writes a recovered record to history', () async {
+      final pending = await container.read(sessionStartupProvider.future);
+      await container.read(sessionRecoveryProvider).save(pending!);
 
       final saved = sessions.getSession('cp');
       expect(saved, isNotNull);
       expect(saved!.completed, isFalse);
       expect(saved.finalCount, 17);
       expect(saved.voiceCount, 17);
-      expect(store.current, isNull);
       expect(container.read(sessionsProvider).single.id, 'cp');
     });
 
-    test('discard clears without saving', () async {
-      await container.read(sessionRecoveryProvider).discard();
+    test('resume seeds the live counter and leaves history alone', () async {
+      final pending = await container.read(sessionStartupProvider.future);
+      container.read(sessionRecoveryProvider).resume(pending!);
 
-      expect(store.current, isNull);
+      expect(container.read(counterProvider).count, 17);
+      expect(container.read(sessionControllerProvider).total, 17);
       expect(sessions.getAllSessions(), isEmpty);
     });
-
-    test(
-      'resume seeds the live counter and hands over to the checkpointer',
-      () async {
-        final recovery = container.read(sessionRecoveryProvider);
-        await recovery.resume(recovery.pending!);
-
-        expect(container.read(counterProvider).count, 17);
-        expect(container.read(sessionControllerProvider).total, 17);
-        expect(sessions.getAllSessions(), isEmpty);
-
-        // The old checkpoint is gone; the resumed session is tracked afresh
-        // under a new identity so a second crash is still recoverable.
-        final fresh = store.current;
-        expect(fresh, isNotNull);
-        expect(fresh!.id, isNot('cp'));
-        expect(fresh.finalCount, 17);
-        expect(fresh.completed, isFalse);
-      },
-    );
   });
 }

@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
@@ -8,7 +10,7 @@ import '../../state/providers/session_controller.dart';
 import '../../state/providers/app_lifecycle_provider.dart';
 import '../../state/providers/counter_provider.dart';
 import '../../state/providers/services_provider.dart';
-import '../../state/providers/session_checkpointer.dart';
+import '../../domain/models/count_session.dart';
 import '../../state/providers/session_recovery.dart';
 import '../../state/providers/settings_provider.dart';
 import '../sheets/alert_config_sheet.dart';
@@ -36,31 +38,50 @@ class CounterScreen extends ConsumerStatefulWidget {
 
 class _CounterScreenState extends ConsumerState<CounterScreen>
     with WidgetsBindingObserver {
+  ProviderSubscription<AsyncValue<CountSession?>>? _recoverySubscription;
+  bool _recoveryOffered = false;
+
   @override
   void initState() {
     super.initState();
     WidgetsBinding.instance.addObserver(this);
 
-    // Initialize notification service and clear stale notifications from
-    // any previous session that may have been killed or crashed.
-    WidgetsBinding.instance.addPostFrameCallback((_) async {
-      // Look for a crashed session before the checkpointer is attached, so
-      // the leftover checkpoint cannot be overwritten by the first tap.
-      final checkpoint = ref.read(sessionRecoveryProvider).pending;
-      ref.read(sessionCheckpointerProvider);
+    // Independent of recovery. Awaiting these used to hold the sheet behind
+    // two platform round-trips, during which a tap could land on a session
+    // the user had not decided about yet.
+    unawaited(_initNotifications());
 
-      final ns = ref.read(notificationServiceProvider);
-      await ns.init();
-      await ns.cancelAllNotifications();
+    // The screen only reacts: taking the checkpoint and attaching the
+    // checkpointer are `sessionStartupProvider`'s job, done in app
+    // composition before this screen exists.
+    _recoverySubscription = ref.listenManual<AsyncValue<CountSession?>>(
+      sessionStartupProvider,
+      (_, next) => _offerRecovery(next),
+      fireImmediately: true,
+    );
+  }
 
-      if (checkpoint != null && mounted) {
-        await showRecoverSessionSheet(context, checkpoint);
-      }
+  Future<void> _initNotifications() async {
+    final ns = ref.read(notificationServiceProvider);
+    await ns.init();
+    await ns.cancelAllNotifications();
+  }
+
+  void _offerRecovery(AsyncValue<CountSession?> startup) {
+    if (_recoveryOffered) return;
+    final checkpoint = startup.valueOrNull;
+    if (checkpoint == null) return;
+    _recoveryOffered = true;
+
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (!mounted) return;
+      showRecoverSessionSheet(context, checkpoint);
     });
   }
 
   @override
   void dispose() {
+    _recoverySubscription?.close();
     WidgetsBinding.instance.removeObserver(this);
     super.dispose();
   }

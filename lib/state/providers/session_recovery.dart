@@ -1,50 +1,57 @@
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
-import '../../data/repositories/session_checkpoint_repository.dart';
 import '../../domain/models/count_session.dart';
 import 'counter_provider.dart';
 import 'hive_providers.dart';
 import 'session_checkpointer.dart';
 import 'sessions_provider.dart';
 
-/// The checkpoint worth offering back to the user after an unexpected
-/// termination, or null when there is nothing to recover.
+/// The one startup step that has to happen before anything can count.
 ///
-/// A checkpoint at zero is not worth a prompt: nothing was lost.
-CountSession? pendingRecovery(SessionCheckpointStore store) {
-  final checkpoint = store.read();
+/// Takes the checkpoint left behind by a previous run — read *and* delete, in
+/// one step — and only then attaches the checkpointer. Reading it without
+/// removing it, or attaching the checkpointer first, let the first count of
+/// this launch overwrite the record the user was about to be offered: the
+/// store keys every write to the same slot.
+///
+/// Resolves to the checkpoint worth prompting about, or null when there is
+/// nothing to recover. A checkpoint at zero is not worth a prompt: nothing was
+/// lost.
+final sessionStartupProvider = FutureProvider<CountSession?>((ref) async {
+  final checkpoint = await ref
+      .watch(sessionCheckpointRepositoryProvider)
+      .take();
+
+  // Deliberately after the take(): from here on the live session owns the
+  // checkpoint slot.
+  ref.watch(sessionCheckpointerProvider);
+
   if (checkpoint == null || checkpoint.finalCount <= 0) return null;
   return checkpoint;
-}
+});
 
 /// Handles what the user decides to do with a recovered checkpoint
 /// (requirement 7.2).
+///
+/// The checkpoint is already out of the store by the time any of these run —
+/// [sessionStartupProvider] took it — so none of them has to clear it.
 class SessionRecovery {
   final Ref _ref;
 
   SessionRecovery(this._ref);
 
-  CountSession? get pending =>
-      pendingRecovery(_ref.read(sessionCheckpointRepositoryProvider));
-
-  /// Persists the checkpoint to history as a recovered session and clears it.
-  Future<void> save(CountSession checkpoint) async {
-    await _ref
-        .read(sessionsProvider.notifier)
-        .saveSession(checkpoint.copyWith(completed: false));
-    await _ref.read(sessionCheckpointerProvider).clear();
+  /// Persists the checkpoint to history as a recovered session.
+  ///
+  /// The record already carries `completed: false` from the checkpoint
+  /// snapshot, so there is nothing to override here.
+  Future<void> save(CountSession checkpoint) {
+    return _ref.read(sessionsProvider.notifier).saveSession(checkpoint);
   }
 
-  /// Drops the checkpoint without keeping a record.
-  Future<void> discard() async {
-    await _ref.read(sessionCheckpointerProvider).clear();
-  }
-
-  /// Loads the checkpointed count back into the live counter so the user can
-  /// carry on where the crash left them. The checkpointer takes over from
-  /// here, so the old checkpoint is cleared rather than left to go stale.
-  Future<void> resume(CountSession checkpoint) async {
-    await _ref.read(sessionCheckpointerProvider).clear();
+  /// Loads the checkpointed session back into the live counter so the user can
+  /// carry on where the crash left them, counts, phrase and start time intact.
+  /// The checkpointer tracks it afresh from here under a new identity.
+  void resume(CountSession checkpoint) {
     _ref.read(counterProvider.notifier).loadSession(checkpoint);
   }
 }

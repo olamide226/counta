@@ -29,8 +29,9 @@ typedef CheckpointSnapshot =
 /// checkpoint is cleared. Saving must call [clear] explicitly, because saving
 /// does not zero the on-screen count.
 ///
-/// The checkpointer never clears a checkpoint it did not write itself, so a
-/// leftover from a previous process survives until recovery has looked at it.
+/// Clearing is unconditional: `sessionStartupProvider` has already taken any
+/// leftover from a previous process out of the store before this is attached,
+/// so the only checkpoint it can ever see is its own.
 class SessionCheckpointer {
   static const defaultInterval = Duration(seconds: 10);
 
@@ -44,7 +45,6 @@ class SessionCheckpointer {
   String? _checkpointId;
   EngineStatus? _lastStatus;
   bool _dirty = false;
-  bool _wroteThisSession = false;
 
   SessionCheckpointer({
     required SessionController controller,
@@ -104,17 +104,13 @@ class SessionCheckpointer {
     _timer = null;
     _checkpointId = null;
     _dirty = false;
-    if (_wroteThisSession) {
-      _wroteThisSession = false;
-      unawaited(_store.clear());
-    }
+    unawaited(_store.clear());
   }
 
   Future<void> _write() async {
     final id = _checkpointId;
     if (id == null) return;
     _dirty = false;
-    _wroteThisSession = true;
     await _store.write(_snapshot(_controller, id));
   }
 
@@ -126,7 +122,6 @@ class SessionCheckpointer {
   /// Tracking continues: if the user keeps counting, the next dirty tick
   /// writes a fresh checkpoint for the progress made since the save.
   Future<void> clear() async {
-    _wroteThisSession = false;
     _dirty = false;
     await _store.clear();
   }
@@ -140,8 +135,9 @@ class SessionCheckpointer {
 
 /// Keeps the active session checkpointed for the life of the app.
 ///
-/// Read once at startup (the counter screen does this) so the listener is
-/// attached before the first count lands.
+/// Attached by [sessionStartupProvider], never read directly by a screen: it
+/// must not exist until the previous run's checkpoint has been taken out of
+/// the store.
 final sessionCheckpointerProvider = Provider<SessionCheckpointer>((ref) {
   // `.notifier` deliberately: watching the ChangeNotifier itself would
   // rebuild this provider (and re-attach the listener) on every count.

@@ -100,19 +100,18 @@ class RecoverSessionSheet extends ConsumerWidget {
           ),
           const SizedBox(height: 8),
           OutlinedButton.icon(
-            onPressed: () async {
-              await recovery.resume(checkpoint);
-              if (context.mounted) Navigator.of(context).pop();
+            onPressed: () {
+              recovery.resume(checkpoint);
+              Navigator.of(context).pop();
             },
             icon: const Icon(Icons.play_arrow),
             label: const Text('Continue counting'),
           ),
           const SizedBox(height: 8),
           TextButton(
-            onPressed: () async {
-              await recovery.discard();
-              if (context.mounted) Navigator.of(context).pop();
-            },
+            // Nothing to undo: the checkpoint left the store at startup, so
+            // dismissing this sheet is the discard.
+            onPressed: () => Navigator.of(context).pop(),
             child: const Text('Discard'),
           ),
         ],
