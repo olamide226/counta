@@ -83,6 +83,10 @@ class FakeAudioSource implements AudioSource {
   /// What the OS answers when capture asks for the microphone.
   bool permissionGranted = true;
 
+  /// Holds the stream silent: no first frame, no error. Models a microphone
+  /// that has been granted but never delivers, so a stop can race startup.
+  bool silent = false;
+
   @override
   Future<bool> hasPermission() async => permissionGranted;
 
@@ -96,6 +100,9 @@ class FakeAudioSource implements AudioSource {
     // The real source answers on the stream, asynchronously: a refusal as a
     // typed error, and a working microphone as its first frame.
     scheduleMicrotask(() {
+      if (silent) {
+        return;
+      }
       if (!permissionGranted) {
         _controller?.addError(const AudioSourcePermissionDenied());
       } else {
@@ -194,6 +201,26 @@ void main() {
         fakeAudio.emitFrame();
         await Future<void>.delayed(Duration.zero);
         expect(fakeSocket.sentFrames, hasLength(2));
+      });
+
+      test('a stop while capture is still unconfirmed does not hang', () async {
+        // The microphone was granted but has not delivered its first frame, so
+        // the confirmation is still pending. Stopping cancels the very
+        // subscription that would settle it; without stop() completing the
+        // confirmation itself, this start never returns.
+        fakeAudio.silent = true;
+        final pendingStart = engine.start();
+        await Future<void>.delayed(Duration.zero);
+        expect(fakeSocket.connectCount, 0);
+
+        await engine.stop();
+        await pendingStart.timeout(
+          const Duration(seconds: 2),
+          onTimeout: () => fail('start() never completed after stop()'),
+        );
+
+        expect(fakeSocket.connectCount, 0);
+        expect(engine.currentStatus, EngineStatus.idle);
       });
 
       test(

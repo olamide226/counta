@@ -504,6 +504,14 @@ class CloudCountingEngine implements CountingEngine {
     _stopTranscriptionWatchdog();
     _preConnectFrames.clear();
 
+    // A stop during startup — before capture has delivered its first frame —
+    // cancels the very subscription that would confirm or refuse it. Without
+    // this the pending `start()` waits on a completer nothing can ever finish.
+    final pendingConfirmation = _captureConfirmed;
+    if (pendingConfirmation != null && !pendingConfirmation.isCompleted) {
+      pendingConfirmation.complete(false);
+    }
+
     try {
       await _audioSubscription?.cancel();
       _audioSubscription = null;
