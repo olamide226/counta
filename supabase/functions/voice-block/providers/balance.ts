@@ -62,12 +62,16 @@ export class RevenueCatBalanceProvider implements BalanceProvider {
     return this.balanceFrom(list);
   }
 
-  spend(userId: string, amount: number, reference: string): Promise<number> {
-    return this.adjust(userId, -Math.abs(amount), reference);
+  spend(userId: string, blockId: string, credits: number): Promise<number> {
+    return this.adjust(userId, -Math.abs(credits), `voice-block:${blockId}`);
   }
 
-  grant(userId: string, amount: number, reference: string): Promise<number> {
-    return this.adjust(userId, Math.abs(amount), reference);
+  refund(userId: string, blockId: string, credits: number): Promise<number> {
+    return this.adjust(
+      userId,
+      Math.abs(credits),
+      `voice-block:${blockId}:refund`,
+    );
   }
 
   private async adjust(

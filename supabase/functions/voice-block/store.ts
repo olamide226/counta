@@ -37,7 +37,7 @@ export class SupabaseBlockStore implements BlockStore {
   }
 
   async insert(
-    row: Omit<VoiceBlockRow, "id" | "reconciled" | "streamed_secs" | "detections">,
+    row: Omit<VoiceBlockRow, "reconciled" | "streamed_secs" | "detections">,
   ): Promise<VoiceBlockRow> {
     const { data, error } = await this.admin
       .from("voice_blocks")

@@ -37,10 +37,20 @@ export class FakeAuth implements Authenticator {
   }
 }
 
-/** In-memory balances. State lives for the life of the instance. */
+/**
+ * In-memory balances. State lives for the life of the instance.
+ *
+ * Applies each (op, blockId) pair at most once, mirroring the Idempotency-Key
+ * contract the RevenueCat adapter relies on — without that, a test could not
+ * tell a genuinely exactly-once refund from one that just happened to run
+ * twice.
+ */
 export class FakeBalanceProvider implements BalanceProvider {
   readonly balances = new Map<string, number>();
-  readonly calls: Array<{ op: string; userId: string; amount?: number }> = [];
+  readonly calls: Array<
+    { op: string; userId: string; blockId?: string; credits?: number }
+  > = [];
+  private readonly applied = new Set<string>();
 
   constructor(private readonly initialBalance = 20) {}
 
@@ -49,18 +59,22 @@ export class FakeBalanceProvider implements BalanceProvider {
     return Promise.resolve(this.current(userId));
   }
 
-  spend(userId: string, amount: number): Promise<number> {
-    this.calls.push({ op: "spend", userId, amount });
-    const next = this.current(userId) - amount;
-    this.balances.set(userId, next);
-    return Promise.resolve(next);
+  spend(userId: string, blockId: string, credits: number): Promise<number> {
+    this.calls.push({ op: "spend", userId, blockId, credits });
+    return this.apply(userId, `spend:${blockId}`, -credits);
   }
 
-  grant(userId: string, amount: number): Promise<number> {
-    this.calls.push({ op: "grant", userId, amount });
-    const next = this.current(userId) + amount;
-    this.balances.set(userId, next);
-    return Promise.resolve(next);
+  refund(userId: string, blockId: string, credits: number): Promise<number> {
+    this.calls.push({ op: "refund", userId, blockId, credits });
+    return this.apply(userId, `refund:${blockId}`, credits);
+  }
+
+  private apply(userId: string, key: string, delta: number): Promise<number> {
+    if (!this.applied.has(key)) {
+      this.applied.add(key);
+      this.balances.set(userId, this.current(userId) + delta);
+    }
+    return Promise.resolve(this.current(userId));
   }
 
   private current(userId: string): number {
@@ -71,7 +85,6 @@ export class FakeBalanceProvider implements BalanceProvider {
 /** In-memory stand-in for the Supabase-backed store. */
 export class MemoryBlockStore implements BlockStore {
   rows: VoiceBlockRow[] = [];
-  private seq = 0;
 
   findLiveBlock(userId: string, notBefore: Date): Promise<VoiceBlockRow | null> {
     const live = this.rows
@@ -93,15 +106,10 @@ export class MemoryBlockStore implements BlockStore {
   }
 
   insert(
-    row: Omit<
-      VoiceBlockRow,
-      "id" | "reconciled" | "streamed_secs" | "detections"
-    >,
+    row: Omit<VoiceBlockRow, "reconciled" | "streamed_secs" | "detections">,
   ): Promise<VoiceBlockRow> {
-    this.seq++;
     const full: VoiceBlockRow = {
       ...row,
-      id: `33333333-3333-4333-8333-${String(this.seq).padStart(12, "0")}`,
       reconciled: false,
       streamed_secs: null,
       detections: null,
@@ -160,6 +168,7 @@ export function harness(
   const blocks = new MemoryBlockStore();
   const logs: Harness["logs"] = [];
   const clock = { now: new Date("2026-09-07T12:00:00.000Z") };
+  let seq = 0;
   const deps: Deps = {
     auth: new FakeAuth(),
     balance,
@@ -167,6 +176,7 @@ export function harness(
     blocks,
     config: CONFIG,
     now: () => clock.now,
+    newBlockId: () => `33333333-3333-4333-8333-${String(++seq).padStart(12, "0")}`,
     log: (event, fields) => logs.push({ event, fields }),
     ...overrides,
   };

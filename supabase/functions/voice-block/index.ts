@@ -59,7 +59,7 @@ function deps(): Deps {
     auth: { persistSession: false, autoRefreshToken: false },
   });
 
-  cachedDeps = {
+  const built: Deps = {
     auth: new SupabaseAuthenticator((bearer) =>
       createClient(supabaseUrl, publishableKey, {
         auth: { persistSession: false, autoRefreshToken: false },
@@ -80,9 +80,11 @@ function deps(): Deps {
     }),
     config: buildConfig(),
     now: () => new Date(),
+    newBlockId: () => crypto.randomUUID(),
     log,
   };
-  return cachedDeps;
+  cachedDeps = built;
+  return built;
 }
 
 Deno.serve(async (req) => {

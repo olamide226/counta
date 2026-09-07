@@ -107,27 +107,19 @@ async function grant(req: Request, deps: Deps, userId: string): Promise<Response
     });
   }
 
-  // 3.5: debit before minting.
-  const reference = `voice-block:${sessionId}:${now.toISOString()}`;
-  const balanceAfter = await balance.spend(userId, config.blockCredits, reference);
+  // 3.5: debit before minting. The block id is minted here rather than by the
+  // database so every ledger call for this block — the debit and any refund —
+  // is keyed on the same stable identity. Keying on the attempt (a timestamp)
+  // meant a retried grant looked like a new purchase and double-charged.
+  const blockId = deps.newBlockId();
+  const balanceAfter = await balance.spend(userId, blockId, config.blockCredits);
 
   // 3.6: any mint failure refunds the debit and reports 503.
   let token: string;
   try {
     token = await minter.mint(config.tokenTtlSeconds);
   } catch (error) {
-    try {
-      await balance.grant(userId, config.blockCredits, `${reference}:refund`);
-    } catch (refundError) {
-      // Money is now wrong; say so loudly. The reconciliation query (10.5)
-      // is what catches this class of drift.
-      deps.log("refund_failed", {
-        user_id: userId,
-        session_id: sessionId,
-        credits: config.blockCredits,
-        message: String(refundError),
-      });
-    }
+    await refundQuietly(deps, userId, blockId, config.blockCredits);
     deps.log("mint_failed", { user_id: userId, message: String(error) });
     return json(503, { error: "provider_unavailable" });
   }
@@ -135,6 +127,7 @@ async function grant(req: Request, deps: Deps, userId: string): Promise<Response
   // 3.7
   const expiresAt = new Date(now.getTime() + config.blockSeconds * 1000);
   const row = await blocks.insert({
+    id: blockId,
     user_id: userId,
     session_id: sessionId,
     credits: config.blockCredits,
@@ -199,11 +192,7 @@ async function release(req: Request, deps: Deps, userId: string): Promise<Respon
   let refunded = false;
   let balanceNow: number;
   if (eligible) {
-    balanceNow = await balance.grant(
-      userId,
-      block.credits,
-      `voice-block:${block.id}:release-refund`,
-    );
+    balanceNow = await balance.refund(userId, block.id, block.credits);
     refunded = true;
   } else {
     balanceNow = await balance.getBalance(userId);
@@ -219,6 +208,30 @@ async function release(req: Request, deps: Deps, userId: string): Promise<Respon
   });
 
   return json(200, { refunded, balance: balanceNow });
+}
+
+/**
+ * Returns the debit for a block that will never exist. Failing to refund
+ * leaves the money wrong, so it is logged loudly rather than thrown: the
+ * caller is already returning an error, and the reconciliation query (10.5)
+ * is what catches this class of drift.
+ */
+async function refundQuietly(
+  deps: Deps,
+  userId: string,
+  blockId: string,
+  credits: number,
+): Promise<void> {
+  try {
+    await deps.balance.refund(userId, blockId, credits);
+  } catch (error) {
+    deps.log("refund_failed", {
+      user_id: userId,
+      block_id: blockId,
+      credits,
+      message: String(error),
+    });
+  }
 }
 
 function clampInt(value: unknown): number {

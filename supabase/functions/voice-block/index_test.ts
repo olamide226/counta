@@ -24,6 +24,7 @@ async function call(deps: Deps, req: Request) {
 }
 
 const BASE = "http://localhost:54321/functions/v1";
+const BLOCK = "33333333-3333-4333-8333-000000000001";
 
 // ---------------------------------------------------------------------------
 // Grant
@@ -103,7 +104,7 @@ Deno.test("grant: mint failure refunds the debit and returns 503", async () => {
   assertEquals(status, 503);
   assertEquals(body, { error: "provider_unavailable" });
   assertEquals(h.balance.balances.get(USER), 20);
-  assertEquals(h.balance.calls.map((c) => c.op), ["get", "spend", "grant"]);
+  assertEquals(h.balance.calls.map((c) => c.op), ["get", "spend", "refund"]);
   assertEquals(h.blocks.rows.length, 0);
   assertEquals(h.logs.some((l) => l.event === "mint_failed"), true);
 });
@@ -162,7 +163,7 @@ Deno.test("RevenueCat provider: a write retries a 429 twice with a capped backof
   });
 
   const error = await assertRejects(
-    () => provider.spend(USER, 5, "ref-1"),
+    () => provider.spend(USER, BLOCK, 5),
     ProviderError,
   );
   assertEquals(error.reason, "rate_limited");
@@ -198,15 +199,30 @@ Deno.test("RevenueCat provider: recovers after a single 429 and parses the balan
     sleep: () => Promise.resolve(),
   });
 
-  assertEquals(await provider.spend(USER, 5, "ref-1"), 7);
+  assertEquals(await provider.spend(USER, BLOCK, 5), 7);
   assertEquals(attempts, 2);
   assertStringIncludes(seen[1].url, `/projects/proj/customers/${USER}/virtual_currencies/transactions`);
   const sent = JSON.parse(String(seen[1].init?.body));
   assertEquals(sent.adjustments, { VOICE: -5 });
-  assertEquals(sent.reference, "ref-1");
+  assertEquals(sent.reference, `voice-block:${BLOCK}`);
   const headers = seen[1].init?.headers as Record<string, string>;
-  assertEquals(headers["Idempotency-Key"], "ref-1");
+  assertEquals(headers["Idempotency-Key"], `voice-block:${BLOCK}`);
   assertEquals(headers["Authorization"], "Bearer test");
+});
+
+Deno.test("grant: every ledger call for a block is keyed on the block id", async () => {
+  const h = harness();
+  const { body } = await call(h.deps, grantReq());
+
+  const spend = h.balance.calls.find((c) => c.op === "spend");
+  assertEquals(spend?.blockId, body.block_id);
+
+  // A retried mint failure for the same block refunds once, not once per
+  // attempt: the debit and the refund share the block's identity, so the
+  // ledger can deduplicate them. Keying on `now` made every attempt distinct.
+  await h.deps.balance.spend(USER, String(body.block_id), 5);
+  await h.deps.balance.spend(USER, String(body.block_id), 5);
+  assertEquals(h.balance.balances.get(USER), 15);
 });
 
 Deno.test("grant: per-user rate limit returns 429", async () => {

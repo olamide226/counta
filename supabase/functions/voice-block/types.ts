@@ -26,10 +26,22 @@ export class ProviderError extends Error {
 export interface BalanceProvider {
   /** Current credit balance for the user. */
   getBalance(userId: string): Promise<number>;
-  /** Debit `amount` credits. Resolves to the balance after the debit. */
-  spend(userId: string, amount: number, reference: string): Promise<number>;
-  /** Credit `amount` credits. Resolves to the balance after the grant. */
-  grant(userId: string, amount: number, reference: string): Promise<number>;
+  /**
+   * Debits a block's cost. Resolves to the balance after the debit.
+   *
+   * Keyed on `blockId`, not on the attempt: the ledger call carries it as the
+   * idempotency key, so a client (or a proxy) that retries a grant it never
+   * saw the answer to is charged once.
+   */
+  spend(userId: string, blockId: string, credits: number): Promise<number>;
+  /**
+   * Credits a block's cost back. Resolves to the balance after the refund.
+   *
+   * Separate from a general "grant credits" so that both refund sites — the
+   * mint failure in grant() and the eligible release — are the same keyed
+   * operation, and so a retry of either refunds exactly once.
+   */
+  refund(userId: string, blockId: string, credits: number): Promise<number>;
 }
 
 export interface TokenMinter {
@@ -54,8 +66,9 @@ export interface BlockStore {
   findLiveBlock(userId: string, notBefore: Date): Promise<VoiceBlockRow | null>;
   /** Number of blocks granted to the user since `since` (rate limiting). */
   countGrantsSince(userId: string, since: Date): Promise<number>;
+  /** Inserts the row under the caller-supplied id (see BalanceProvider.spend). */
   insert(
-    row: Omit<VoiceBlockRow, "id" | "reconciled" | "streamed_secs" | "detections">,
+    row: Omit<VoiceBlockRow, "reconciled" | "streamed_secs" | "detections">,
   ): Promise<VoiceBlockRow>;
   findById(blockId: string, userId: string): Promise<VoiceBlockRow | null>;
   /**
@@ -92,5 +105,7 @@ export interface Deps {
   config: HandlerConfig;
   /** Injected so tests control time; both constructors always supply it. */
   now: () => Date;
+  /** New block id, minted before the debit so the ledger can be keyed on it. */
+  newBlockId: () => string;
   log: (event: string, fields: Record<string, unknown>) => void;
 }
