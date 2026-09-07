@@ -12,6 +12,10 @@ import {
  * on purpose and is the only write path to the table.
  */
 export class SupabaseBlockStore implements BlockStore {
+  /** Every column the handler reads; named so a select never ships more. */
+  private static readonly COLUMNS =
+    "id,user_id,session_id,credits,granted_at,expires_at,reconciled,streamed_secs,detections";
+
   constructor(private readonly admin: SupabaseClient) {}
 
   async findLiveBlock(
@@ -20,7 +24,7 @@ export class SupabaseBlockStore implements BlockStore {
   ): Promise<VoiceBlockRow | null> {
     const { data, error } = await this.admin
       .from("voice_blocks")
-      .select("*")
+      .select("id,session_id,expires_at")
       .eq("user_id", userId)
       .eq("reconciled", false)
       .gt("expires_at", now.toISOString())
@@ -66,7 +70,7 @@ export class SupabaseBlockStore implements BlockStore {
     const { data, error } = await this.admin
       .from("voice_blocks")
       .insert(row)
-      .select("*")
+      .select(SupabaseBlockStore.COLUMNS)
       .single();
     if (error) {
       // 23505: the partial unique index on (user_id) where not reconciled.
@@ -82,7 +86,7 @@ export class SupabaseBlockStore implements BlockStore {
   ): Promise<VoiceBlockRow | null> {
     const { data, error } = await this.admin
       .from("voice_blocks")
-      .select("*")
+      .select("id,credits,granted_at,reconciled")
       .eq("id", blockId)
       .eq("user_id", userId)
       .maybeSingle();
@@ -105,14 +109,18 @@ export class SupabaseBlockStore implements BlockStore {
   }
 }
 
-/** Verifies a Supabase user JWT by asking Auth for the user behind it. */
+/**
+ * Verifies a Supabase user JWT by asking Auth for the user behind it.
+ *
+ * Takes the client the rest of the function already holds: `getUser(token)`
+ * sends the token itself, so building a second SupabaseClient per request only
+ * to attach a redundant Authorization header bought nothing.
+ */
 export class SupabaseAuthenticator implements Authenticator {
-  constructor(
-    private readonly clientFor: (bearer: string) => SupabaseClient,
-  ) {}
+  constructor(private readonly client: SupabaseClient) {}
 
   async userIdForToken(token: string): Promise<string | null> {
-    const { data, error } = await this.clientFor(token).auth.getUser(token);
+    const { data, error } = await this.client.auth.getUser(token);
     if (error || !data.user) return null;
     return data.user.id;
   }

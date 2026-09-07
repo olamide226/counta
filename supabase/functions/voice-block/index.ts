@@ -50,8 +50,6 @@ let cachedDeps: Deps | null = null;
 function deps(): Deps {
   if (cachedDeps) return cachedDeps;
   const supabaseUrl = requireEnv("SUPABASE_URL");
-  const publishableKey = env("SUPABASE_PUBLISHABLE_KEY") ??
-    requireEnv("SUPABASE_ANON_KEY");
   const serviceRoleKey = requireEnv("SUPABASE_SERVICE_ROLE_KEY");
 
   const admin = createClient(supabaseUrl, serviceRoleKey, {
@@ -59,12 +57,7 @@ function deps(): Deps {
   });
 
   const built: Deps = {
-    auth: new SupabaseAuthenticator((bearer) =>
-      createClient(supabaseUrl, publishableKey, {
-        auth: { persistSession: false, autoRefreshToken: false },
-        global: { headers: { Authorization: `Bearer ${bearer}` } },
-      })
-    ),
+    auth: new SupabaseAuthenticator(admin),
     blocks: new SupabaseBlockStore(admin),
     // Only the real adapters are reachable from here. The fakes live in
     // testing/ and are never imported by this module, so no environment

@@ -77,10 +77,15 @@ async function grant(req: Request, deps: Deps, userId: string): Promise<Response
   }
 
   // Rate limit (8.7) before anything that costs money or touches a provider.
+  // Both pre-checks read the same table and neither depends on the other, so
+  // they go out together rather than as two sequential PostgREST round trips.
   const windowStart = new Date(
     now.getTime() - config.rateLimitWindowMinutes * 60_000,
   );
-  const recent = await blocks.countGrantsSince(userId, windowStart);
+  const [recent, live] = await Promise.all([
+    blocks.countGrantsSince(userId, windowStart),
+    blocks.findLiveBlock(userId, now),
+  ]);
   if (recent >= config.rateLimitMax) {
     deps.log("rate_limited", { user_id: userId, recent });
     return json(429, { error: "rate_limited" });
@@ -92,7 +97,6 @@ async function grant(req: Request, deps: Deps, userId: string): Promise<Response
   // conflict however little life the live block has left. Treating "nearly
   // expired" as "not live" handed a *second* session a concurrent block for
   // the whole overlap window — the exact thing 3.8 exists to prevent.
-  const live = await blocks.findLiveBlock(userId, now);
   if (live && live.session_id !== sessionId) {
     return json(409, { error: "block_in_flight", expires_at: live.expires_at });
   }

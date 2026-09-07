@@ -67,8 +67,8 @@ an omitted count is no report at all, not a report of zero.
 
 ## Environment the function reads
 
-Injected by the runtime (do not set): `SUPABASE_URL`, `SUPABASE_ANON_KEY` or
-`SUPABASE_PUBLISHABLE_KEY`, `SUPABASE_SERVICE_ROLE_KEY`.
+Injected by the runtime (do not set): `SUPABASE_URL`,
+`SUPABASE_SERVICE_ROLE_KEY`.
 
 | Variable | Default | Purpose |
 |---|---|---|
