@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../state/providers/counter_provider.dart';
+import 'counta_sheet.dart';
 
 class AlertConfigSheet extends ConsumerStatefulWidget {
   const AlertConfigSheet({super.key});
@@ -35,63 +36,53 @@ class _AlertConfigSheetState extends ConsumerState<AlertConfigSheet> {
 
   @override
   Widget build(BuildContext context) {
-    return Padding(
-      padding: EdgeInsets.only(
-        left: 24,
-        right: 24,
-        top: 24,
-        bottom: MediaQuery.of(context).viewInsets.bottom + 24,
-      ),
-      child: Column(
-        mainAxisSize: MainAxisSize.min,
-        crossAxisAlignment: CrossAxisAlignment.stretch,
-        children: [
-          Text(
-            'Alert Settings',
-            style: Theme.of(context).textTheme.headlineSmall,
+    return CountaSheetBody(
+      children: [
+        Text(
+          'Alert Settings',
+          style: Theme.of(context).textTheme.headlineSmall,
+        ),
+        const SizedBox(height: 16),
+        TextField(
+          controller: _thresholdController,
+          decoration: const InputDecoration(
+            labelText: 'Threshold',
+            hintText: 'e.g. 100',
+            border: OutlineInputBorder(),
+            helperText: 'Alert when count reaches this number',
           ),
-          const SizedBox(height: 16),
-          TextField(
-            controller: _thresholdController,
-            decoration: const InputDecoration(
-              labelText: 'Threshold',
-              hintText: 'e.g. 100',
-              border: OutlineInputBorder(),
-              helperText: 'Alert when count reaches this number',
-            ),
-            keyboardType: TextInputType.number,
+          keyboardType: TextInputType.number,
+        ),
+        const SizedBox(height: 16),
+        TextField(
+          controller: _repeatController,
+          decoration: const InputDecoration(
+            labelText: 'Repeat Interval',
+            hintText: 'e.g. 100',
+            border: OutlineInputBorder(),
+            helperText: 'Alert every N counts after threshold',
           ),
-          const SizedBox(height: 16),
-          TextField(
-            controller: _repeatController,
-            decoration: const InputDecoration(
-              labelText: 'Repeat Interval',
-              hintText: 'e.g. 100',
-              border: OutlineInputBorder(),
-              helperText: 'Alert every N counts after threshold',
-            ),
-            keyboardType: TextInputType.number,
-          ),
-          const SizedBox(height: 24),
-          Row(
-            children: [
-              Expanded(
-                child: OutlinedButton(
-                  onPressed: _clear,
-                  child: const Text('Clear'),
-                ),
+          keyboardType: TextInputType.number,
+        ),
+        const SizedBox(height: 24),
+        Row(
+          children: [
+            Expanded(
+              child: OutlinedButton(
+                onPressed: _clear,
+                child: const Text('Clear'),
               ),
-              const SizedBox(width: 12),
-              Expanded(
-                child: FilledButton(
-                  onPressed: _apply,
-                  child: const Text('Apply'),
-                ),
+            ),
+            const SizedBox(width: 12),
+            Expanded(
+              child: FilledButton(
+                onPressed: _apply,
+                child: const Text('Apply'),
               ),
-            ],
-          ),
-        ],
-      ),
+            ),
+          ],
+        ),
+      ],
     );
   }
 
@@ -112,9 +103,8 @@ class _AlertConfigSheetState extends ConsumerState<AlertConfigSheet> {
 }
 
 Future<void> showAlertConfigSheet(BuildContext context) {
-  return showModalBottomSheet(
+  return showCountaSheet<void>(
     context: context,
-    isScrollControlled: true,
     builder: (_) => const AlertConfigSheet(),
   );
 }

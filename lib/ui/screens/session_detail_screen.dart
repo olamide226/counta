@@ -1,11 +1,13 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
+import '../../core/theme/date_format.dart';
 import '../../core/theme/sound_mode_presentation.dart';
 
 import '../../domain/models/count_session.dart';
 import '../../state/providers/counter_provider.dart';
 import '../../state/providers/sessions_provider.dart';
+import '../widgets/session_summary_card.dart';
 
 class SessionDetailScreen extends ConsumerWidget {
   const SessionDetailScreen({super.key, required this.session});
@@ -78,13 +80,12 @@ class SessionDetailScreen extends ConsumerWidget {
           ],
           if (session.voiceCount != null || session.manualCount != null) ...[
             const SizedBox(height: 16),
-            _buildStatCard(
-              context,
-              icon: Icons.mic_rounded,
-              label: 'Voice vs tap',
-              value:
-                  '${session.voiceCount ?? 0} by voice · '
-                  '${session.manualCount ?? 0} by tap',
+            SessionSummaryCard(
+              title: session.phrase ?? session.mantra,
+              total: session.finalCount,
+              voiceCount: session.voiceCount,
+              manualCount: session.manualCount,
+              isVoiceSession: session.isVoiceSession,
             ),
           ],
           if (session.creditsConsumed != null) ...[
@@ -108,14 +109,14 @@ class SessionDetailScreen extends ConsumerWidget {
             context,
             icon: Icons.play_arrow,
             label: 'Started',
-            value: _formatDateTime(session.startedAt),
+            value: session.startedAt.asSessionTimestamp,
           ),
           const SizedBox(height: 16),
           _buildStatCard(
             context,
             icon: Icons.stop,
             label: 'Ended',
-            value: _formatDateTime(session.endedAt),
+            value: session.endedAt.asSessionTimestamp,
           ),
           if (session.threshold != null) ...[
             const SizedBox(height: 16),
@@ -281,9 +282,5 @@ class SessionDetailScreen extends ConsumerWidget {
     } else {
       return '${seconds}s';
     }
-  }
-
-  String _formatDateTime(DateTime date) {
-    return '${date.day}/${date.month}/${date.year} ${date.hour.toString().padLeft(2, '0')}:${date.minute.toString().padLeft(2, '0')}';
   }
 }

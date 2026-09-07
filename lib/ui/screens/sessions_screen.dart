@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
+import '../../core/theme/date_format.dart';
 import '../../state/providers/sessions_provider.dart';
 import 'session_detail_screen.dart';
 
@@ -36,6 +37,18 @@ class SessionsScreen extends ConsumerWidget {
               itemCount: sessions.length,
               itemBuilder: (context, index) {
                 final session = sessions[index];
+                // Built once: the subtitle and the three-line flag have to
+                // agree, and deriving both from the same list is what makes
+                // that true by construction rather than by matching two
+                // copies of the same condition.
+                final lines = [
+                  if (session.phrase != null &&
+                      session.phrase != session.mantra)
+                    '“${session.phrase}”',
+                  '${session.finalCount} counts • '
+                      '${session.endedAt.asSessionTimestamp}',
+                  if (!session.completed) 'Recovered after interruption',
+                ];
                 return Dismissible(
                   key: Key(session.id),
                   direction: DismissDirection.endToStart,
@@ -59,20 +72,8 @@ class SessionsScreen extends ConsumerWidget {
                           )
                         : const Icon(Icons.touch_app_outlined),
                     title: Text(session.mantra),
-                    subtitle: Text(
-                      [
-                        if (session.phrase != null &&
-                            session.phrase != session.mantra)
-                          '“${session.phrase}”',
-                        '${session.finalCount} counts • '
-                            '${_formatDate(session.endedAt)}',
-                        if (!session.completed) 'Recovered after interruption',
-                      ].join('\n'),
-                    ),
-                    isThreeLine:
-                        !session.completed ||
-                        (session.phrase != null &&
-                            session.phrase != session.mantra),
+                    subtitle: Text(lines.join('\n')),
+                    isThreeLine: lines.length > 2,
                     trailing: const Icon(Icons.chevron_right),
                     onTap: () {
                       Navigator.of(context).push(
@@ -115,9 +116,5 @@ class SessionsScreen extends ConsumerWidget {
       ),
     );
     return result ?? false;
-  }
-
-  String _formatDate(DateTime date) {
-    return '${date.day}/${date.month}/${date.year} ${date.hour.toString().padLeft(2, '0')}:${date.minute.toString().padLeft(2, '0')}';
   }
 }
