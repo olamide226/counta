@@ -18,10 +18,13 @@ Future<void> initHive() async {
   Hive.registerAdapter(AppSettingsAdapter());
   Hive.registerAdapter(CountSessionAdapter());
 
-  // Open boxes
-  await Hive.openBox<AppSettings>(settingsBoxName);
-  await Hive.openBox<CountSession>(sessionsBoxName);
-  await Hive.openBox<CountSession>(sessionCheckpointBoxName);
+  // Concurrently: three independent file opens on the startup path, and the
+  // app shows a spinner until the last one lands.
+  await Future.wait([
+    Hive.openBox<AppSettings>(settingsBoxName),
+    Hive.openBox<CountSession>(sessionsBoxName),
+    Hive.openBox<CountSession>(sessionCheckpointBoxName),
+  ]);
 }
 
 Box<AppSettings> getSettingsBox() => Hive.box<AppSettings>(settingsBoxName);
