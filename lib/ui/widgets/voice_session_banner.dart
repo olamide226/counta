@@ -32,28 +32,32 @@ class VoiceSessionBanner extends StatelessWidget {
   bool get _isUnhealthy =>
       status == EngineStatus.reconnecting ||
       status == EngineStatus.degraded ||
+      status == EngineStatus.notConfigured ||
       status == EngineStatus.error;
 
   String get _statusLabel => switch (status) {
-        EngineStatus.live => 'Listening',
-        EngineStatus.connecting => 'Connecting…',
-        EngineStatus.reconnecting => 'Reconnecting…',
-        EngineStatus.requestingBlock => 'Preparing…',
-        EngineStatus.degraded => 'Poor connection',
-        EngineStatus.exhausted => 'Out of credit',
-        EngineStatus.error => 'Voice counting stopped',
-        EngineStatus.idle => 'Paused',
-      };
+    EngineStatus.live => 'Listening',
+    EngineStatus.connecting => 'Connecting…',
+    EngineStatus.reconnecting => 'Reconnecting…',
+    EngineStatus.requestingBlock => 'Preparing…',
+    EngineStatus.degraded => 'Poor connection',
+    EngineStatus.exhausted => 'Out of credit',
+    EngineStatus.error => 'Voice counting stopped',
+    EngineStatus.notConfigured => 'Voice counting unavailable',
+    EngineStatus.idle => 'Paused',
+  };
 
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
     final scheme = theme.colorScheme;
 
-    final container =
-        _isUnhealthy ? scheme.errorContainer : scheme.primaryContainer;
-    final onContainer =
-        _isUnhealthy ? scheme.onErrorContainer : scheme.onPrimaryContainer;
+    final container = _isUnhealthy
+        ? scheme.errorContainer
+        : scheme.primaryContainer;
+    final onContainer = _isUnhealthy
+        ? scheme.onErrorContainer
+        : scheme.onPrimaryContainer;
     final accent = _isUnhealthy ? scheme.error : scheme.primary;
 
     return Material(
@@ -68,10 +72,7 @@ class VoiceSessionBanner extends StatelessWidget {
               Row(
                 crossAxisAlignment: CrossAxisAlignment.center,
                 children: [
-                  _VoiceActivityIndicator(
-                    active: _isListening,
-                    color: accent,
-                  ),
+                  _VoiceActivityIndicator(active: _isListening, color: accent),
                   const SizedBox(width: 12),
                   Expanded(
                     child: Column(
@@ -190,9 +191,9 @@ class _CountPill extends StatelessWidget {
           Text(
             label,
             style: Theme.of(context).textTheme.labelSmall?.copyWith(
-                  color: onContainer,
-                  fontWeight: FontWeight.w600,
-                ),
+              color: onContainer,
+              fontWeight: FontWeight.w600,
+            ),
           ),
         ],
       ),

@@ -222,11 +222,24 @@ class CloudCountingEngine implements CountingEngine {
       }
     });
 
+    String token;
     try {
-      await _speechSocket.connect(
-        apiKeyOrToken: await tokenProvider(),
-        phrase: targetPhrase,
-      );
+      token = await tokenProvider();
+    } on VoiceUnavailable catch (e) {
+      // Not a failed session — a build that can never start one. Report it as
+      // state so the UI can explain it; rethrowing as well lets the caller
+      // that opened the session keep its sheet open and show the reason.
+      _report(e.message);
+      _setStatus(EngineStatus.notConfigured);
+      rethrow;
+    } catch (e) {
+      _report('Could not start voice session: $e');
+      _setStatus(EngineStatus.error);
+      rethrow;
+    }
+
+    try {
+      await _speechSocket.connect(apiKeyOrToken: token, phrase: targetPhrase);
       _attachAudio();
     } catch (e) {
       _report('Could not start voice session: $e');

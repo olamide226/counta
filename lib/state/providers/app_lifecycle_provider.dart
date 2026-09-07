@@ -28,7 +28,9 @@ class AppLifecycleNotifier extends StateNotifier<AppLifecycleState> {
     // the audio background mode. Nagging the user to "resume" a session that
     // never stopped would be wrong, so show a live status instead.
     if (session.isVoiceActive) {
-      _ref.read(notificationServiceProvider).showVoiceSessionNotification(
+      _ref
+          .read(notificationServiceProvider)
+          .showVoiceSessionNotification(
             currentCount: session.total,
             phrase: session.activePhrase?.raw ?? 'your phrase',
           );

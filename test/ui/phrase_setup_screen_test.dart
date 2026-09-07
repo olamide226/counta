@@ -9,7 +9,7 @@ void main() {
       MaterialApp(
         home: PhraseSetupScreen(
           initialPhrase: 'I am full of power',
-          onStartSession: (PhraseSpec _) {},
+          onStartSession: (PhraseSpec _) async {},
         ),
       ),
     );
@@ -17,5 +17,47 @@ void main() {
     final field = tester.widget<TextField>(find.byType(TextField));
     expect(field.controller?.text, 'I am full of power');
     expect(find.text('Resume Voice Session'), findsOneWidget);
+  });
+
+  testWidgets('a start that fails keeps the sheet open and says why', (
+    tester,
+  ) async {
+    await tester.pumpWidget(
+      MaterialApp(
+        home: PhraseSetupScreen(
+          onStartSession: (PhraseSpec _) async {
+            throw const VoiceUnavailable('Voice counting is not available.');
+          },
+        ),
+      ),
+    );
+
+    await tester.tap(find.text('Start Voice Session'));
+    await tester.pumpAndSettle();
+
+    // Popping on a failed start told the user the session had begun.
+    expect(find.byType(PhraseSetupScreen), findsOneWidget);
+    expect(find.text('Voice counting is not available.'), findsOneWidget);
+  });
+
+  testWidgets('a successful start closes the sheet', (tester) async {
+    var started = 0;
+    await tester.pumpWidget(
+      MaterialApp(
+        home: Navigator(
+          onGenerateRoute: (_) => MaterialPageRoute<void>(
+            builder: (_) => PhraseSetupScreen(
+              onStartSession: (PhraseSpec _) async => started++,
+            ),
+          ),
+        ),
+      ),
+    );
+
+    await tester.tap(find.text('Start Voice Session'));
+    await tester.pumpAndSettle();
+
+    expect(started, 1);
+    expect(find.byType(PhraseSetupScreen), findsNothing);
   });
 }

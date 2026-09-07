@@ -3,6 +3,12 @@ import 'dart:async';
 /// Status of the counting engine lifecycle.
 enum EngineStatus {
   idle,
+
+  /// This build cannot obtain a streaming credential at all, so no session can
+  /// start. A configuration state, not a failure of a running session: the
+  /// engine reports it instead of throwing an unhandled error, and the UI
+  /// explains it rather than leaving the user with a counter that never moved.
+  notConfigured,
   requestingBlock,
   connecting,
   live,
@@ -12,11 +18,24 @@ enum EngineStatus {
   error,
 }
 
-/// Source of a count event (voice detection or manual tap).
-enum CountSource {
-  voice,
-  manual,
+/// Thrown when voice counting cannot start because there is no way to obtain a
+/// streaming credential — no block token from the voice-block service, and no
+/// developer key in a dev build.
+///
+/// Distinct from a transport failure: retrying will not help and the message is
+/// meant to be shown to the user, so [CloudCountingEngine] maps it to
+/// [EngineStatus.notConfigured] rather than [EngineStatus.error].
+class VoiceUnavailable implements Exception {
+  const VoiceUnavailable(this.message);
+
+  final String message;
+
+  @override
+  String toString() => message;
 }
+
+/// Source of a count event (voice detection or manual tap).
+enum CountSource { voice, manual }
 
 /// Event emitted whenever a count increment occurs.
 class CountEvent {

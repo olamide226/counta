@@ -24,7 +24,7 @@ class _StreamingDebugScreenState extends State<StreamingDebugScreen> {
   // This screen is only reachable behind BuildConfig.showDebugTools, so it
   // may read the dev key directly; release code paths never can.
   final TextEditingController _apiKeyController = TextEditingController(
-    text: DevSecrets.deepgramApiKey,
+    text: DevSecrets.deepgramApiKey ?? '',
   );
   final TextEditingController _phraseController = TextEditingController(
     text: "I'm rich in wisdom",

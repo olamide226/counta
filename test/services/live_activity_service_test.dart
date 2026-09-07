@@ -28,23 +28,26 @@ void main() {
       );
     });
 
-    test('updateActivity executes safely and throttles subsequent updates', () async {
-      service.updateActivity(
-        phrase: 'Om Namah Shivaya',
-        count: 109,
-        voiceCount: 101,
-        manualCount: 8,
-        status: 'live',
-      );
+    test(
+      'updateActivity executes safely and throttles subsequent updates',
+      () async {
+        service.updateActivity(
+          phrase: 'Om Namah Shivaya',
+          count: 109,
+          voiceCount: 101,
+          manualCount: 8,
+          status: 'live',
+        );
 
-      service.updateActivity(
-        phrase: 'Om Namah Shivaya',
-        count: 110,
-        voiceCount: 102,
-        manualCount: 8,
-        status: 'live',
-      );
-    });
+        service.updateActivity(
+          phrase: 'Om Namah Shivaya',
+          count: 110,
+          voiceCount: 102,
+          manualCount: 8,
+          status: 'live',
+        );
+      },
+    );
 
     test('endActivity executes safely without active activity', () async {
       await expectLater(service.endActivity(), completes);

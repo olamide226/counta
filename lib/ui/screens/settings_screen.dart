@@ -110,8 +110,6 @@ class SettingsScreen extends ConsumerWidget {
     };
   }
 
-
-
   void _showThemeModeDialog(
     BuildContext context,
     WidgetRef ref,

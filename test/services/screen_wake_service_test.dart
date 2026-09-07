@@ -51,25 +51,30 @@ void main() {
       expect(toggles, [true, false, true]);
     });
 
-    test('a failed acquire leaves the service retryable, not stuck held',
-        () async {
-      var shouldFail = true;
-      final flaky = ScreenWakeService(
-        toggle: (enable) async {
-          if (shouldFail) throw Exception('platform unavailable');
-          toggles.add(enable);
-        },
-      );
+    test(
+      'a failed acquire leaves the service retryable, not stuck held',
+      () async {
+        var shouldFail = true;
+        final flaky = ScreenWakeService(
+          toggle: (enable) async {
+            if (shouldFail) throw Exception('platform unavailable');
+            toggles.add(enable);
+          },
+        );
 
-      await flaky.acquire();
-      expect(flaky.isHeld, isFalse,
-          reason: 'a failed acquire must not latch the held flag');
+        await flaky.acquire();
+        expect(
+          flaky.isHeld,
+          isFalse,
+          reason: 'a failed acquire must not latch the held flag',
+        );
 
-      shouldFail = false;
-      await flaky.acquire();
-      expect(flaky.isHeld, isTrue);
-      expect(toggles, [true]);
-    });
+        shouldFail = false;
+        await flaky.acquire();
+        expect(flaky.isHeld, isTrue);
+        expect(toggles, [true]);
+      },
+    );
 
     test('a failed release still clears the flag', () async {
       var failOnRelease = false;

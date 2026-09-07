@@ -13,10 +13,14 @@ class DevSecrets {
 
   /// Deepgram master key for the Streaming Spike Debug screen and for running
   /// a voice session in a dev build before the block client exists.
-  static String get deepgramApiKey {
+  ///
+  /// Null when no key was compiled in. "Empty define means no key" is decided
+  /// here so every caller agrees on it rather than each re-checking `isEmpty`.
+  static String? get deepgramApiKey {
     if (!BuildConfig.showDebugTools) {
       throw StateError('DevSecrets are not available in release builds');
     }
-    return const String.fromEnvironment('DEEPGRAM_API_KEY');
+    const key = String.fromEnvironment('DEEPGRAM_API_KEY');
+    return key.isEmpty ? null : key;
   }
 }

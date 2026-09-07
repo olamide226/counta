@@ -14,7 +14,7 @@ class LiveActivityService {
   static const Duration updateThrottle = Duration(milliseconds: 1500);
 
   LiveActivityService({LiveActivities? liveActivities})
-      : _liveActivities = liveActivities ?? LiveActivities();
+    : _liveActivities = liveActivities ?? LiveActivities();
 
   /// Initialize LiveActivities (registers App Group if supported).
   Future<void> init() async {

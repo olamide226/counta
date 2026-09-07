@@ -52,7 +52,8 @@ class SessionDetailScreen extends ConsumerWidget {
               context,
               icon: Icons.mic_rounded,
               label: 'Voice vs tap',
-              value: '${session.voiceCount ?? 0} by voice · '
+              value:
+                  '${session.voiceCount ?? 0} by voice · '
                   '${session.manualCount ?? 0} by tap',
             ),
           ],
@@ -246,6 +247,4 @@ class SessionDetailScreen extends ConsumerWidget {
   String _formatDateTime(DateTime date) {
     return '${date.day}/${date.month}/${date.year} ${date.hour.toString().padLeft(2, '0')}:${date.minute.toString().padLeft(2, '0')}';
   }
-
-
 }

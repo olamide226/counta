@@ -20,31 +20,32 @@ final sessionControllerProvider = ChangeNotifierProvider<SessionController>(
 /// Supplies the Deepgram credential for each voice connection.
 ///
 /// Release builds have no credential source until the block client (task 9)
-/// exchanges a Supabase session for a short-lived token, so the engine reports
-/// a clear error instead of silently connecting with nothing. Dev builds fall
-/// back to the `--dart-define` key so the spike keeps working; that branch is
-/// compile-time dead in release and is the only path that touches
-/// [DevSecrets].
-final deepgramTokenProviderProvider = Provider<DeepgramTokenProvider>((ref) {
-  if (BuildConfig.showDebugTools) {
-    return () async {
-      final key = DevSecrets.deepgramApiKey;
-      if (key.isEmpty) {
-        throw StateError(
-          'DEEPGRAM_API_KEY is not set. Add it to .env or pass '
-          '--dart-define=DEEPGRAM_API_KEY=... for dev voice sessions.',
-        );
-      }
-      return key;
-    };
-  }
-  return () async {
-    throw StateError(
-      'Voice counting needs a block token from the voice-block service, '
-      'which is not wired into this build yet.',
-    );
-  };
-});
+/// exchanges a Supabase session for a short-lived token, and a dev build
+/// without `DEEPGRAM_API_KEY` has none either. Both raise [VoiceUnavailable],
+/// which the engine turns into [EngineStatus.notConfigured] and the UI shows
+/// as a message — an unhandled async error here failed every voice session in
+/// release with nothing on screen to say why.
+///
+/// The [DevSecrets] read is compile-time dead in release, because
+/// [BuildConfig.showDebugTools] is a constant.
+final deepgramTokenProviderProvider = Provider<DeepgramTokenProvider>(
+  (ref) => () async {
+    if (!BuildConfig.showDebugTools) {
+      throw const VoiceUnavailable(
+        'Voice counting needs a block token from the voice-block service, '
+        'which is not wired into this build yet.',
+      );
+    }
+    final key = DevSecrets.deepgramApiKey;
+    if (key == null) {
+      throw const VoiceUnavailable(
+        'DEEPGRAM_API_KEY is not set. Add it to .env or pass '
+        '--dart-define=DEEPGRAM_API_KEY=... for dev voice sessions.',
+      );
+    }
+    return key;
+  },
+);
 
 /// Builds the engine for a voice session.
 ///

@@ -158,6 +158,39 @@ void main() {
     });
 
     test(
+      'an unavailable credential reports notConfigured, not a bare error',
+      () async {
+        final socket = FakeSpeechSocket();
+        final localEngine = CloudCountingEngine(
+          tokenProvider: () async =>
+              throw const VoiceUnavailable('Voice counting is not wired up.'),
+          speechSocket: socket,
+          audioSource: FakeAudioSource(),
+        );
+        addTearDown(localEngine.dispose);
+        final diagnostics = <String>[];
+        final sub = localEngine.diagnostics.listen(diagnostics.add);
+
+        await expectLater(
+          localEngine.start(
+            const PhraseSpec(
+              raw: "I'm rich in wisdom",
+              normalisedTokens: ['i', 'am', 'rich', 'in', 'wisdom'],
+            ),
+          ),
+          throwsA(isA<VoiceUnavailable>()),
+        );
+        await pumpEventQueue();
+
+        expect(localEngine.currentStatus, EngineStatus.notConfigured);
+        expect(diagnostics, contains('Voice counting is not wired up.'));
+        expect(socket.tokensSeen, isEmpty);
+
+        await sub.cancel();
+      },
+    );
+
+    test(
       'token provider failure reports error status and never connects',
       () async {
         final socket = FakeSpeechSocket();
