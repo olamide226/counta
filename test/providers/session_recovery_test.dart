@@ -1,8 +1,6 @@
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
 
-import 'package:counta/data/repositories/session_checkpoint_repository.dart';
-import 'package:counta/domain/models/app_settings.dart';
 import 'package:counta/domain/models/count_session.dart';
 import 'package:counta/domain/models/enums.dart';
 import 'package:counta/state/providers/counter_provider.dart';
@@ -11,45 +9,8 @@ import 'package:counta/state/providers/session_recovery.dart';
 import 'package:counta/state/providers/sessions_provider.dart';
 import 'package:counta/state/providers/settings_provider.dart';
 
-class InMemoryCheckpointStore implements SessionCheckpointStore {
-  CountSession? current;
-
-  @override
-  CountSession? read() => current;
-
-  @override
-  Future<void> write(CountSession checkpoint) async => current = checkpoint;
-
-  @override
-  Future<void> clear() async => current = null;
-
-  @override
-  Future<CountSession?> take() async {
-    final checkpoint = current;
-    current = null;
-    return checkpoint;
-  }
-}
-
-class InMemorySessionsRepository {
-  final Map<String, CountSession> _rows = {};
-
-  List<CountSession> getAllSessions() {
-    final sessions = _rows.values.toList();
-    sessions.sort((a, b) => b.endedAt.compareTo(a.endedAt));
-    return sessions;
-  }
-
-  CountSession? getSession(String id) => _rows[id];
-  Future<void> saveSession(CountSession session) async =>
-      _rows[session.id] = session;
-  Future<void> deleteSession(String id) async => _rows.remove(id);
-}
-
-class MockSettingsRepository {
-  AppSettings getSettings() => AppSettings.defaults();
-  Future<void> saveSettings(AppSettings settings) async {}
-}
+import '../helpers/checkpoint_store.dart';
+import '../helpers/mock_repositories.dart';
 
 CountSession checkpoint({int count = 17}) {
   return CountSession(

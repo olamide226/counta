@@ -41,16 +41,15 @@ void main() {
     expect(offenders, isEmpty);
   });
 
-  test('the debug screen only ever writes the transcript JSON export', () {
+  test('the debug screen never writes bytes or opens a write stream', () {
     final source = File(debugScreen).readAsStringSync();
 
-    // Exactly one write, and it is a string write of JSON — never bytes.
-    expect('writeAsString'.allMatches(source).length, 1);
+    // The debug screen forwards PCM frames to the socket and exports the
+    // transcript as text. Only the byte paths would put audio on disk, so
+    // those are what this pins — counting its string writes would just break
+    // every time the export grows a second one.
     expect(source.contains('writeAsBytes'), isFalse);
     expect(source.contains('openWrite'), isFalse);
-    // The written content is a JsonEncoder product — the debug screen does
-    // forward PCM frames to the socket, but it never puts them in a file.
-    expect(source.contains('JsonEncoder'), isTrue);
-    expect(source.contains(".json'"), isTrue);
+    expect(source.contains('RandomAccessFile'), isFalse);
   });
 }

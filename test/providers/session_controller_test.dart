@@ -1,69 +1,9 @@
-import 'dart:async';
-
 import 'package:flutter_test/flutter_test.dart';
 
 import 'package:counta/domain/counting/counting_engine.dart';
 import 'package:counta/state/providers/session_controller.dart';
 
-/// Engine that answers every start with a fixed status, so the controller's
-/// handling of the permission path can be exercised without a microphone.
-class ScriptedEngine implements CountingEngine {
-  ScriptedEngine({required this.startStatus});
-
-  final EngineStatus startStatus;
-  final _counts = StreamController<CountEvent>.broadcast();
-  final _status = StreamController<EngineStatus>.broadcast();
-  final _diagnostics = StreamController<String>.broadcast();
-  int startCount = 0;
-  int stopCount = 0;
-
-  @override
-  Stream<CountEvent> get counts => _counts.stream;
-
-  @override
-  Stream<EngineStatus> get status => _status.stream;
-
-  @override
-  Stream<String> get diagnostics => _diagnostics.stream;
-
-  @override
-  Future<void> start([PhraseSpec? phrase]) async {
-    startCount++;
-    if (startStatus == EngineStatus.permissionDenied) {
-      _diagnostics.add('Microphone access is needed for voice counting.');
-    }
-    _status.add(startStatus);
-    // Let the broadcast listeners run before start() returns, as the real
-    // engine's awaits would.
-    await Future<void>.delayed(Duration.zero);
-  }
-
-  @override
-  Future<SessionSummary> stop() async {
-    stopCount++;
-    _status.add(EngineStatus.idle);
-    await Future<void>.delayed(Duration.zero);
-    return const SessionSummary(
-      voiceCount: 0,
-      manualCount: 0,
-      totalCount: 0,
-      duration: Duration.zero,
-    );
-  }
-
-  @override
-  void incrementManual() {}
-
-  @override
-  void decrementManual() {}
-
-  @override
-  Future<void> dispose() async {
-    await _counts.close();
-    await _status.close();
-    await _diagnostics.close();
-  }
-}
+import '../helpers/fake_counting_engine.dart';
 
 void main() {
   const phrase = PhraseSpec(
@@ -75,7 +15,7 @@ void main() {
     test(
       'denied permission is exposed as a typed status, not an exception',
       () async {
-        final engine = ScriptedEngine(
+        final engine = FakeCountingEngine(
           startStatus: EngineStatus.permissionDenied,
         );
         final controller = SessionController(engine: engine);
@@ -97,7 +37,9 @@ void main() {
     );
 
     test('a manual count still works after a denied voice start', () async {
-      final engine = ScriptedEngine(startStatus: EngineStatus.permissionDenied);
+      final engine = FakeCountingEngine(
+        startStatus: EngineStatus.permissionDenied,
+      );
       final controller = SessionController(engine: engine);
 
       await controller.startSession(phrase);
@@ -110,7 +52,7 @@ void main() {
     });
 
     test('a granted start is voice-active and not permission-denied', () async {
-      final engine = ScriptedEngine(startStatus: EngineStatus.live);
+      final engine = FakeCountingEngine(startStatus: EngineStatus.live);
       final controller = SessionController(engine: engine);
 
       await controller.startSession(phrase);

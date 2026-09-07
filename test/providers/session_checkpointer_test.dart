@@ -2,40 +2,13 @@ import 'package:fake_async/fake_async.dart';
 import 'package:flutter_test/flutter_test.dart';
 
 import 'package:counta/core/services/counting/tap_counting_engine.dart';
-import 'package:counta/data/repositories/session_checkpoint_repository.dart';
 import 'package:counta/domain/counting/counting_engine.dart';
 import 'package:counta/domain/models/count_session.dart';
 import 'package:counta/domain/models/enums.dart';
 import 'package:counta/state/providers/session_checkpointer.dart';
 import 'package:counta/state/providers/session_controller.dart';
 
-class InMemoryCheckpointStore implements SessionCheckpointStore {
-  CountSession? current;
-  int writes = 0;
-  int clears = 0;
-
-  @override
-  CountSession? read() => current;
-
-  @override
-  Future<void> write(CountSession checkpoint) async {
-    current = checkpoint;
-    writes++;
-  }
-
-  @override
-  Future<void> clear() async {
-    current = null;
-    clears++;
-  }
-
-  @override
-  Future<CountSession?> take() async {
-    final checkpoint = current;
-    current = null;
-    return checkpoint;
-  }
-}
+import '../helpers/checkpoint_store.dart';
 
 CountSession snapshot(SessionController controller, String id) {
   return CountSession(
