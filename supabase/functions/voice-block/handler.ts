@@ -218,7 +218,7 @@ async function release(req: Request, deps: Deps, userId: string): Promise<Respon
 
   if (block.reconciled) {
     // Idempotent: a retried release neither refunds twice nor errors.
-    return json(200, { refunded: false, balance: await balance.getBalance(userId) });
+    return json(200, { refunded: false });
   }
 
   // 3.11, validated server-side against granted_at. An absent `detections` is
@@ -227,22 +227,19 @@ async function release(req: Request, deps: Deps, userId: string): Promise<Respon
   const eligible = ageMs <= config.refundWindowSeconds * 1000 &&
     detections === 0;
 
+  // The refund goes before the reconcile, and is keyed on the block id so the
+  // ledger applies it once however many times it is attempted. Flipping the
+  // row first made a failure here permanent: the block was reconciled, the
+  // money had not moved, and the client's retry was answered refunded:false.
+  // Failing before the flip leaves a retry able to finish the job.
+  const balanceAfter = eligible
+    ? await balance.refund(userId, block.id, block.credits)
+    : undefined;
+
   const flipped = await blocks.reconcile(block.id, {
     streamed_secs: streamedSecs,
     detections,
   });
-  if (!flipped) {
-    return json(200, { refunded: false, balance: await balance.getBalance(userId) });
-  }
-
-  let refunded = false;
-  let balanceNow: number;
-  if (eligible) {
-    balanceNow = await balance.refund(userId, block.id, block.credits);
-    refunded = true;
-  } else {
-    balanceNow = await balance.getBalance(userId);
-  }
 
   deps.log("block_released", {
     user_id: userId,
@@ -250,10 +247,15 @@ async function release(req: Request, deps: Deps, userId: string): Promise<Respon
     streamed_secs: streamedSecs,
     detections,
     client_claimed_refund: clientClaimsRefund,
-    refunded,
+    refunded: balanceAfter !== undefined,
+    first_release: flipped,
   });
 
-  return json(200, { refunded, balance: balanceNow });
+  // The balance is reported only when it moved: echoing an unchanged number
+  // costs a RevenueCat round trip on every ordinary release.
+  return balanceAfter === undefined
+    ? json(200, { refunded: false })
+    : json(200, { refunded: true, balance: balanceAfter });
 }
 
 /**

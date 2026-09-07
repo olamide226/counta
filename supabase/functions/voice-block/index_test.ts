@@ -394,7 +394,7 @@ Deno.test("release: client assertion is ignored when detections > 0", async () =
   );
 
   assertEquals(status, 200);
-  assertEquals(body, { refunded: false, balance: 15 });
+  assertEquals(body, { refunded: false });
   assertEquals(h.blocks.rows[0].reconciled, true);
 });
 
@@ -412,7 +412,7 @@ Deno.test("release: after the 30 s window is not refunded even with zero detecti
       eligible_for_refund: true,
     }),
   );
-  assertEquals(body, { refunded: false, balance: 15 });
+  assertEquals(body, { refunded: false });
 });
 
 Deno.test("release: a missing detections count is not a refundable zero", async () => {
@@ -459,7 +459,35 @@ Deno.test("release: is idempotent, a second release never refunds again", async 
     releaseReq({ block_id: granted.body.block_id, streamed_secs: 5, detections: 0 });
 
   assertEquals((await call(h.deps, req())).body, { refunded: true, balance: 20 });
-  assertEquals((await call(h.deps, req())).body, { refunded: false, balance: 20 });
+  assertEquals((await call(h.deps, req())).body, { refunded: false });
+});
+
+Deno.test("release: a failed refund leaves a retry able to finish it, exactly once", async () => {
+  const h = harness();
+  const granted = await call(h.deps, grantReq());
+  h.clock.now = new Date("2026-09-07T12:00:05.000Z");
+  const release = () =>
+    releaseReq({
+      block_id: granted.body.block_id,
+      streamed_secs: 5,
+      detections: 0,
+    });
+
+  h.balance.failRefunds = 1;
+  const failed = await call(h.deps, release());
+  assertEquals(failed.status, 503);
+  // Still unreconciled, so the retry runs the refund path again instead of
+  // being answered "already released, nothing refunded".
+  assertEquals(h.blocks.rows[0].reconciled, false);
+  assertEquals(h.balance.balances.get(USER), 15);
+
+  const retried = await call(h.deps, release());
+  assertEquals(retried.body, { refunded: true, balance: 20 });
+  assertEquals(h.blocks.rows[0].reconciled, true);
+
+  // And a third attempt does not credit a second time.
+  assertEquals((await call(h.deps, release())).body, { refunded: false });
+  assertEquals(h.balance.balances.get(USER), 20);
 });
 
 Deno.test("release: unknown or foreign block is 404, unauthenticated is 401", async () => {

@@ -5,7 +5,7 @@
 // streaming, so the deployed function can only ever construct the real
 // adapters. Nothing outside index_test.ts should import this file.
 
-import { BlockConflictError } from "../types.ts";
+import { BlockConflictError, ProviderError } from "../types.ts";
 import type {
   Authenticator,
   BalanceProvider,
@@ -53,6 +53,9 @@ export class FakeBalanceProvider implements BalanceProvider {
   > = [];
   private readonly applied = new Set<string>();
 
+  /** While positive, the next refund rejects and this decrements. */
+  failRefunds = 0;
+
   constructor(private readonly initialBalance = 20) {}
 
   getBalance(userId: string): Promise<number> {
@@ -67,6 +70,10 @@ export class FakeBalanceProvider implements BalanceProvider {
 
   refund(userId: string, blockId: string, credits: number): Promise<number> {
     this.calls.push({ op: "refund", userId, blockId, credits });
+    if (this.failRefunds > 0) {
+      this.failRefunds--;
+      return Promise.reject(new ProviderError("unavailable", "refund failed"));
+    }
     return this.apply(userId, `refund:${blockId}`, credits);
   }
 
