@@ -15,7 +15,9 @@ supabase/
     index.ts                        entrypoint: env -> adapters -> handler
     handler.ts                      pure handler (request + deps -> Response)
     types.ts                        ports: BalanceProvider, TokenMinter, BlockStore
-    store.ts                        Supabase-backed BlockStore + JWT authenticator
+    auth.ts                         JWT verification (local JWKS, getUser fallback)
+    store.ts                        Supabase-backed BlockStore
+    providers/http.ts               shared fetch + failure classification
     providers/balance.ts            RevenueCatBalanceProvider
     providers/minter.ts             DeepgramTokenMinter
     testing/fakes.ts                test doubles; never imported by index.ts
@@ -114,3 +116,30 @@ here can bound cost once a client holds an open socket.
   through the service-role client inside the function.
 - `matcher_config` is created empty. An absent row means "use the compiled
   `MatcherConfig` defaults"; task 14 makes the app fetch it.
+
+## Notes on auth and abuse
+
+`config.toml` sets `verify_jwt = false` so the function owns its 401 contract
+and keeps working when the project moves to asymmetric signing keys, which the
+gateway's verification does not understand. The endpoint is therefore publicly
+reachable, and `auth.ts` is what makes that cheap: tokens are verified in-process
+against the project JWKS (fetched once per worker, refreshed only on an unseen
+key id), and `auth.getUser` is consulted only for a token this cannot decide
+locally — a legacy HS256 token, an unimplemented algorithm, or an unreachable
+JWKS. Junk costs no round trip.
+
+**Known gap:** there is no IP-level rate limit. `RATE_LIMIT_MAX` is per user id
+and only applies after a token verifies, so an unauthenticated flood still
+reaches the function and is bounded only by Supabase's platform limits. Nothing
+here spends money on an unauthenticated request, but the invocations are
+billable. Put a WAF or an API gateway limit in front of the function before it
+is advertised publicly.
+
+## Verifying the RevenueCat balance shape
+
+`RevenueCatBalanceProvider.balanceFrom` reads `items[].currency_code` and
+`items[].balance` from the virtual-currencies response. That shape was taken
+from the Developer API v2 documentation and has **not** been checked against a
+live response. Confirm it against a real project — a mismatch reads as a zero
+balance, which fails every grant with 402 — before this provider serves real
+traffic.

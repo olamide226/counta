@@ -1,10 +1,5 @@
 import type { SupabaseClient } from "@supabase/supabase-js";
-import {
-  Authenticator,
-  BlockConflictError,
-  BlockStore,
-  VoiceBlockRow,
-} from "./types.ts";
+import { BlockConflictError, BlockStore, VoiceBlockRow } from "./types.ts";
 
 /**
  * `voice_blocks` access through a service-role client. RLS grants clients
@@ -106,22 +101,5 @@ export class SupabaseBlockStore implements BlockStore {
       .select("id");
     if (error) throw new Error(`voice_blocks update: ${error.message}`);
     return (data?.length ?? 0) > 0;
-  }
-}
-
-/**
- * Verifies a Supabase user JWT by asking Auth for the user behind it.
- *
- * Takes the client the rest of the function already holds: `getUser(token)`
- * sends the token itself, so building a second SupabaseClient per request only
- * to attach a redundant Authorization header bought nothing.
- */
-export class SupabaseAuthenticator implements Authenticator {
-  constructor(private readonly client: SupabaseClient) {}
-
-  async userIdForToken(token: string): Promise<string | null> {
-    const { data, error } = await this.client.auth.getUser(token);
-    if (error || !data.user) return null;
-    return data.user.id;
   }
 }

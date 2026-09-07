@@ -6,7 +6,8 @@ import { createClient } from "@supabase/supabase-js";
 import { handleVoiceBlock, json } from "./handler.ts";
 import { RevenueCatBalanceProvider } from "./providers/balance.ts";
 import { DeepgramTokenMinter } from "./providers/minter.ts";
-import { SupabaseAuthenticator, SupabaseBlockStore } from "./store.ts";
+import { SupabaseAuthenticator } from "./auth.ts";
+import { SupabaseBlockStore } from "./store.ts";
 import type { Deps, HandlerConfig } from "./types.ts";
 
 function env(name: string): string | undefined {
@@ -57,7 +58,10 @@ function deps(): Deps {
   });
 
   const built: Deps = {
-    auth: new SupabaseAuthenticator(admin),
+    auth: new SupabaseAuthenticator({
+      client: admin,
+      jwksUrl: `${supabaseUrl}/auth/v1/.well-known/jwks.json`,
+    }),
     blocks: new SupabaseBlockStore(admin),
     // Only the real adapters are reachable from here. The fakes live in
     // testing/ and are never imported by this module, so no environment
