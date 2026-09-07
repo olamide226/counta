@@ -32,6 +32,7 @@ class VoiceSessionBanner extends StatelessWidget {
   bool get _isUnhealthy =>
       status == EngineStatus.reconnecting ||
       status == EngineStatus.degraded ||
+      status == EngineStatus.notConfigured ||
       status == EngineStatus.error;
 
   String get _statusLabel => switch (status) {
@@ -44,6 +45,7 @@ class VoiceSessionBanner extends StatelessWidget {
     EngineStatus.error => 'Voice counting stopped',
     EngineStatus.idle => 'Paused',
     EngineStatus.permissionDenied => 'Microphone access needed',
+    EngineStatus.notConfigured => 'Voice counting unavailable',
   };
 
   @override

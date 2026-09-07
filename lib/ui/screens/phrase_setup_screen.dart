@@ -6,7 +6,10 @@ import '../../domain/validation/phrase_validator.dart';
 
 class PhraseSetupScreen extends StatefulWidget {
   final List<PhraseHistoryEntry> recentPhrases;
-  final Function(PhraseSpec spec) onStartSession;
+
+  /// Starts the session. Awaited: the sheet stays open, showing why, when
+  /// starting fails — popping first made a failed start look like a success.
+  final Future<void> Function(PhraseSpec spec) onStartSession;
   final String? initialPhrase;
 
   const PhraseSetupScreen({
@@ -25,6 +28,8 @@ class _PhraseSetupScreenState extends State<PhraseSetupScreen> {
   final PhraseValidator _validator = PhraseValidator();
 
   PhraseValidationResult? _validationResult;
+  String? _startError;
+  bool _starting = false;
 
   @override
   void initState() {
@@ -56,14 +61,39 @@ class _PhraseSetupScreenState extends State<PhraseSetupScreen> {
     );
   }
 
-  void _handleSubmit() {
+  Future<void> _handleSubmit() async {
     _validateCurrentInput();
-    if (_validationResult != null &&
-        _validationResult!.isValid &&
-        _validationResult!.phraseSpec != null) {
-      widget.onStartSession(_validationResult!.phraseSpec!);
-      Navigator.of(context).pop();
+    final spec = _validationResult?.phraseSpec;
+    if (_validationResult?.isValid != true || spec == null) return;
+
+    setState(() {
+      _starting = true;
+      _startError = null;
+    });
+
+    try {
+      await widget.onStartSession(spec);
+    } on VoiceUnavailable catch (error) {
+      // Nothing to retry: this build cannot obtain a credential at all.
+      if (mounted) {
+        setState(() {
+          _starting = false;
+          _startError = error.message;
+        });
+      }
+      return;
+    } catch (error) {
+      if (mounted) {
+        setState(() {
+          _starting = false;
+          _startError = 'Could not start voice counting: $error';
+        });
+      }
+      return;
     }
+
+    if (!mounted) return;
+    Navigator.of(context).pop();
   }
 
   @override
@@ -122,8 +152,25 @@ class _PhraseSetupScreenState extends State<PhraseSetupScreen> {
                 const SizedBox(height: 16),
               ],
               const Spacer(),
+              if (_startError != null) ...[
+                Container(
+                  width: double.infinity,
+                  padding: const EdgeInsets.all(12),
+                  decoration: BoxDecoration(
+                    color: Theme.of(context).colorScheme.errorContainer,
+                    borderRadius: BorderRadius.circular(8),
+                  ),
+                  child: Text(
+                    _startError!,
+                    style: TextStyle(
+                      color: Theme.of(context).colorScheme.onErrorContainer,
+                    ),
+                  ),
+                ),
+                const SizedBox(height: 12),
+              ],
               ElevatedButton.icon(
-                onPressed: isValid ? _handleSubmit : null,
+                onPressed: isValid && !_starting ? _handleSubmit : null,
                 icon: const Icon(Icons.mic),
                 label: Text(
                   widget.initialPhrase == null

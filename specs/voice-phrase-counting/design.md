@@ -56,7 +56,7 @@ This trades away three things a relay would give: a hard mid-stream kill switch,
 2. Client → Edge Function: POST /voice-block { session_id }
 3. Edge Function:
      verify Supabase JWT
-     check no live block for user          → 409 if one exists
+     check live block for user             → 409 unless the session_id matches
      read RevenueCat balance               → 402 if < BLOCK_CREDITS
      spend BLOCK_CREDITS on RevenueCat
      POST Deepgram /v1/auth/grant (ttl=30) → refund + 503 on failure
@@ -383,8 +383,12 @@ Body: { "session_id": "<uuid>" }
 ```
 POST /functions/v1/voice-block/release
 Body: { "block_id", "streamed_secs", "detections", "eligible_for_refund" }
-200 { "refunded": true|false, "balance": 34 }
+200 { "refunded": true, "balance": 34 }
+200 { "refunded": false }
+400 { "error": "invalid_detections" }
 ```
+
+One block is live per user at a time, and renewal is identified by `session_id` rather than inferred from a clock. A grant whose `session_id` matches the caller's live block is the 90% renewal of Requirement 3.9: it is granted and the block it replaces is marked reconciled in the same request, so the invariant still holds. A grant carrying any other `session_id` is a 409 no matter how close the live block is to expiry — treating a nearly expired block as "not live" would hand a second, unrelated session a concurrent block for the length of that window, which is what Requirement 3.8 exists to prevent. A partial unique index on `voice_blocks (user_id) where not reconciled` enforces this in the database as well, so two concurrent requests cannot both pass the check.
 
 Refund eligibility is asserted by the client but validated server-side against `granted_at`: a refund is only issued if the release arrives within 30 seconds of grant and reports zero detections (Requirement 3.11). Client assertion alone is not trusted.
 

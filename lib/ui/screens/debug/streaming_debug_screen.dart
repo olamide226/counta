@@ -5,6 +5,7 @@ import 'dart:typed_data';
 import 'package:flutter/material.dart';
 import 'package:path_provider/path_provider.dart';
 
+import '../../../core/config/dev_secrets.dart';
 import '../../../core/services/counting/audio_source.dart';
 import '../../../core/services/counting/deepgram_socket.dart';
 import '../../../domain/validation/phrase_validator.dart';
@@ -20,8 +21,10 @@ class StreamingDebugScreen extends StatefulWidget {
 }
 
 class _StreamingDebugScreenState extends State<StreamingDebugScreen> {
+  // This screen is only reachable behind BuildConfig.showDebugTools, so it
+  // may read the dev key directly; release code paths never can.
   final TextEditingController _apiKeyController = TextEditingController(
-    text: const String.fromEnvironment('DEEPGRAM_API_KEY'),
+    text: DevSecrets.deepgramApiKey ?? '',
   );
   final TextEditingController _phraseController = TextEditingController(
     text: "I'm rich in wisdom",

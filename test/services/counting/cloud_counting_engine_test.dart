@@ -9,7 +9,11 @@ import 'package:counta/domain/counting/speech_socket.dart';
 import 'package:counta/domain/counting/transcript_segment.dart';
 import 'package:counta/core/services/counting/audio_source.dart';
 
+const testToken = 'test-deepgram-token';
+
 class FakeSpeechSocket implements SpeechSocket {
+  /// Every credential the engine handed to [connect], in order.
+  final List<String> tokensSeen = [];
   final _segmentsController = StreamController<TranscriptSegment>.broadcast();
   final _stateController = StreamController<SocketState>.broadcast();
   final _activityController = StreamController<void>.broadcast();
@@ -38,6 +42,7 @@ class FakeSpeechSocket implements SpeechSocket {
     PhraseSpec? phrase,
   }) async {
     connectCount++;
+    tokensSeen.add(apiKeyOrToken);
     _currentState = SocketState.connected;
     _stateController.add(_currentState);
   }
@@ -145,6 +150,7 @@ void main() {
       fakeSocket = FakeSpeechSocket();
       fakeAudio = FakeAudioSource();
       engine = CloudCountingEngine(
+        tokenProvider: () async => testToken,
         speechSocket: fakeSocket,
         audioSource: fakeAudio,
       );
@@ -248,6 +254,81 @@ void main() {
       expect(engine.currentStatus, EngineStatus.live);
     });
 
+    test('connects the socket with the token from the provider', () async {
+      await engine.start(
+        const PhraseSpec(
+          raw: "I'm rich in wisdom",
+          normalisedTokens: ['i', 'am', 'rich', 'in', 'wisdom'],
+        ),
+      );
+
+      expect(fakeSocket.tokensSeen, [testToken]);
+    });
+
+    test(
+      'an unavailable credential reports notConfigured, not a bare error',
+      () async {
+        final socket = FakeSpeechSocket();
+        final localEngine = CloudCountingEngine(
+          tokenProvider: () async =>
+              throw const VoiceUnavailable('Voice counting is not wired up.'),
+          speechSocket: socket,
+          audioSource: FakeAudioSource(),
+        );
+        addTearDown(localEngine.dispose);
+        final diagnostics = <String>[];
+        final sub = localEngine.diagnostics.listen(diagnostics.add);
+
+        await expectLater(
+          localEngine.start(
+            const PhraseSpec(
+              raw: "I'm rich in wisdom",
+              normalisedTokens: ['i', 'am', 'rich', 'in', 'wisdom'],
+            ),
+          ),
+          throwsA(isA<VoiceUnavailable>()),
+        );
+        await pumpEventQueue();
+
+        expect(localEngine.currentStatus, EngineStatus.notConfigured);
+        expect(diagnostics, contains('Voice counting is not wired up.'));
+        expect(socket.tokensSeen, isEmpty);
+
+        await sub.cancel();
+      },
+    );
+
+    test(
+      'token provider failure reports error status and never connects',
+      () async {
+        final socket = FakeSpeechSocket();
+        final localEngine = CloudCountingEngine(
+          tokenProvider: () async => throw StateError('no block token'),
+          speechSocket: socket,
+          audioSource: FakeAudioSource(),
+        );
+        addTearDown(localEngine.dispose);
+        final diagnostics = <String>[];
+        final sub = localEngine.diagnostics.listen(diagnostics.add);
+
+        await expectLater(
+          localEngine.start(
+            const PhraseSpec(
+              raw: "I'm rich in wisdom",
+              normalisedTokens: ['i', 'am', 'rich', 'in', 'wisdom'],
+            ),
+          ),
+          throwsStateError,
+        );
+        await pumpEventQueue();
+
+        expect(localEngine.currentStatus, EngineStatus.error);
+        expect(socket.tokensSeen, isEmpty);
+        expect(diagnostics.single, contains('no block token'));
+        await sub.cancel();
+      },
+    );
+
     test(
       'emits CountEvent on phrase detection from transcript stream',
       () async {
@@ -306,6 +387,7 @@ void main() {
     test('stop always lands on idle, even if teardown throws', () async {
       final throwingSocket = _ThrowingCloseSocket();
       final localEngine = CloudCountingEngine(
+        tokenProvider: () async => testToken,
         speechSocket: throwingSocket,
         audioSource: FakeAudioSource(),
       );
@@ -365,6 +447,7 @@ void main() {
         final localSocket = FakeSpeechSocket();
         final localAudio = FakeAudioSource();
         final localEngine = CloudCountingEngine(
+          tokenProvider: () async => testToken,
           speechSocket: localSocket,
           audioSource: localAudio,
           transcriptionSilenceTimeout: const Duration(milliseconds: 80),
@@ -394,6 +477,7 @@ void main() {
         final localSocket = FakeSpeechSocket();
         final localAudio = FakeAudioSource();
         final localEngine = CloudCountingEngine(
+          tokenProvider: () async => testToken,
           speechSocket: localSocket,
           audioSource: localAudio,
           transcriptionSilenceTimeout: const Duration(milliseconds: 70),
@@ -420,6 +504,7 @@ void main() {
       // the middle of a 90-minute session must not end the session.
       final failing = _FailingReconnectSocket();
       final localEngine = CloudCountingEngine(
+        tokenProvider: () async => testToken,
         speechSocket: failing,
         audioSource: FakeAudioSource(),
         reconnectWindow: const Duration(minutes: 5),
@@ -445,6 +530,7 @@ void main() {
     test('gives up only after the reconnect window elapses', () async {
       final failing = _FailingReconnectSocket();
       final localEngine = CloudCountingEngine(
+        tokenProvider: () async => testToken,
         speechSocket: failing,
         audioSource: FakeAudioSource(),
         reconnectWindow: const Duration(milliseconds: 120),

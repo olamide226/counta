@@ -1,11 +1,17 @@
-.PHONY: help setup format lint analyze test test-corpus test-coverage build-runner clean build-ios build-ios-ipa build-android build-macos build-web run run-ios run-android run-web doctor icons pull-fixtures
+.PHONY: help setup format lint analyze test test-corpus test-coverage build-runner clean build-ios build-ios-ipa build-android build-macos build-web run run-ios run-android run-web doctor icons pull-fixtures supabase-start supabase-stop supabase-test supabase-serve
 
 # Environment Configuration
-# Automatically loads variables from .env file if present, or CLI overrides
+# Automatically loads variables from .env file if present, or CLI overrides.
 -include .env
-DEEPGRAM_API_KEY ?=
 
-DART_DEFINES := $(if $(wildcard .env),--dart-define-from-file=.env,$(if $(DEEPGRAM_API_KEY),--dart-define=DEEPGRAM_API_KEY=$(DEEPGRAM_API_KEY),))
+# Every key the app reads with String.fromEnvironment. Add one here and both
+# the .env path and the command-line path pick it up.
+DART_DEFINE_KEYS := DEEPGRAM_API_KEY SUPABASE_URL SUPABASE_PUBLISHABLE_KEY
+
+# With a .env every key in it becomes a dart-define. Without one, forward
+# whichever of the known keys were passed on the command line.
+DART_DEFINES := $(if $(wildcard .env),--dart-define-from-file=.env,\
+	$(foreach key,$(DART_DEFINE_KEYS),$(if $($(key)),--dart-define=$(key)=$($(key)))))
 
 
 # Default target
@@ -24,14 +30,17 @@ help:
 	@echo "  make clean          - Clean build artifacts"
 
 	@echo ""
-	@echo "Build commands (supports DEEPGRAM_API_KEY=...):"
+	@echo "Build and run commands read .env, or take any of $(DART_DEFINE_KEYS)"
+	@echo "on the command line (e.g. make run DEEPGRAM_API_KEY=...)."
+	@echo ""
+	@echo "Build commands:"
 	@echo "  make build-ios      - Build iOS app (debug/ad-hoc)"
 	@echo "  make build-ios-ipa  - Build iOS archive for App Store/TestFlight"
 	@echo "  make build-android  - Build Android APK"
 	@echo "  make build-macos    - Build macOS app"
 	@echo "  make build-web      - Build web app"
 	@echo ""
-	@echo "Run commands (supports DEEPGRAM_API_KEY=...):"
+	@echo "Run commands:"
 	@echo "  make run            - Run app (default device)"
 	@echo "  make run-ios        - Run on iOS"
 	@echo "  make run-android    - Run on Android"
@@ -39,6 +48,12 @@ help:
 	@echo ""
 	@echo "Asset commands:"
 	@echo "  make icons          - Generate app icons from assets/icon/app_icon.png"
+	@echo ""
+	@echo "Supabase commands (voice-block Edge Function):"
+	@echo "  make supabase-start - Start the local Supabase stack and apply migrations"
+	@echo "  make supabase-stop  - Stop the local Supabase stack"
+	@echo "  make supabase-test  - Run the Edge Function Deno tests"
+	@echo "  make supabase-serve - Serve Edge Functions locally (uses supabase/.env)"
 	@echo ""
 	@echo "Other commands:"
 	@echo "  make doctor         - Check Flutter environment"
@@ -186,6 +201,30 @@ pull-fixtures:
 	@rm -f test/fixtures/transcripts/*.hive test/fixtures/transcripts/*.lock
 	@echo "✅ JSON transcript fixtures copied to test/fixtures/transcripts/"
 
+
+# --- Supabase (voice-block Edge Function) -----------------------------------
+
+# Start the local stack; migrations in supabase/migrations are applied on start.
+supabase-start:
+	@echo "🗄️  Starting local Supabase stack..."
+	supabase start
+	@echo "✅ Local Supabase running. Put the printed API URL and anon key into .env as SUPABASE_URL / SUPABASE_PUBLISHABLE_KEY."
+
+supabase-stop:
+	@echo "🛑 Stopping local Supabase stack..."
+	supabase stop
+
+# Deno unit tests for the Edge Function. No stack or network needed.
+supabase-test:
+	@echo "🧪 Running Edge Function tests..."
+	cd supabase/functions && deno test --allow-env --allow-net=127.0.0.1 .
+	@echo "✅ Edge Function tests complete!"
+
+# Serve functions locally with secrets from supabase/.env (copy supabase/.env.example).
+supabase-serve:
+	@echo "⚡ Serving Edge Functions locally..."
+	@test -f supabase/.env || (echo "supabase/.env missing: cp supabase/.env.example supabase/.env and fill it in" && exit 1)
+	supabase functions serve --env-file supabase/.env
 
 # Prepare for commit
 pre-commit: format lint test

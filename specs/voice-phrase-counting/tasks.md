@@ -69,14 +69,14 @@ Each task is scoped to be completable in isolation and leaves the app in a worki
   - [x] 7.5 Build the session summary screen showing the voice and manual breakdown
   - _Requirements: 7.1, 7.2, 7.3, 7.4, 6.4_
 
-- [ ] **8. Build the Edge Function and remove the hardcoded key**
-  - [ ] 8.1 Create the `voice_blocks`, `trial_grants`, and `matcher_config` tables with RLS policies as specified
-  - [ ] 8.2 Enable Supabase anonymous sign-in and wire it into app startup
-  - [ ] 8.3 Implement `POST /voice-block`: JWT verification, in-flight block check (409), RevenueCat balance read, insufficient credit (402), debit, Deepgram token grant, refund-on-grant-failure (503), block row insert
-  - [ ] 8.4 Implement `POST /voice-block/release` with server-side validated refund eligibility
-  - [ ] 8.5 Delete the hardcoded Deepgram key and the debug flavour that carried it
-  - [ ] 8.6 Write Deno tests with mocked providers: happy path, 401, 402, 409, grant-failure refund, RevenueCat 429 mapped to 503
-  - [ ] 8.7 Add per-user rate limiting on `/voice-block`
+- [x] **8. Build the Edge Function and remove the hardcoded key**
+  - [x] 8.1 Create the `voice_blocks`, `trial_grants`, and `matcher_config` tables with RLS policies as specified
+  - [x] 8.2 Enable Supabase anonymous sign-in and wire it into app startup
+  - [x] 8.3 Implement `POST /voice-block`: JWT verification, in-flight block check (409), RevenueCat balance read, insufficient credit (402), debit, Deepgram token grant, refund-on-grant-failure (503), block row insert
+  - [x] 8.4 Implement `POST /voice-block/release` with server-side validated refund eligibility
+  - [x] 8.5 Delete the hardcoded Deepgram key and the debug flavour that carried it
+  - [x] 8.6 Write Deno tests with mocked providers: happy path, 401, 402, 409, grant-failure refund, RevenueCat 429 mapped to 503
+  - [x] 8.7 Add per-user rate limiting on `/voice-block`
   - _Requirements: 3.2, 3.3, 3.4, 3.5, 3.6, 3.7, 3.8, 3.11, 3.12_
 
 - [ ] **9. Implement block lifecycle in the client**
