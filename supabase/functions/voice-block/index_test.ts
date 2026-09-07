@@ -108,11 +108,13 @@ Deno.test("grant: mint failure refunds the debit and returns 503", async () => {
   assertEquals(h.logs.some((l) => l.event === "mint_failed"), true);
 });
 
-Deno.test("grant: RevenueCat 429 on every attempt maps to 503 after at most 2 retries", async () => {
+Deno.test("grant: a rate-limited balance read fails fast to 503 without sleeping", async () => {
   let attempts = 0;
   const fetchStub: typeof fetch = () => {
     attempts++;
-    return Promise.resolve(new Response("", { status: 429 }));
+    return Promise.resolve(
+      new Response("", { status: 429, headers: { "Retry-After": "60" } }),
+    );
   };
   const sleeps: number[] = [];
   const balance = new RevenueCatBalanceProvider({
@@ -130,9 +132,42 @@ Deno.test("grant: RevenueCat 429 on every attempt maps to 503 after at most 2 re
 
   assertEquals(status, 503);
   assertEquals(body, { error: "provider_unavailable" });
-  assertEquals(attempts, 3); // 1 try + 2 retries
-  assertEquals(sleeps.length, 2);
+  // The read happens before any money moves, so retrying it only burns the
+  // seconds the client's token window has left.
+  assertEquals(attempts, 1);
+  assertEquals(sleeps, []);
   assertEquals(h.minter.minted, 0);
+});
+
+Deno.test("RevenueCat provider: a write retries a 429 twice with a capped backoff", async () => {
+  let attempts = 0;
+  const fetchStub: typeof fetch = () => {
+    attempts++;
+    return Promise.resolve(
+      // A minute of Retry-After would outlive the token this request exists to
+      // mint, so the backoff must clamp it.
+      new Response("", { status: 429, headers: { "Retry-After": "60" } }),
+    );
+  };
+  const sleeps: number[] = [];
+  const provider = new RevenueCatBalanceProvider({
+    secretKey: "test",
+    projectId: "proj",
+    currencyCode: "VOICE",
+    fetch: fetchStub,
+    sleep: (ms) => {
+      sleeps.push(ms);
+      return Promise.resolve();
+    },
+  });
+
+  const error = await assertRejects(
+    () => provider.spend(USER, 5, "ref-1"),
+    ProviderError,
+  );
+  assertEquals(error.reason, "rate_limited");
+  assertEquals(attempts, 3); // 1 try + 2 retries
+  assertEquals(sleeps, [2000, 2000]);
 });
 
 Deno.test("RevenueCat provider: recovers after a single 429 and parses the balance", async () => {

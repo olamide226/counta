@@ -3,8 +3,22 @@ import { providerFetch } from "./http.ts";
 
 const BASE_URL = "https://api.revenuecat.com/v2";
 
-/** Retries after a 429 before giving up. The design caps this at 2. */
-const MAX_RETRIES = 2;
+/**
+ * Retries after a 429 on a write before giving up. The design caps this at 2.
+ * Reads are never retried: `getBalance` runs before any money moves, so
+ * failing fast to 503 costs the caller a retry, while sleeping costs the whole
+ * request the seconds it has left.
+ */
+const MAX_WRITE_RETRIES = 2;
+
+/**
+ * Ceiling on a single backoff. RevenueCat can answer a 429 with a
+ * `Retry-After` of a minute; honouring that would hold the request open long
+ * past the 30 s life of the Deepgram token this call exists to mint, so the
+ * client would receive a token that is already dead. Cap it and let the client
+ * retry the whole request instead.
+ */
+const MAX_BACKOFF_MS = 2_000;
 
 export interface RevenueCatOptions {
   secretKey: string;
@@ -43,6 +57,7 @@ export class RevenueCatBalanceProvider implements BalanceProvider {
     const list = await this.request<VirtualCurrencyList>(
       "GET",
       `${this.customerPath(userId)}/virtual_currencies?include_empty_balances=true`,
+      { retries: 0 },
     );
     return this.balanceFrom(list);
   }
@@ -64,10 +79,10 @@ export class RevenueCatBalanceProvider implements BalanceProvider {
       "POST",
       `${this.customerPath(userId)}/virtual_currencies/transactions?include_empty_balances=true`,
       {
-        adjustments: { [this.opts.currencyCode]: delta },
-        reference,
+        body: { adjustments: { [this.opts.currencyCode]: delta }, reference },
+        idempotencyKey: reference,
+        retries: MAX_WRITE_RETRIES,
       },
-      reference,
     );
     return this.balanceFrom(list);
   }
@@ -88,15 +103,16 @@ export class RevenueCatBalanceProvider implements BalanceProvider {
   private async request<T>(
     method: "GET" | "POST",
     path: string,
-    body?: unknown,
-    idempotencyKey?: string,
+    opts: { body?: unknown; idempotencyKey?: string; retries: number },
   ): Promise<T> {
     const headers: Record<string, string> = {
       Authorization: `Bearer ${this.opts.secretKey}`,
       Accept: "application/json",
     };
-    if (body !== undefined) headers["Content-Type"] = "application/json";
-    if (idempotencyKey) headers["Idempotency-Key"] = idempotencyKey;
+    if (opts.body !== undefined) headers["Content-Type"] = "application/json";
+    if (opts.idempotencyKey) {
+      headers["Idempotency-Key"] = opts.idempotencyKey;
+    }
 
     for (let attempt = 0;; attempt++) {
       try {
@@ -107,17 +123,23 @@ export class RevenueCatBalanceProvider implements BalanceProvider {
           {
             method,
             headers,
-            body: body === undefined ? undefined : JSON.stringify(body),
+            body: opts.body === undefined
+              ? undefined
+              : JSON.stringify(opts.body),
           },
         );
         return (await response.json()) as T;
       } catch (error) {
-        const retryable = error instanceof ProviderError &&
-          error.reason === "rate_limited" && attempt < MAX_RETRIES;
-        if (!retryable) throw error;
-        const wait = (error as ProviderError).retryAfterMs ??
-          250 * 2 ** attempt;
-        await this.sleep(wait);
+        if (
+          !(error instanceof ProviderError) ||
+          error.reason !== "rate_limited" ||
+          attempt >= opts.retries
+        ) {
+          throw error;
+        }
+        await this.sleep(
+          Math.min(error.retryAfterMs ?? 250 * 2 ** attempt, MAX_BACKOFF_MS),
+        );
       }
     }
   }
