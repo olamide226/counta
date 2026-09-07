@@ -1,8 +1,4 @@
-import {
-  Deps,
-  ProviderRateLimitedError,
-  ProviderUnavailableError,
-} from "./types.ts";
+import { Deps, ProviderError } from "./types.ts";
 
 // Pure request handler for POST /voice-block and POST /voice-block/release.
 // No Deno.env, no network: everything arrives through `deps`, which is what
@@ -59,11 +55,11 @@ export async function handleVoiceBlock(
       ? await release(req, deps, userId)
       : await grant(req, deps, userId);
   } catch (error) {
-    if (
-      error instanceof ProviderRateLimitedError ||
-      error instanceof ProviderUnavailableError
-    ) {
-      deps.log?.("provider_unavailable", { user_id: userId, reason: error.name });
+    if (error instanceof ProviderError) {
+      deps.log?.("provider_unavailable", {
+        user_id: userId,
+        reason: error.reason,
+      });
       return json(503, { error: "provider_unavailable" });
     }
     deps.log?.("internal_error", { user_id: userId, message: String(error) });
@@ -117,9 +113,9 @@ async function grant(req: Request, deps: Deps, userId: string): Promise<Response
   const balanceAfter = await balance.spend(userId, config.blockCredits, reference);
 
   // 3.6: any mint failure refunds the debit and reports 503.
-  let minted;
+  let token: string;
   try {
-    minted = await minter.mint(config.tokenTtlSeconds);
+    token = await minter.mint(config.tokenTtlSeconds);
   } catch (error) {
     try {
       await balance.grant(userId, config.blockCredits, `${reference}:refund`);
@@ -158,7 +154,7 @@ async function grant(req: Request, deps: Deps, userId: string): Promise<Response
 
   return json(200, {
     block_id: row.id,
-    token: minted.token,
+    token,
     block_seconds: config.blockSeconds,
     expires_at: row.expires_at,
     balance_after: balanceAfter,

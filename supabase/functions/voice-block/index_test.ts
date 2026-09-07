@@ -1,6 +1,11 @@
-import { assertEquals, assertStringIncludes } from "@std/assert";
+import {
+  assertEquals,
+  assertRejects,
+  assertStringIncludes,
+} from "@std/assert";
 import { handleVoiceBlock } from "./handler.ts";
 import { RevenueCatBalanceProvider } from "./providers/balance.ts";
+import { DeepgramTokenMinter } from "./providers/minter.ts";
 import {
   CONFIG,
   FakeTokenMinter,
@@ -11,7 +16,7 @@ import {
   SESSION,
   USER,
 } from "./testing/fakes.ts";
-import { Deps, ProviderUnavailableError } from "./types.ts";
+import { Deps, ProviderError } from "./types.ts";
 
 async function call(deps: Deps, req: Request) {
   const res = await handleVoiceBlock(req, deps);
@@ -91,7 +96,7 @@ Deno.test("grant: a block inside its renewal overlap window does not 409", async
 });
 
 Deno.test("grant: mint failure refunds the debit and returns 503", async () => {
-  const minter = new FakeTokenMinter(new ProviderUnavailableError("deepgram down"));
+  const minter = new FakeTokenMinter(new ProviderError("unavailable", "deepgram down"));
   const h = harness({ minter });
   const { status, body } = await call(h.deps, grantReq());
 
@@ -198,6 +203,40 @@ Deno.test("grant: malformed session_id is 400 before any provider call", async (
   assertEquals(status, 400);
   assertEquals(body.error, "invalid_session_id");
   assertEquals(h.balance.calls.length, 0);
+});
+
+Deno.test("Deepgram minter: 429 classifies as rate limited, like RevenueCat's", async () => {
+  const minter = new DeepgramTokenMinter({
+    apiKey: "master-key",
+    fetch: () =>
+      Promise.resolve(
+        new Response("", { status: 429, headers: { "Retry-After": "3" } }),
+      ),
+  });
+
+  const error = await assertRejects(() => minter.mint(30), ProviderError);
+  assertEquals(error.reason, "rate_limited");
+  assertEquals(error.retryAfterMs, 3000);
+});
+
+Deno.test("Deepgram minter: returns the access token from a successful grant", async () => {
+  const seen: Array<{ url: string; init?: RequestInit }> = [];
+  const minter = new DeepgramTokenMinter({
+    apiKey: "master-key",
+    fetch: (input, init) => {
+      seen.push({ url: String(input), init });
+      return Promise.resolve(
+        new Response(JSON.stringify({ access_token: "dg-token", expires_in: 30 }), {
+          status: 200,
+          headers: { "Content-Type": "application/json" },
+        }),
+      );
+    },
+  });
+
+  assertEquals(await minter.mint(30), "dg-token");
+  assertStringIncludes(seen[0].url, "https://api.deepgram.com/v1/auth/grant");
+  assertEquals(JSON.parse(String(seen[0].init?.body)), { ttl_seconds: 30 });
 });
 
 // ---------------------------------------------------------------------------

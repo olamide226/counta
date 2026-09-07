@@ -11,7 +11,6 @@ import type {
   BlockStore,
   Deps,
   HandlerConfig,
-  MintedToken,
   TokenMinter,
   VoiceBlockRow,
 } from "../types.ts";
@@ -25,13 +24,10 @@ export class FakeTokenMinter implements TokenMinter {
   minted = 0;
   constructor(private readonly failWith?: Error) {}
 
-  mint(ttlSeconds: number): Promise<MintedToken> {
+  mint(_ttlSeconds: number): Promise<string> {
     if (this.failWith) return Promise.reject(this.failWith);
     this.minted++;
-    return Promise.resolve({
-      token: `fake-token-${this.minted}`,
-      expiresInSeconds: ttlSeconds,
-    });
+    return Promise.resolve(`fake-token-${this.minted}`);
   }
 }
 

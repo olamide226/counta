@@ -1,9 +1,11 @@
-import { MintedToken, ProviderUnavailableError, TokenMinter } from "../types.ts";
+import { ProviderError, TokenMinter } from "../types.ts";
+import { providerFetch } from "./http.ts";
+
+const BASE_URL = "https://api.deepgram.com";
 
 export interface DeepgramMinterOptions {
   /** Master API key. Read from Deno.env by the entrypoint; never logged. */
   apiKey: string;
-  baseUrl?: string;
   fetch?: typeof fetch;
 }
 
@@ -13,18 +15,18 @@ export interface DeepgramMinterOptions {
  * (https://developers.deepgram.com/reference/auth/tokens/grant)
  */
 export class DeepgramTokenMinter implements TokenMinter {
-  private readonly baseUrl: string;
   private readonly fetchFn: typeof fetch;
 
   constructor(private readonly opts: DeepgramMinterOptions) {
-    this.baseUrl = opts.baseUrl ?? "https://api.deepgram.com";
     this.fetchFn = opts.fetch ?? fetch;
   }
 
-  async mint(ttlSeconds: number): Promise<MintedToken> {
-    let response: Response;
-    try {
-      response = await this.fetchFn(`${this.baseUrl}/v1/auth/grant`, {
+  async mint(ttlSeconds: number): Promise<string> {
+    const response = await providerFetch(
+      "deepgram",
+      this.fetchFn,
+      `${BASE_URL}/v1/auth/grant`,
+      {
         method: "POST",
         headers: {
           Authorization: `Token ${this.opts.apiKey}`,
@@ -32,27 +34,16 @@ export class DeepgramTokenMinter implements TokenMinter {
           Accept: "application/json",
         },
         body: JSON.stringify({ ttl_seconds: ttlSeconds }),
-      });
-    } catch (error) {
-      throw new ProviderUnavailableError(`deepgram: ${String(error)}`);
-    }
+      },
+    );
 
-    if (!response.ok) {
-      throw new ProviderUnavailableError(
-        `deepgram: /v1/auth/grant -> ${response.status}`,
+    const body = (await response.json()) as { access_token?: string };
+    if (!body.access_token) {
+      throw new ProviderError(
+        "unavailable",
+        "deepgram: grant returned no token",
       );
     }
-
-    const body = (await response.json()) as {
-      access_token?: string;
-      expires_in?: number;
-    };
-    if (!body.access_token) {
-      throw new ProviderUnavailableError("deepgram: grant returned no token");
-    }
-    return {
-      token: body.access_token,
-      expiresInSeconds: body.expires_in ?? ttlSeconds,
-    };
+    return body.access_token;
   }
 }

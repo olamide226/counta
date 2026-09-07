@@ -2,20 +2,24 @@
 // (request, deps) so every collaborator here has a fake for tests and a real
 // adapter for production (see providers/ and store.ts).
 
-/** Thrown by a provider when the upstream rate-limits us (HTTP 429). The
- * handler maps it to 503 rather than a credit error (design: Security). */
-export class ProviderRateLimitedError extends Error {
-  constructor(message = "provider rate limited") {
-    super(message);
-    this.name = "ProviderRateLimitedError";
-  }
-}
+/** Why an upstream provider call failed. */
+export type ProviderFailure = "rate_limited" | "unavailable";
 
-/** Any other upstream failure the handler should surface as 503. */
-export class ProviderUnavailableError extends Error {
-  constructor(message = "provider unavailable") {
+/**
+ * Any upstream failure the handler surfaces as 503 rather than as a credit
+ * error (design: Security). One class rather than two because the handler
+ * treats every failure identically; `reason` exists for the caller that does
+ * care — the RevenueCat write path, which retries a 429 and nothing else.
+ */
+export class ProviderError extends Error {
+  constructor(
+    readonly reason: ProviderFailure,
+    message: string,
+    /** `Retry-After` in milliseconds, when the upstream sent one. */
+    readonly retryAfterMs?: number,
+  ) {
     super(message);
-    this.name = "ProviderUnavailableError";
+    this.name = "ProviderError";
   }
 }
 
@@ -28,13 +32,9 @@ export interface BalanceProvider {
   grant(userId: string, amount: number, reference: string): Promise<number>;
 }
 
-export interface MintedToken {
-  token: string;
-  expiresInSeconds: number;
-}
-
 export interface TokenMinter {
-  mint(ttlSeconds: number): Promise<MintedToken>;
+  /** Resolves to a short-lived streaming token. */
+  mint(ttlSeconds: number): Promise<string>;
 }
 
 export interface VoiceBlockRow {

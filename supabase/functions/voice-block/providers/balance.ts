@@ -1,17 +1,16 @@
-import {
-  BalanceProvider,
-  ProviderRateLimitedError,
-  ProviderUnavailableError,
-} from "../types.ts";
+import { BalanceProvider, ProviderError } from "../types.ts";
+import { providerFetch } from "./http.ts";
+
+const BASE_URL = "https://api.revenuecat.com/v2";
+
+/** Retries after a 429 before giving up. The design caps this at 2. */
+const MAX_RETRIES = 2;
 
 export interface RevenueCatOptions {
   secretKey: string;
   projectId: string;
   currencyCode: string;
-  baseUrl?: string;
   fetch?: typeof fetch;
-  /** Retries after a 429 before giving up. Design caps this at 2. */
-  maxRetries?: number;
   /** Injected so tests do not sleep. */
   sleep?: (ms: number) => Promise<void>;
 }
@@ -31,15 +30,11 @@ interface VirtualCurrencyList {
  * Both live in the Virtual Currencies domain, rate limited to 480 req/min.
  */
 export class RevenueCatBalanceProvider implements BalanceProvider {
-  private readonly baseUrl: string;
   private readonly fetchFn: typeof fetch;
-  private readonly maxRetries: number;
   private readonly sleep: (ms: number) => Promise<void>;
 
   constructor(private readonly opts: RevenueCatOptions) {
-    this.baseUrl = opts.baseUrl ?? "https://api.revenuecat.com/v2";
     this.fetchFn = opts.fetch ?? fetch;
-    this.maxRetries = Math.min(opts.maxRetries ?? 2, 2);
     this.sleep = opts.sleep ??
       ((ms) => new Promise((resolve) => setTimeout(resolve, ms)));
   }
@@ -103,36 +98,27 @@ export class RevenueCatBalanceProvider implements BalanceProvider {
     if (body !== undefined) headers["Content-Type"] = "application/json";
     if (idempotencyKey) headers["Idempotency-Key"] = idempotencyKey;
 
-    for (let attempt = 0; ; attempt++) {
-      let response: Response;
+    for (let attempt = 0;; attempt++) {
       try {
-        response = await this.fetchFn(`${this.baseUrl}${path}`, {
-          method,
-          headers,
-          body: body === undefined ? undefined : JSON.stringify(body),
-        });
-      } catch (error) {
-        throw new ProviderUnavailableError(`revenuecat: ${String(error)}`);
-      }
-
-      if (response.status === 429) {
-        if (attempt >= this.maxRetries) {
-          throw new ProviderRateLimitedError("revenuecat: 429 after retries");
-        }
-        const retryAfter = Number(response.headers.get("Retry-After"));
-        const backoffMs = Number.isFinite(retryAfter) && retryAfter > 0
-          ? retryAfter * 1000
-          : 250 * 2 ** attempt;
-        await this.sleep(backoffMs);
-        continue;
-      }
-
-      if (!response.ok) {
-        throw new ProviderUnavailableError(
-          `revenuecat: ${method} ${path} -> ${response.status}`,
+        const response = await providerFetch(
+          "revenuecat",
+          this.fetchFn,
+          `${BASE_URL}${path}`,
+          {
+            method,
+            headers,
+            body: body === undefined ? undefined : JSON.stringify(body),
+          },
         );
+        return (await response.json()) as T;
+      } catch (error) {
+        const retryable = error instanceof ProviderError &&
+          error.reason === "rate_limited" && attempt < MAX_RETRIES;
+        if (!retryable) throw error;
+        const wait = (error as ProviderError).retryAfterMs ??
+          250 * 2 ** attempt;
+        await this.sleep(wait);
       }
-      return (await response.json()) as T;
     }
   }
 }
