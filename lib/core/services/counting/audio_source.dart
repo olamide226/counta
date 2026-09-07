@@ -19,6 +19,20 @@ class AudioSourceStalled implements Exception {
       'AudioSourceStalled: no microphone frames for ${silentFor.inSeconds}s';
 }
 
+/// Raised on the audio stream when the user has not granted microphone access.
+///
+/// Typed, and raised on the same channel as [AudioSourceStalled], so callers
+/// learn about a refusal the same way they learn about every other capture
+/// failure. This class is the single owner of the permission decision: asking
+/// again anywhere else races this one and answers for a different moment.
+class AudioSourcePermissionDenied implements Exception {
+  const AudioSourcePermissionDenied();
+
+  @override
+  String toString() =>
+      'AudioSourcePermissionDenied: microphone access was refused';
+}
+
 /// Captures 16 kHz mono PCM16 audio frames from the microphone and streams
 /// them to subscribers.
 class AudioSource {

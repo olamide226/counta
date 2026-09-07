@@ -56,8 +56,10 @@ class FakeSpeechSocket implements SpeechSocket {
 
   void emitActivity() => _activityController.add(null);
 
+  final List<Uint8List> sentFrames = [];
+
   @override
-  void sendAudio(Uint8List pcmFrames) {}
+  void sendAudio(Uint8List pcmFrames) => sentFrames.add(pcmFrames);
 
   @override
   Future<void> closeGracefully({int drainTimeoutMs = 2000}) async {
@@ -78,7 +80,7 @@ class FakeAudioSource implements AudioSource {
   int startCount = 0;
   int stopCount = 0;
 
-  /// What the OS answers when the engine asks for the microphone.
+  /// What the OS answers when capture asks for the microphone.
   bool permissionGranted = true;
 
   @override
@@ -90,6 +92,16 @@ class FakeAudioSource implements AudioSource {
     // A fresh controller per start, so the engine can restart capture after a
     // stall the same way the real source does.
     _controller = StreamController<Uint8List>.broadcast();
+
+    // The real source answers on the stream, asynchronously: a refusal as a
+    // typed error, and a working microphone as its first frame.
+    scheduleMicrotask(() {
+      if (!permissionGranted) {
+        _controller?.addError(const AudioSourcePermissionDenied());
+      } else {
+        _controller?.add(Uint8List(320));
+      }
+    });
     return _controller!.stream;
   }
 
@@ -149,22 +161,39 @@ void main() {
           await Future<void>.delayed(Duration.zero);
 
           expect(engine.currentStatus, EngineStatus.permissionDenied);
-          expect(statuses, [EngineStatus.permissionDenied]);
+          expect(statuses.last, EngineStatus.permissionDenied);
           expect(diagnostics, isNotEmpty);
           // No streaming time may be spent on a session that cannot capture
-          // audio: neither the socket nor the microphone is touched.
+          // audio. Capture is attempted — that is what raises the refusal —
+          // but no socket is ever opened, and the microphone is released.
           expect(fakeSocket.connectCount, 0);
-          expect(fakeAudio.startCount, 0);
+          expect(fakeAudio.startCount, 1);
+          expect(fakeAudio.stopCount, greaterThanOrEqualTo(1));
         },
       );
 
-      test('permission is checked before the socket is opened', () async {
+      test('capture is confirmed before the socket is opened', () async {
         await engine.start();
         await Future<void>.delayed(Duration.zero);
 
         expect(fakeSocket.connectCount, 1);
         expect(fakeAudio.startCount, 1);
         expect(engine.currentStatus, EngineStatus.live);
+      });
+
+      test('audio captured while connecting is not lost', () async {
+        await engine.start();
+        await Future<void>.delayed(Duration.zero);
+
+        // Capture now starts before the socket, so the frames that prove the
+        // microphone works arrive before there is anywhere to send them. They
+        // are held and flushed on connect rather than dropped, which would
+        // silently lose the opening repetitions of every session.
+        expect(fakeSocket.sentFrames, isNotEmpty);
+
+        fakeAudio.emitFrame();
+        await Future<void>.delayed(Duration.zero);
+        expect(fakeSocket.sentFrames, hasLength(2));
       });
 
       test(
