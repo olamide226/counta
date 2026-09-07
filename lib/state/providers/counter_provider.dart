@@ -1,6 +1,8 @@
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import 'session_controller.dart';
+import '../../core/config/build_config.dart';
+import '../../core/config/dev_secrets.dart';
 import '../../core/services/counting/cloud_counting_engine.dart';
 import '../../core/services/counting/tap_counting_engine.dart';
 import '../../domain/counting/counting_engine.dart';
@@ -15,6 +17,34 @@ final sessionControllerProvider = ChangeNotifierProvider<SessionController>(
   ),
 );
 
+/// Supplies the Deepgram credential for each voice connection.
+///
+/// Release builds have no credential source until the block client (task 9)
+/// exchanges a Supabase session for a short-lived token, so the engine reports
+/// a clear error instead of silently connecting with nothing. Dev builds fall
+/// back to the `--dart-define` key so the spike keeps working; that branch is
+/// compile-time dead in release and is the only path that touches
+/// [DevSecrets].
+final deepgramTokenProviderProvider = Provider<DeepgramTokenProvider>((ref) {
+  if (BuildConfig.showDebugTools) {
+    return () async {
+      final key = DevSecrets.deepgramApiKey;
+      if (key.isEmpty) {
+        throw StateError(
+          'DEEPGRAM_API_KEY is not set. Add it to .env or pass '
+          '--dart-define=DEEPGRAM_API_KEY=... for dev voice sessions.',
+        );
+      }
+      return key;
+    };
+  }
+  return () async {
+    throw StateError(
+      'Voice counting needs a block token from the voice-block service, '
+      'which is not wired into this build yet.',
+    );
+  };
+});
 
 /// Builds the engine for a voice session.
 ///
@@ -22,7 +52,10 @@ final sessionControllerProvider = ChangeNotifierProvider<SessionController>(
 /// themselves — that made the counter screen untestable and put platform
 /// wiring in the UI layer.
 final voiceEngineFactoryProvider = Provider<CountingEngine Function()>(
-  (ref) => CloudCountingEngine.new,
+  (ref) =>
+      () => CloudCountingEngine(
+        tokenProvider: ref.read(deepgramTokenProviderProvider),
+      ),
 );
 
 /// Builds the engine used when no voice session is running.
@@ -42,7 +75,7 @@ class CounterNotifier extends StateNotifier<CounterState> {
   final SessionController sessionController;
 
   CounterNotifier(this._ref, {required this.sessionController})
-      : super(CounterState(count: 0, sessionStart: DateTime.now())) {
+    : super(CounterState(count: 0, sessionStart: DateTime.now())) {
     _initFromSettings();
     sessionController.addListener(_onSessionChanged);
   }

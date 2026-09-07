@@ -9,13 +9,20 @@ import '../../../domain/counting/phrase_matcher.dart';
 import '../../../domain/counting/speech_socket.dart';
 import '../../../domain/counting/transcript_segment.dart';
 
+/// Supplies the credential for the next Deepgram connection.
+///
+/// Invoked on every connect, including reconnects, because production tokens
+/// are short-lived grants from the voice-block Edge Function rather than a
+/// long-lived key. The engine never holds a Deepgram master key itself.
+typedef DeepgramTokenProvider = Future<String> Function();
+
 /// Concrete implementation of [CountingEngine] using cloud streaming STT (Deepgram/SpeechSocket),
 /// [AudioSource] PCM capture, and local [PhraseMatcher].
 class CloudCountingEngine implements CountingEngine {
   final AudioSource _audioSource;
   final SpeechSocket _speechSocket;
   final MatcherConfig matcherConfig;
-  final String apiKeyOrToken;
+  final DeepgramTokenProvider tokenProvider;
 
   /// How long the engine keeps trying to restore a dropped session before it
   /// gives up and reports [EngineStatus.error].
@@ -87,6 +94,7 @@ class CloudCountingEngine implements CountingEngine {
   Duration get downtime => _downtime;
 
   CloudCountingEngine({
+    required this.tokenProvider,
     AudioSource? audioSource,
     SpeechSocket? speechSocket,
     this.matcherConfig = const MatcherConfig(),
@@ -94,11 +102,8 @@ class CloudCountingEngine implements CountingEngine {
     this.maxReconnectBackoff = const Duration(seconds: 15),
     this.transcriptionSilenceTimeout = const Duration(seconds: 20),
     this.transcriptionWatchdogInterval = const Duration(seconds: 5),
-    String? apiKeyOrToken,
   }) : _audioSource = audioSource ?? AudioSource(),
-       _speechSocket = speechSocket ?? DeepgramSocket(),
-       apiKeyOrToken =
-           apiKeyOrToken ?? const String.fromEnvironment('DEEPGRAM_API_KEY');
+       _speechSocket = speechSocket ?? DeepgramSocket();
 
   @override
   Stream<CountEvent> get counts => _countsController.stream;
@@ -219,7 +224,7 @@ class CloudCountingEngine implements CountingEngine {
 
     try {
       await _speechSocket.connect(
-        apiKeyOrToken: apiKeyOrToken,
+        apiKeyOrToken: await tokenProvider(),
         phrase: targetPhrase,
       );
       _attachAudio();
@@ -328,7 +333,7 @@ class CloudCountingEngine implements CountingEngine {
 
         await _speechSocket.closeGracefully(drainTimeoutMs: 0);
         await _speechSocket.connect(
-          apiKeyOrToken: apiKeyOrToken,
+          apiKeyOrToken: await tokenProvider(),
           phrase: _phrase,
         );
 
