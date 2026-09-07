@@ -16,6 +16,9 @@ import 'settings_provider.dart';
 /// Everything the controller does not know (settings snapshot, threshold,
 /// session start) is filled in by the caller, so the checkpointer itself
 /// stays free of provider lookups and is testable with a plain closure.
+///
+/// Called once per tracked session and again only when the active phrase
+/// changes — the rest of what it returns cannot change while a session runs.
 typedef CheckpointSnapshot =
     CountSession Function(SessionController controller, String id);
 
@@ -23,11 +26,14 @@ typedef CheckpointSnapshot =
 /// can be recovered on the next launch (requirements 7.2 and 7.3).
 ///
 /// A session counts as active while it has unsaved progress: either a voice
-/// engine is running, or the total is above zero. While active, the count is
-/// checkpointed at least every [interval] and immediately on every engine
-/// status transition. When the session goes inactive (reset, new session) the
-/// checkpoint is cleared. Saving must call [clear] explicitly, because saving
-/// does not zero the on-screen count.
+/// engine is running, or the total is above zero. The first moment a session
+/// becomes active is written immediately; after that a write happens at most
+/// once per [interval], and only when the *persisted* content actually
+/// changed. Engine status is not persisted, so status churn on its own —
+/// connecting, reconnecting, degraded — never costs a write.
+///
+/// While nothing is happening there is no timer at all: the interval timer is
+/// armed by the first unwritten change and clears itself once it fires.
 ///
 /// Clearing is unconditional: `sessionStartupProvider` has already taken any
 /// leftover from a previous process out of the store before this is attached,
@@ -40,10 +46,20 @@ class SessionCheckpointer {
   final CheckpointSnapshot _snapshot;
   final Duration interval;
   final String Function() _newId;
+  final DateTime Function() _now;
 
   Timer? _timer;
   String? _checkpointId;
-  EngineStatus? _lastStatus;
+
+  /// The cached immutable frame of the record, and the phrase it was built
+  /// for. Rebuilt when the phrase changes, because a tap session can turn into
+  /// a voice session without ever going inactive.
+  CountSession? _base;
+  PhraseSpec? _basePhrase;
+
+  /// Fingerprint of the content last handed to the store. A change here is the
+  /// only thing that justifies another write.
+  String? _lastWritten;
   bool _dirty = false;
 
   SessionCheckpointer({
@@ -52,15 +68,20 @@ class SessionCheckpointer {
     required CheckpointSnapshot snapshot,
     this.interval = defaultInterval,
     String Function()? newId,
+    DateTime Function()? now,
   }) : _controller = controller,
        _store = store,
        _snapshot = snapshot,
-       _newId = newId ?? const Uuid().v4 {
+       _newId = newId ?? const Uuid().v4,
+       _now = now ?? DateTime.now {
     _controller.addListener(_onControllerChanged);
   }
 
   /// Whether a session with unsaved progress is being tracked.
-  bool get isTracking => _timer != null;
+  ///
+  /// The checkpoint id is the one piece of state that says so; the timer is an
+  /// implementation detail that comes and goes within a tracked session.
+  bool get isTracking => _checkpointId != null;
 
   /// Identifier the current session's checkpoint is written under. Stable for
   /// the life of the session so a recovered record does not change identity
@@ -69,49 +90,84 @@ class SessionCheckpointer {
 
   bool get _isActive => _controller.isVoiceActive || _controller.total > 0;
 
-  void _onControllerChanged() {
-    final status = _controller.status;
-    final statusChanged = status != _lastStatus;
-    _lastStatus = status;
+  /// Everything that reaches the store, and nothing that does not.
+  String _signature() {
+    final phrase = _controller.activePhrase?.raw ?? '';
+    return '${_controller.total}|${_controller.voiceCount}'
+        '|${_controller.manualCount}|$phrase';
+  }
 
+  void _onControllerChanged() {
     if (!_isActive) {
-      if (_timer != null) _stopTracking();
+      if (isTracking) _stopTracking();
       return;
     }
 
-    if (_timer == null) {
+    if (!isTracking) {
       _startTracking();
       return;
     }
 
-    if (statusChanged) {
-      unawaited(_write());
-    } else {
-      _dirty = true;
-    }
+    // Status-only churn lands here and stops: the fingerprint is unchanged, so
+    // there is nothing new to persist and no timer to arm.
+    if (_signature() == _lastWritten) return;
+
+    _dirty = true;
+    _armTimer();
   }
 
   void _startTracking() {
     _checkpointId = _newId();
-    _timer = Timer.periodic(interval, (_) {
+    _base = null;
+    _basePhrase = null;
+    _lastWritten = null;
+    unawaited(_write());
+  }
+
+  void _armTimer() {
+    // One in flight at a time is what bounds writes to one per interval.
+    if (_timer != null) return;
+    _timer = Timer(interval, () {
+      _timer = null;
       if (_dirty) unawaited(_write());
     });
-    unawaited(_write());
   }
 
   void _stopTracking() {
     _timer?.cancel();
     _timer = null;
     _checkpointId = null;
+    _base = null;
+    _basePhrase = null;
+    _lastWritten = null;
     _dirty = false;
     unawaited(_store.clear());
+  }
+
+  CountSession _record(String id) {
+    final phrase = _controller.activePhrase;
+    if (_base == null || _basePhrase != phrase) {
+      _base = _snapshot(_controller, id);
+      _basePhrase = phrase;
+    }
+
+    return _base!.copyWith(
+      endedAt: _now(),
+      finalCount: _controller.total,
+      // Null keeps whatever the base holds, which is itself null for a
+      // tap-only session — that is the distinction the history screen reads.
+      voiceCount: phrase == null ? null : _controller.voiceCount,
+      manualCount: phrase == null ? null : _controller.manualCount,
+    );
   }
 
   Future<void> _write() async {
     final id = _checkpointId;
     if (id == null) return;
     _dirty = false;
-    await _store.write(_snapshot(_controller, id));
+    final record = _record(id);
+    _lastWritten = _signature();
+    await _store.write(record);
   }
 
   /// Forces a checkpoint now, regardless of the interval.
@@ -119,8 +175,10 @@ class SessionCheckpointer {
 
   /// Removes the checkpoint after the session has been saved.
   ///
-  /// Tracking continues: if the user keeps counting, the next dirty tick
-  /// writes a fresh checkpoint for the progress made since the save.
+  /// Tracking continues: if the user keeps counting, the next change writes a
+  /// fresh checkpoint for the progress made since the save. The fingerprint is
+  /// deliberately left in place, so merely stopping the engine afterwards does
+  /// not re-checkpoint counts that are already in history.
   Future<void> clear() async {
     _dirty = false;
     await _store.clear();
@@ -135,7 +193,7 @@ class SessionCheckpointer {
 
 /// Keeps the active session checkpointed for the life of the app.
 ///
-/// Attached by [sessionStartupProvider], never read directly by a screen: it
+/// Attached by `sessionStartupProvider`, never read directly by a screen: it
 /// must not exist until the previous run's checkpoint has been taken out of
 /// the store.
 final sessionCheckpointerProvider = Provider<SessionCheckpointer>((ref) {

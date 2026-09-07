@@ -1,7 +1,6 @@
 import 'package:fake_async/fake_async.dart';
 import 'package:flutter_test/flutter_test.dart';
 
-import 'package:counta/core/services/counting/tap_counting_engine.dart';
 import 'package:counta/domain/counting/counting_engine.dart';
 import 'package:counta/domain/models/count_session.dart';
 import 'package:counta/domain/models/enums.dart';
@@ -9,6 +8,7 @@ import 'package:counta/state/providers/session_checkpointer.dart';
 import 'package:counta/state/providers/session_controller.dart';
 
 import '../helpers/checkpoint_store.dart';
+import '../helpers/fake_counting_engine.dart';
 
 CountSession snapshot(SessionController controller, String id) {
   return CountSession(
@@ -32,13 +32,15 @@ const phrase = PhraseSpec(raw: 'om mani padme hum', normalisedTokens: []);
 void main() {
   group('SessionCheckpointer', () {
     late SessionController controller;
+    late FakeCountingEngine engine;
     late InMemoryCheckpointStore store;
     late SessionCheckpointer checkpointer;
     late int ids;
 
     void build() {
       ids = 0;
-      controller = SessionController(engine: TapCountingEngine());
+      engine = FakeCountingEngine();
+      controller = SessionController(engine: engine);
       store = InMemoryCheckpointStore();
       checkpointer = SessionCheckpointer(
         controller: controller,
@@ -61,17 +63,6 @@ void main() {
         expect(store.writes, 0);
         expect(store.clears, 0);
         expect(checkpointer.isTracking, isFalse);
-      });
-    });
-
-    test('never clears a checkpoint left by a previous process', () {
-      fakeAsync((async) {
-        build();
-        store.current = snapshot(controller, 'stale');
-        async.elapse(const Duration(minutes: 1));
-
-        expect(store.current?.id, 'stale');
-        expect(store.clears, 0);
       });
     });
 
@@ -130,23 +121,59 @@ void main() {
       });
     });
 
-    test('writes on every engine status transition', () {
+    test('a status hop that changes no content writes nothing', () {
       fakeAsync((async) {
         build();
         controller.incrementManual();
         async.flushMicrotasks();
         expect(store.writes, 1);
 
-        // Tap engine goes idle -> live on start, live -> idle on stop.
-        controller.startSession(phrase);
+        // Status is not persisted, so churning it cannot make the stored
+        // record any more accurate. This used to cost a Hive write per
+        // transition, and reconnect storms produce a lot of them.
+        for (final status in [
+          EngineStatus.connecting,
+          EngineStatus.reconnecting,
+          EngineStatus.degraded,
+          EngineStatus.live,
+        ]) {
+          engine.emitStatus(status);
+          async.flushMicrotasks();
+        }
+        async.elapse(const Duration(minutes: 1));
+
+        expect(store.writes, 1);
+      });
+    });
+
+    test('a phrase change is content, so it is written on the next tick', () {
+      fakeAsync((async) {
+        build();
+        controller.incrementManual();
         async.flushMicrotasks();
+        expect(store.writes, 1);
+        expect(store.current?.phrase, isNull);
+
+        controller.startSession(phrase);
+        async.elapse(const Duration(seconds: 10));
+
         expect(store.writes, 2);
         expect(store.current?.phrase, phrase.raw);
-
-        controller.stop();
-        async.flushMicrotasks();
-        expect(store.writes, 3);
         expect(store.current?.finalCount, 1);
+      });
+    });
+
+    test('idle tracking leaves no timer running', () {
+      fakeAsync((async) {
+        build();
+        controller.incrementManual();
+        async.flushMicrotasks();
+
+        // The write is done and nothing has changed since, so there is nothing
+        // left to fire. A periodic timer used to tick every 10 s for the whole
+        // session regardless.
+        expect(async.periodicTimerCount, 0);
+        expect(async.nonPeriodicTimerCount, 0);
       });
     });
 
@@ -229,6 +256,29 @@ void main() {
 
         expect(store.writes, 2);
         expect(store.current?.finalCount, 2);
+      });
+    });
+
+    test('clear() leaves a later status change alone', () {
+      fakeAsync((async) {
+        build();
+        controller.incrementManual();
+        async.flushMicrotasks();
+        expect(store.writes, 1);
+
+        // Saving clears the checkpoint but does not zero the on-screen count.
+        checkpointer.clear();
+        async.flushMicrotasks();
+        expect(store.current, isNull);
+
+        // Regression: stopping the engine after a save re-checkpointed the
+        // already-saved total, so the next launch offered to recover a session
+        // that was sitting in history.
+        engine.emitStatus(EngineStatus.idle);
+        async.elapse(const Duration(minutes: 1));
+
+        expect(store.current, isNull);
+        expect(store.writes, 1);
       });
     });
 
