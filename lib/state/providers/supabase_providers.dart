@@ -26,28 +26,38 @@ final supabaseSessionProvider = FutureProvider<Session?>((ref) async {
   );
 
   final auth = Supabase.instance.client.auth;
-  final existing = auth.currentSession;
-  if (existing != null && !existing.isExpired) {
-    return existing;
-  }
-  if (existing != null) {
-    // Let the SDK refresh a persisted-but-stale session rather than minting a
-    // second anonymous user for the same device.
-    final refreshed = await auth.refreshSession();
-    if (refreshed.session != null) return refreshed.session;
-  }
-
-  final response = await auth.signInAnonymously();
-  return response.session;
-});
-
-/// The Supabase client, or null when the backend is not configured or has
-/// not finished initialising. Consumers that need a JWT (the block client,
-/// task 9) read this rather than touching [Supabase.instance] directly.
-final supabaseClientProvider = Provider<SupabaseClient?>((ref) {
-  final session = ref.watch(supabaseSessionProvider);
-  return session.maybeWhen(
-    data: (s) => s == null ? null : Supabase.instance.client,
-    orElse: () => null,
+  return resolveSupabaseSession(
+    existing: auth.currentSession,
+    refresh: () async => (await auth.refreshSession()).session,
+    signInAnonymously: () async => (await auth.signInAnonymously()).session,
   );
 });
+
+/// Chooses the session to run with, given whatever the SDK has persisted.
+///
+/// A live persisted session is reused, and a stale one is refreshed rather
+/// than replaced, so a device does not accumulate anonymous users (and orphan
+/// the credit balance attached to the old one).
+///
+/// [refresh] throwing is the *normal* failure here, not a null return:
+/// gotrue raises [AuthException] when the refresh token has been revoked,
+/// expired or cannot be sent at all. Letting that escape stranded the provider
+/// in a permanent error state with nothing to invalidate it, and made the
+/// anonymous fallback below unreachable in exactly the cases it exists for.
+@visibleForTesting
+Future<Session?> resolveSupabaseSession({
+  required Session? existing,
+  required Future<Session?> Function() refresh,
+  required Future<Session?> Function() signInAnonymously,
+}) async {
+  if (existing != null) {
+    if (!existing.isExpired) return existing;
+    try {
+      final refreshed = await refresh();
+      if (refreshed != null) return refreshed;
+    } on AuthException catch (error) {
+      debugPrint('Supabase session refresh failed: ${error.message}');
+    }
+  }
+  return signInAnonymously();
+}
