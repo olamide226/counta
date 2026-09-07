@@ -2,6 +2,8 @@ import 'dart:async';
 import 'package:flutter/foundation.dart';
 
 import '../../domain/counting/counting_engine.dart';
+import '../../domain/models/count_session.dart';
+import '../../domain/validation/phrase_validator.dart';
 import '../../core/services/counting/tap_counting_engine.dart';
 import '../../core/services/live_activity_service.dart';
 
@@ -171,6 +173,29 @@ class SessionController extends ChangeNotifier {
     _activePhrase = null;
     _lastDiagnostic = null;
     _sessionStart = startedAt ?? DateTime.now();
+    _updateLiveActivity();
+    notifyListeners();
+  }
+
+  /// Restores a session that was saved or recovered from a checkpoint.
+  ///
+  /// Unlike [seed] this keeps the session whole: the voice/tap split, the
+  /// phrase that was being chanted and the original start time all come back,
+  /// so continuing a recovered voice session does not silently turn it into a
+  /// tap session that started just now.
+  void restore(CountSession session) {
+    final phrase = session.phrase;
+    _voiceCount = (session.voiceCount ?? 0).clamp(0, session.finalCount);
+    _manualCount = session.manualCount ?? (session.finalCount - _voiceCount);
+    if (_manualCount < 0) _manualCount = 0;
+
+    // A stored phrase is just the raw text; re-normalising it here is what
+    // makes the resumed session countable again rather than decorative.
+    _activePhrase = phrase == null
+        ? null
+        : PhraseValidator().validate(phrase).phraseSpec;
+    _lastDiagnostic = null;
+    _sessionStart = session.startedAt;
     _updateLiveActivity();
     notifyListeners();
   }

@@ -119,14 +119,17 @@ class CounterNotifier extends StateNotifier<CounterState> {
   }
 
   void loadSession(CountSession session) {
-    // Seed rather than reset: the controller owns the running total, so
+    // Restore rather than reset: the controller owns the running total, so
     // leaving it at zero here made the next tap collapse the loaded count to 1.
-    sessionController.seed(session.finalCount);
+    // Restoring also brings back the voice/tap split and the phrase, so a
+    // recovered voice session carries on as one.
+    sessionController.restore(session);
     state = CounterState(
       count: session.finalCount,
+      mantra: session.mantra,
       threshold: session.threshold,
       repeatInterval: session.repeatInterval,
-      sessionStart: DateTime.now(),
+      sessionStart: session.startedAt,
     );
   }
 

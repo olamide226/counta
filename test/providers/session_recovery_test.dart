@@ -5,6 +5,7 @@ import 'package:counta/domain/models/count_session.dart';
 import 'package:counta/domain/models/enums.dart';
 import 'package:counta/state/providers/counter_provider.dart';
 import 'package:counta/state/providers/hive_providers.dart';
+import 'package:counta/state/providers/session_checkpointer.dart';
 import 'package:counta/state/providers/session_recovery.dart';
 import 'package:counta/state/providers/sessions_provider.dart';
 import 'package:counta/state/providers/settings_provider.dart';
@@ -129,6 +130,40 @@ void main() {
       expect(container.read(counterProvider).count, 17);
       expect(container.read(sessionControllerProvider).total, 17);
       expect(sessions.getAllSessions(), isEmpty);
+    });
+
+    test('resume restores the whole session, not just the total', () async {
+      final pending = await container.read(sessionStartupProvider.future);
+      container.read(sessionRecoveryProvider).resume(pending!);
+
+      final counter = container.read(counterProvider);
+      final controller = container.read(sessionControllerProvider);
+
+      // Regression: resuming used to seed the total as manual counts under a
+      // brand-new start time with no phrase, so a recovered voice session came
+      // back as a tap session that had just begun.
+      expect(counter.sessionStart, DateTime(2026, 5, 5, 6));
+      expect(counter.mantra, 'hare krishna');
+      expect(controller.voiceCount, 17);
+      expect(controller.manualCount, 0);
+      expect(controller.activePhrase?.raw, 'hare krishna');
+    });
+
+    test('a resumed session checkpoints under its own name', () async {
+      final pending = await container.read(sessionStartupProvider.future);
+      container.read(sessionRecoveryProvider).resume(pending!);
+      container.read(sessionControllerProvider).incrementManual();
+      // Counts land on the next interval tick, so ask for the write directly
+      // rather than waiting ten seconds of real time for it.
+      await container.read(sessionCheckpointerProvider).flush();
+
+      // Not the literal 'Recovered session' placeholder the snapshot used to
+      // write for every checkpoint.
+      expect(store.current?.mantra, 'hare krishna');
+      expect(store.current?.phrase, 'hare krishna');
+      expect(store.current?.voiceCount, 17);
+      expect(store.current?.manualCount, 1);
+      expect(store.current?.finalCount, 18);
     });
   });
 }

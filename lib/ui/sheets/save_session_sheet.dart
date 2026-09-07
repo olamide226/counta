@@ -1,9 +1,8 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
-import '../../domain/models/count_session.dart';
+import '../../domain/models/session_record.dart';
 import '../../state/providers/counter_provider.dart';
-import '../../state/providers/session_checkpointer.dart';
 import '../../state/providers/sessions_provider.dart';
 import '../../state/providers/settings_provider.dart';
 import '../../state/providers/services_provider.dart';
@@ -23,11 +22,12 @@ class _SaveSessionSheetState extends ConsumerState<SaveSessionSheet> {
   @override
   void initState() {
     super.initState();
-    // Save a voice session without retyping what you just spent it chanting.
+    // Save a session without retyping its name: a recovered or continued
+    // session already has one, and a voice session has the phrase you just
+    // spent it chanting.
+    final mantra = ref.read(counterProvider).mantra;
     final phrase = ref.read(sessionControllerProvider).activePhrase;
-    if (phrase != null) {
-      _mantraController.text = phrase.raw;
-    }
+    _mantraController.text = mantra ?? phrase?.raw ?? '';
   }
 
   @override
@@ -183,28 +183,19 @@ class _SaveSessionSheetState extends ConsumerState<SaveSessionSheet> {
       _errorMessage = null;
     });
 
-    final session = CountSession(
+    final notes = _notesController.text.trim();
+    final session = buildSessionRecord(
       mantra: mantra,
-      startedAt: counter.sessionStart,
+      settings: settings,
+      counter: counter,
+      phrase: phrase,
+      voiceCount: controller.voiceCount,
+      manualCount: controller.manualCount,
       endedAt: DateTime.now(),
-      finalCount: counter.count,
-      threshold: counter.threshold,
-      repeatInterval: counter.repeatInterval,
-      soundMode: settings.soundMode,
-      themeModeChoice: settings.themeModeChoice,
-      themeId: settings.themeId,
-      notes: _notesController.text.trim().isNotEmpty
-          ? _notesController.text.trim()
-          : null,
-      phrase: phrase?.raw,
-      voiceCount: phrase != null ? controller.voiceCount : null,
-      manualCount: phrase != null ? controller.manualCount : null,
+      notes: notes.isNotEmpty ? notes : null,
     );
 
     await ref.read(sessionsProvider.notifier).saveSession(session);
-
-    // Saved cleanly, so there is nothing left to recover on next launch.
-    await ref.read(sessionCheckpointerProvider).clear();
 
     // Clear any lingering notifications now that the session is saved.
     await ref.read(notificationServiceProvider).cancelAllNotifications();

@@ -6,6 +6,7 @@ import 'package:uuid/uuid.dart';
 import '../../data/repositories/session_checkpoint_repository.dart';
 import '../../domain/counting/counting_engine.dart';
 import '../../domain/models/count_session.dart';
+import '../../domain/models/session_record.dart';
 import 'counter_provider.dart';
 import 'hive_providers.dart';
 import 'session_controller.dart';
@@ -204,23 +205,19 @@ final sessionCheckpointerProvider = Provider<SessionCheckpointer>((ref) {
     controller: controller,
     store: ref.watch(sessionCheckpointRepositoryProvider),
     snapshot: (controller, id) {
-      final settings = ref.read(settingsProvider);
       final counter = ref.read(counterProvider);
       final phrase = controller.activePhrase;
-      return CountSession(
+      return buildSessionRecord(
         id: id,
-        mantra: phrase?.raw ?? 'Recovered session',
-        startedAt: counter.sessionStart,
+        // The session's own label when it has one — a recovered session used
+        // to come back as the literal string 'Recovered session'.
+        mantra: counter.mantra ?? phrase?.raw ?? 'Session in progress',
+        settings: ref.read(settingsProvider),
+        counter: counter,
+        phrase: phrase,
+        voiceCount: controller.voiceCount,
+        manualCount: controller.manualCount,
         endedAt: DateTime.now(),
-        finalCount: controller.total,
-        threshold: counter.threshold,
-        repeatInterval: counter.repeatInterval,
-        soundMode: settings.soundMode,
-        themeModeChoice: settings.themeModeChoice,
-        themeId: settings.themeId,
-        phrase: phrase?.raw,
-        voiceCount: phrase != null ? controller.voiceCount : null,
-        manualCount: phrase != null ? controller.manualCount : null,
         completed: false,
       );
     },
