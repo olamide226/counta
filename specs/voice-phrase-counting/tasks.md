@@ -70,14 +70,14 @@ Each task is scoped to be completable in isolation and leaves the app in a worki
   - _Requirements: 7.1, 7.2, 7.3, 7.4, 6.4_
 
 - [x] **8. Build the Edge Function and remove the hardcoded key**
-  - [x] 8.1 Create the `voice_blocks`, `trial_grants`, and `matcher_config` tables with RLS policies as specified
+  - [x] 8.1 Create the `voice_blocks`, `trial_grants`, `matcher_config`, `vouchers`, `voucher_redemptions` and `voucher_attempts` tables with RLS, grants and the uniqueness constraints as specified
   - [x] 8.2 Enable Supabase anonymous sign-in and wire it into app startup
   - [x] 8.3 Implement `POST /voice-block`: JWT verification, in-flight block check (409), RevenueCat balance read, insufficient credit (402), debit, Deepgram token grant, refund-on-grant-failure (503), block row insert
   - [x] 8.4 Implement `POST /voice-block/release` with server-side validated refund eligibility
   - [x] 8.5 Delete the hardcoded Deepgram key and the debug flavour that carried it
   - [x] 8.6 Write Deno tests with mocked providers: happy path, 401, 402, 409, grant-failure refund, RevenueCat 429 mapped to 503
   - [x] 8.7 Add per-user rate limiting on `/voice-block`
-  - _Requirements: 3.2, 3.3, 3.4, 3.5, 3.6, 3.7, 3.8, 3.11, 3.12_
+  - _Requirements: 3.2, 3.3, 3.4, 3.5, 3.6, 3.7, 3.8, 3.11, 3.12, 11.8, 12.4_
 
 - [ ] **9. Implement block lifecycle in the client**
   - [ ] 9.1 Implement `BlockClient.acquire` and `.release` against the Edge Function
@@ -92,20 +92,30 @@ Each task is scoped to be completable in isolation and leaves the app in a worki
 
 ## Phase C: Monetise
 
-- [ ] **10. Integrate RevenueCat**
+- [ ] **10. Integrate RevenueCat, the device-gated trial and vouchers**
   - [ ] 10.1 Configure consumable credit-pack products in App Store Connect and Google Play Console
   - [ ] 10.2 Create the voice-minute virtual currency in RevenueCat and associate the products with grant amounts
   - [ ] 10.3 Add `purchases_flutter`, initialise with the public SDK key, and identify the user against the Supabase user id
   - [ ] 10.4 Implement `EntitlementService`: fetch offerings, present the paywall, execute purchase, invalidate the virtual currency cache and refetch balance
-  - [ ] 10.5 Implement the one-time 20-credit trial grant, made idempotent by the `trial_grants` primary key
-  - _Requirements: 4.1, 4.2, 4.3, 4.7_
+  - [ ] 10.5 Implement `POST /voice-block/trial`: JWT verification, platform dispatch, grant through the same `BalanceProvider` as purchases, `counta.trial_grants` row, and `granted: false` rather than an error when the device has already claimed it
+  - [ ] 10.6 Implement the iOS gate: `DCDevice.current.generateToken()` in the client, and server-side `query_two_bits` / `update_two_bits` signed with the team's DeviceCheck key, setting the allocated bit after the grant
+  - [ ] 10.7 Record the DeviceCheck bit allocation in the design table and in `DEVICECHECK_TRIAL_BIT` before the first call ships, so a sibling app on the same Apple team cannot collide with it
+  - [ ] 10.8 Implement the Android gate: request a Play Integrity token in the client, verify it server-side, and refuse the grant unless the verdict reports device integrity, a Play-recognised app and a licensed install
+  - [ ] 10.9 Refuse the trial on any platform without attestation, and hide the trial affordance there rather than letting it fail
+  - [ ] 10.10 Implement `POST /voice-block/redeem`: look the code up by `upper(code)`, claim a slot and insert the redemption in one transaction (a `counta.redeem_voucher` function over RPC), grant keyed on the redemption id, and answer identically for an unknown and a disabled code
+  - [ ] 10.11 Rate-limit failed redemptions per user against `counta.voucher_attempts` and return 429 with `retry_after_seconds`
+  - [ ] 10.12 Write Deno tests for both endpoints with faked attestation: bit already set, indeterminate verdict to 503, unsupported platform, retried grant paying out once, unknown and disabled codes answering identically, expiry and cap refusals, second redemption by the same user, ledger failure completing on retry
+  - [ ] 10.13 Document the operator setup: the Apple DeviceCheck key and team id, the Play Integrity service account, and how a campaign code is created with the service role
+  - _Requirements: 4.1, 4.2, 4.3, 4.7, 4.8, 4.9, 11.1, 11.2, 11.3, 11.4, 11.5, 11.6, 11.7, 11.8, 11.9, 11.10, 12.1, 12.2, 12.3, 12.4, 12.5, 12.6, 12.7, 12.8, 12.9, 12.10, 12.11_
 
 - [ ] **11. Wire credit state into the session UI**
   - [ ] 11.1 Display remaining balance during an active session
   - [ ] 11.2 Implement the low-balance warning at 20% of session-start balance or below 3 credits, whichever is greater
   - [ ] 11.3 On exhaustion, stop audio capture, preserve the count, and present the paywall
   - [ ] 11.4 Implement resume-after-purchase, continuing the same session with its existing count intact
-  - _Requirements: 4.4, 4.5, 4.6_
+  - [ ] 11.5 Add the voucher code entry on the paywall: submit to `/voice-block/redeem`, refetch the balance on success, and show the server's reason on refusal without inventing one of its own
+  - [ ] 11.6 Claim the trial through `/voice-block/trial` on first use of the voice feature, refetching the balance the way a purchase does
+  - _Requirements: 4.4, 4.5, 4.6, 4.9, 12.1_
 
 ---
 
@@ -153,4 +163,6 @@ Each task is scoped to be completable in isolation and leaves the app in a worki
   - [ ] 16.2 Re-run the full fixture suite and confirm recall and false positive targets still hold after all integration work
   - [ ] 16.3 Verify no code path can return the Deepgram master key to a client
   - [ ] 16.4 Verify credits are never spent on any path that fails to deliver streaming time
-  - _Requirements: 3.12, 5.5, 5.6, 7.2, 4.6_
+  - [ ] 16.5 Verify on a real iOS device that deleting and reinstalling the app does not yield a second trial, and record what the same test does on Android rather than assuming it matches
+  - [ ] 16.6 Verify a voucher pays out once per user, refuses past its cap, and cannot be doubled by retrying the request
+  - _Requirements: 3.12, 5.5, 5.6, 7.2, 4.6, 11.3, 11.6, 12.4, 12.5_

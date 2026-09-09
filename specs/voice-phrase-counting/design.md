@@ -4,7 +4,7 @@
 
 Voice phrase counting adds cloud streaming speech recognition to the existing tap counter. The design has one governing constraint: **accuracy is the reason for choosing cloud STT, and per-minute cost is the price of that choice.** Every architectural decision below follows from bounding that cost without operating infrastructure.
 
-The design deliberately avoids a server-side audio relay. Deepgram supports short-lived tokens for direct client connections, and RevenueCat provides virtual currency balance management, so the entire server-side footprint is one Supabase Edge Function and one small table. The Flutter client owns audio capture, the Deepgram WebSocket, and phrase matching.
+The design deliberately avoids a server-side audio relay. Deepgram supports short-lived tokens for direct client connections, and RevenueCat provides virtual currency balance management, so the entire server-side footprint is one Supabase Edge Function and a handful of small tables. The Flutter client owns audio capture, the Deepgram WebSocket, and phrase matching.
 
 This trades away three things a relay would give: a hard mid-stream kill switch, server-side matcher tuning, and transcript telemetry by default. Each is mitigated below (block granularity, remote config, opt-in diagnostics). The engine abstraction in the client is shaped so that introducing a relay later is a swap of one collaborator rather than a rewrite.
 
@@ -28,6 +28,7 @@ This trades away three things a relay would give: a hard mid-stream kill switch,
 │                                             │
 │  SessionController → SessionRepository      │
 │  EntitlementService (RevenueCat SDK)        │
+│  AttestationSource (DeviceCheck, Integrity) │
 └────┬──────────────────────┬─────────────────┘
      │ HTTPS                │ WSS (audio out, transcripts in)
      │                      │
@@ -42,9 +43,19 @@ This trades away three things a relay would give: a hard mid-stream kill switch,
 │    voice_blocks        │           │
 │    matcher_config      │───────────┘
 │    trial_grants        │
-└────┬───────────────────┘
-     │ Developer API v2 (balance read, spend, grant)
-     ▼
+│    vouchers            │
+│    voucher_redemptions │
+│    voucher_attempts    │
+└──┬─────────────────┬───┘
+   │                 │ trial only: query and set the device bit,
+   │                 │ verify the integrity verdict
+   │                 ▼
+   │        ┌────────────────────────┐
+   │        │ Apple DeviceCheck      │
+   │        │ Google Play Integrity  │
+   │        └────────────────────────┘
+   │ Developer API v2 (balance read, spend, grant)
+   ▼
 ┌──────────────┐
 │  RevenueCat  │  ← IAP validation, virtual currency ledger
 └──────────────┘
@@ -80,8 +91,8 @@ Block size of 300 seconds balances three pressures: shorter blocks mean more Edg
 | Component | Where | Notes |
 |---|---|---|
 | Edge Function | Supabase Functions (Deno) | Stateless, no cold-start concern for a sub-second HTTP call |
-| `counta.voice_blocks`, `counta.matcher_config`, `counta.trial_grants` | Supabase Postgres, `counta` schema | RLS on all three; schema must be in the project's exposed-schemas list |
-| Secrets | Supabase function secrets | `DEEPGRAM_API_KEY`, `REVENUECAT_SECRET_KEY`, `REVENUECAT_PROJECT_ID` |
+| `counta.voice_blocks`, `counta.matcher_config`, `counta.trial_grants`, `counta.vouchers`, `counta.voucher_redemptions`, `counta.voucher_attempts` | Supabase Postgres, `counta` schema | RLS on all six; schema must be in the project's exposed-schemas list |
+| Secrets | Supabase function secrets | `DEEPGRAM_API_KEY`, `REVENUECAT_SECRET_KEY`, `REVENUECAT_PROJECT_ID`, plus the trial-gate credentials in "Trial eligibility and vouchers" |
 | Auth | Supabase anonymous sign-in | Upgradeable to email later without changing this feature |
 
 ---
@@ -325,7 +336,7 @@ class PhraseHistoryEntry {
 
 ### Supabase schema
 
-All three tables live in a dedicated `counta` schema rather than in `public`.
+The tables live in a dedicated `counta` schema rather than in `public`.
 The Supabase project is shared staging: other products already occupy a schema
 each (`mcpl`, `mcp_oauth`) and `public` belongs to an unrelated website, so one
 schema per product is both the house convention and the only way this feature's
@@ -365,14 +376,56 @@ grant select on counta.voice_blocks to authenticated;
 grant select, insert, update, delete on counta.voice_blocks to service_role;
 
 create table counta.trial_grants (
-  rc_app_user_id text primary key,
-  credits        int not null,
-  granted_at     timestamptz not null default now()
+  user_id     uuid primary key references auth.users on delete cascade,
+  platform    text not null check (platform in ('ios', 'android')),
+  gate        text not null check (gate in ('devicecheck', 'play_integrity')),
+  credits     int  not null check (credits > 0),
+  granted_at  timestamptz not null default now()
 );
 
 -- no client grant and no policy at all: service_role writes it, and the
 -- primary key makes the one-time grant idempotent
 grant select, insert, update, delete on counta.trial_grants to service_role;
+
+create table counta.vouchers (
+  id               uuid primary key default gen_random_uuid(),
+  code             text not null,
+  credits          int  not null check (credits > 0),
+  max_redemptions  int  not null check (max_redemptions > 0),
+  redeemed_count   int  not null default 0 check (redeemed_count >= 0),
+  expires_at       timestamptz,          -- null: never expires
+  enabled          boolean not null default true,
+  note             text,
+  created_at       timestamptz not null default now(),
+  constraint vouchers_within_cap check (redeemed_count <= max_redemptions)
+);
+
+create unique index on counta.vouchers (upper(code));
+
+create table counta.voucher_redemptions (
+  id          uuid primary key default gen_random_uuid(),
+  voucher_id  uuid not null references counta.vouchers on delete restrict,
+  user_id     uuid not null references auth.users on delete cascade,
+  credits     int  not null check (credits > 0),
+  redeemed_at timestamptz not null default now()
+);
+
+create unique index on counta.voucher_redemptions (voucher_id, user_id);
+
+create table counta.voucher_attempts (
+  id           uuid primary key default gen_random_uuid(),
+  user_id      uuid not null references auth.users on delete cascade,
+  attempted_at timestamptz not null default now()
+);
+
+create index on counta.voucher_attempts (user_id, attempted_at desc);
+
+-- the three voucher tables get no policy and no client grant: the codes are
+-- the secret, and any select policy would let an anonymous session enumerate
+-- every live campaign
+alter table counta.vouchers enable row level security;
+alter table counta.voucher_redemptions enable row level security;
+alter table counta.voucher_attempts enable row level security;
 
 create table counta.matcher_config (
   id          int primary key default 1,
@@ -394,7 +447,14 @@ The live-block index is a partial **unique** index rather than the
 is the set that must stay unique (Requirement 3.8), and serves the in-flight
 lookup as well.
 
-The `trial_grants` primary key on the RevenueCat app user id makes the one-time trial grant idempotent without any additional logic, which matters because the grant path can be retried.
+`trial_grants` was keyed on the RevenueCat app user id until the trial became device-gated. It is now keyed on the Supabase user id, which serves the same purpose — a retried grant collides with the primary key rather than paying out twice — while the question of whether this *device* has already taken the trial is answered by the platform gate described in "Trial eligibility and vouchers" below, not by any identity the app can mint for itself.
+
+Two voucher invariants are database constraints rather than handler logic, for the reason the live-block index is: the handler's read-then-write is passable by two concurrent requests, and what is being protected is a credit grant.
+
+- `voucher_redemptions (voucher_id, user_id)` unique is the one-redemption-per-user rule (Requirement 12.4). It doubles as the "has this user already redeemed this code?" lookup.
+- `vouchers_within_cap` makes it impossible to record more redemptions than the campaign allows. The handler claims a slot with `update counta.vouchers set redeemed_count = redeemed_count + 1 where id = $1 and redeemed_count < max_redemptions returning *`, which takes the row lock and refuses cleanly when the campaign is full; the check constraint is the backstop for a writer that forgets the predicate.
+
+Codes fold to upper case for both lookup and uniqueness, because they are typed by hand off a card or an email. `expires_at` is nullable and null means "never expires".
 
 ### Edge Function contract
 
@@ -422,6 +482,135 @@ One block is live per user at a time, and renewal is identified by `session_id` 
 
 Refund eligibility is asserted by the client but validated server-side against `granted_at`: a refund is only issued if the release arrives within 30 seconds of grant and reports zero detections (Requirement 3.11). Client assertion alone is not trusted.
 
+```
+POST /functions/v1/voice-block/trial
+Authorization: Bearer <supabase-jwt>
+Body: { "platform": "ios",     "device_token":    "<base64 DCDevice token>" }
+Body: { "platform": "android", "integrity_token": "<Play Integrity token>" }
+
+200 { "granted": true,  "credits": 20, "balance": 20 }
+200 { "granted": false, "reason": "already_claimed" }
+400 { "error": "invalid_attestation" }
+401 { "error": "unauthenticated" }
+409 { "error": "platform_unsupported" }
+503 { "error": "attestation_unavailable" }
+```
+
+```
+POST /functions/v1/voice-block/redeem
+Authorization: Bearer <supabase-jwt>
+Body: { "code": "SPRING24" }
+
+200 { "redeemed": true,  "credits": 50, "balance": 71 }
+200 { "redeemed": false, "reason": "already_redeemed", "credits": 50 }
+400 { "error": "invalid_request" }
+401 { "error": "unauthenticated" }
+404 { "error": "voucher_invalid" }
+409 { "error": "voucher_expired" }
+409 { "error": "voucher_exhausted" }
+429 { "error": "too_many_attempts", "retry_after_seconds": 900 }
+503 { "error": "provider_unavailable" }
+```
+
+Both new endpoints sit behind the same JWT verification as the block endpoints and grant through the same `BalanceProvider` seam, so there is exactly one code path that moves credits and exactly one place to audit.
+
+"Already claimed" and "already redeemed" are 200s carrying a negative result rather than errors. They are the expected answer to an ordinary question — every reinstall asks the trial endpoint, and a user who taps Redeem twice asks the second one — and in both cases the client does what it would have done anyway: show the current balance. Reserving the 4xx codes for genuinely malformed or refused requests keeps the client's error handling about errors.
+
+`voucher_invalid` deliberately covers both "no such code" and "disabled", with no way to tell them apart (Requirement 12.6): distinguishing them turns the endpoint into an oracle for discovering live codes. Expiry and exhaustion do get their own answers (12.7), because those reach a user holding a real code, and telling that user the code is fake is worse than the little the distinction leaks. Failed attempts are counted per user in `counta.voucher_attempts` and rate limited, which is what actually bounds guessing.
+
+Ordering inside a redemption matters as much as it does inside a block grant:
+
+```
+verify JWT
+rate-limit check on counta.voucher_attempts         -> 429
+look up voucher by upper(code)                      -> 404 / 409 expired,
+                                                       record an attempt
+claim a slot: redeemed_count + 1 under the cap      -> 409 voucher_exhausted
+insert counta.voucher_redemptions                   -> unique violation means
+                                                       already redeemed: release
+                                                       the slot, re-issue the
+                                                       keyed grant, report 200
+BalanceProvider grant(user, redemption_id, credits) -> 503 on failure
+```
+
+The slot claim and the redemption row are two writes that must not come apart, so they belong in one transaction — the simplest form is a `counta.redeem_voucher(...)` SQL function called over RPC, added alongside the endpoint in task 10, which also keeps the whole decision one round trip. If they are ever issued as separate statements, claim the slot **first**: a leaked slot means a campaign gives out one fewer redemption than it advertised, while a redemption row with no slot behind it means the cap can be exceeded. When the two failure directions are under-granting and over-granting credit, take the first.
+
+The redemption row is written before any credit moves, and the ledger call is keyed on the redemption id exactly as a block debit is keyed on the block id. A retry therefore re-issues the *same* keyed grant rather than a second one: a redemption whose ledger call died mid-flight completes on the next attempt, and one that already succeeded cannot pay out twice. That is what makes the endpoint idempotent and unfarmable by retry (Requirements 12.5, 12.8). A slot claimed for a grant that then fails permanently is left consumed; the remedy is for the operator to raise the cap, which is better than releasing slots automatically and giving a retry loop something to chew on.
+
+---
+
+## Trial eligibility and vouchers
+
+### Why the trial needs a device, not an account
+
+Requirement 4.3 used to key the 20-credit trial on the RevenueCat app user id. Both that id and the Supabase anonymous user are minted on first launch and thrown away with the app, so the price of a second trial was a reinstall and the price of a thousand was a script. A trial is worth roughly 20 minutes of Deepgram time: small per user, unbounded in aggregate — exactly the shape of thing that has to be gated on something the app cannot re-mint.
+
+The only such thing available to a mobile app, short of collecting an identifier the stores forbid, is a platform attestation. The two platforms offer very different amounts of it.
+
+### iOS: DeviceCheck
+
+Apple's DeviceCheck stores **two bits per device, per developer team, on Apple's servers**. The bits survive app deletion, reinstall, device reset, and a change of the Apple Account signed in on the device, and Apple documents limiting a free trial to once per device as their intended use for them. The app calls `DCDevice.current.generateToken()` and sends the token up; everything else happens server-side.
+
+```
+client                     Edge Function                    Apple
+DCDevice token  --------> sign ES256 JWT (team key)
+                          POST /v1/query_two_bits    ---->
+                                                     <----  bit0, bit1, last_update_time
+                          bit0 set?  --------------------->  200 { granted: false }
+                          BalanceProvider grant(...)
+                          POST /v1/update_two_bits   ---->   bit0 := 1
+                          insert counta.trial_grants
+                200 { granted: true, credits: 20 }
+```
+
+The bit is set *after* the credits are granted and before the response, so a crash between the two costs the operator one extra trial rather than silently burning a device's only claim. A device Apple has never seen answers "failed to find bit state", which is read as unclaimed.
+
+#### DeviceCheck bit allocation
+
+The two bits belong to the **Apple developer team**, not to an app. Every app the team ships queries and writes the same two bits for a given device, so an app that picks a bit at random will eventually collide with a sibling and silently deny someone else's trial. The allocation is therefore recorded here, and must be checked before any other app on this team uses DeviceCheck (Requirement 11.4).
+
+| Bit | Owner | Meaning when set |
+|---|---|---|
+| `bit0` | Counta | This device has claimed the Counta voice trial |
+| `bit1` | unallocated | Claim it in this table, in the same commit that starts using it |
+
+`DEVICECHECK_TRIAL_BIT` carries the same number in configuration so the code and the doc cannot drift silently, but this table is the record.
+
+### Android: Play Integrity, and what it does not give
+
+Android has no DeviceCheck equivalent. Play Integrity attests that a genuine, unmodified build of the app is running on a genuine Android device with a licensed Play install — and that is all. **It offers no per-device storage, so there is nowhere to record that this device has taken the trial.** The Android gate is therefore:
+
+1. a Play Integrity verdict, verified server-side, requiring device integrity, an app recognised by Play, and a licensed install, and
+2. a row in `counta.trial_grants` keyed on the Supabase user id.
+
+That stops emulators, rooted-device farms, repackaged builds and scripted signups, which is most of the volume abuse. It does **not** stop a person with a real phone deleting the app, signing in anonymously again, and taking a second trial. **The Android trial gate is weaker than the iOS one, and no amount of design fixes that**; saying so plainly here is better than an implementation that reads as equivalent.
+
+The obvious way to close the gap is a device fingerprint — hardware ids, an advertising id, a hash of build properties. Both stores prohibit it for this purpose, so it appears nowhere in this design (Requirement 11.7). If Android farming turns out to be material in practice, the honest levers are a smaller Android trial, a trial that requires a signed-in Google account rather than an anonymous one, or no Android trial at all. Each is a product decision, not a technical trick.
+
+Platforms with no attestation at all (macOS, Windows, Linux, web) are not offered the trial (Requirement 11.10); the endpoint answers `platform_unsupported`.
+
+### Credentials the operator must obtain
+
+| Setting | Where it comes from |
+|---|---|
+| `APPLE_TEAM_ID` | Apple Developer account, Membership details |
+| `APPLE_DEVICECHECK_KEY_ID` | Certificates, Identifiers & Profiles -> Keys -> a key with DeviceCheck enabled |
+| `APPLE_DEVICECHECK_PRIVATE_KEY` | The `.p8` contents for that key, downloadable exactly once |
+| `APPLE_DEVICECHECK_HOST` | `api.devicecheck.apple.com`, or `api.development.devicecheck.apple.com` for builds signed with a development profile |
+| `DEVICECHECK_TRIAL_BIT` | `0`, per the allocation table above |
+| `PLAY_INTEGRITY_PACKAGE_NAME` | The Android application id |
+| `PLAY_INTEGRITY_SERVICE_ACCOUNT_JSON` | Google Cloud service account with the Play Integrity API enabled, linked to the Play Console app |
+| `TRIAL_CREDITS` | Product decision; 20, per Requirement 4.3 |
+| `VOUCHER_ATTEMPT_MAX`, `VOUCHER_ATTEMPT_WINDOW_MINUTES` | Guess-rate budget; 10 per hour to start |
+
+DeviceCheck's sandbox and production hosts hold **separate** bit stores. A device that claimed the trial against the development host has not claimed it against production — which is what makes testing possible at all, and also means a build pointed at the wrong host reports every device as unclaimed.
+
+### Vouchers
+
+A voucher is one code, many users, capped: `max_redemptions` bounds the campaign and the unique index on `(voucher_id, user_id)` bounds the individual. Codes are created by the operator with the service role — inserted by hand or by a small script — and the app has no write path to them at all (Requirement 12.10). There is no self-serve code generation and no admin UI in this iteration; a campaign is a few rows of SQL.
+
+Redemption reuses the credit machinery rather than paralleling it: the same JWT verification, the same `BalanceProvider`, the same keyed-grant idempotency, the same log fields as a block grant. The only genuinely new mechanism is the attempt counter, and it exists because a redeem endpoint that answers unbounded guesses is a code-guessing oracle however carefully its answers are worded.
+
 ---
 
 ## Error Handling
@@ -441,6 +630,15 @@ Refund eligibility is asserted by the client but validated server-side against `
 | Send buffer overflow | Buffer depth check | Drop oldest frames, record in diagnostics |
 | Remote config fetch fails | HTTP error | Fall back to cache, then compiled defaults (8.2) |
 | Crash mid-session | Checkpoint on next launch | Offer to save recovered session (7.2) |
+| Trial already claimed on this device | DeviceCheck bit set, or a `trial_grants` row | 200 `granted: false`; show the paywall, no error copy (11.2, 11.8) |
+| DeviceCheck or Play Integrity unreachable | Attestation call fails or is indeterminate | 503, no credits; the client may retry, and the trial stays unclaimed (11.9) |
+| Attestation rejected as unverifiable | Apple/Google reject the token | 400, no credits, no `trial_grants` row; do not retry the same token |
+| Trial asked for on an unsupported platform | `platform` not `ios` or `android` | 409 `platform_unsupported`; the trial is not offered there at all (11.10) |
+| Voucher unknown or disabled | Lookup on `upper(code)` | 404 `voucher_invalid`, indistinguishable between the two, attempt recorded (12.6) |
+| Voucher expired or fully redeemed | `expires_at`, `redeemed_count` | 409 with the specific reason, attempt recorded (12.7) |
+| Voucher already redeemed by this user | Unique violation on `(voucher_id, user_id)` | 200 `redeemed: false`; re-issue the keyed grant, never a second one (12.5) |
+| Too many failed redemptions | Count in `counta.voucher_attempts` | 429 with `retry_after_seconds`; bounds code guessing (12.8) |
+| Ledger call fails after the redemption row exists | `BalanceProvider` error | 503; the retry finds the row and re-issues the same keyed grant (12.5) |
 
 **Principle applied throughout:** no failure path may destroy the count, and no failure path may spend credits without delivering streaming time.
 
@@ -453,6 +651,11 @@ Refund eligibility is asserted by the client but validated server-side against `
 - Credit spend happens server-side, keyed on the JWT subject. A client cannot spend on behalf of another user or grant itself credits.
 - `counta.voice_blocks` has no client write policy. All writes use the service role key from inside the Edge Function.
 - Rate limit `/voice-block` per user id to bound token-grant abuse independently of balance checks.
+- **No client claim about free credit is ever trusted** (Requirement 4.8). A client that says "I have not had the trial" is asserting something it cannot know and has every incentive to get wrong: the app it runs in is reinstallable, its Supabase user is anonymous and re-mintable, and its RevenueCat id comes with it. Trial eligibility is decided from an attestation the app cannot forge (DeviceCheck bits held by Apple, a Play Integrity verdict signed by Google) plus the Edge Function's own records, and the grant is applied server-side.
+- The same holds for vouchers. A code is validated server-side against `counta.vouchers`, which no client role can read, and the two rules that bound the payout — one redemption per user, and the campaign cap — are database constraints rather than handler logic, so neither concurrency nor a bug in a code path can exceed them.
+- `counta.vouchers`, `counta.voucher_redemptions`, `counta.voucher_attempts` and `counta.trial_grants` have RLS on, no policy, and no grant to `anon` or `authenticated`. The codes are the secret; a select policy for `authenticated`, however narrow, would let any anonymous session enumerate every live campaign.
+- The DeviceCheck private key and the Play Integrity service account credentials live only in function secrets, alongside the Deepgram and RevenueCat keys. A device token is worthless without them, which is why the check has to be server-side rather than in the app.
+- No device fingerprint, advertising identifier or hardware id is collected for gating (Requirement 11.7). The consequence — a weaker Android trial gate — is accepted and documented rather than worked around.
 - The RevenueCat virtual currency API is rate limited to 480 requests per minute across the project, so the Edge Function must handle 429 with backoff and surface it as 503 rather than as a credit error.
 
 ---
@@ -462,6 +665,7 @@ Refund eligibility is asserted by the client but validated server-side against `
 - Audio is transmitted only during an explicitly started voice session (9.2) and never written to disk (9.4).
 - A persistent, visually distinct recording indicator is shown whenever the microphone is live (9.3).
 - Deepgram connections set the model improvement program opt-out (9.7).
+- Trial gating collects no device fingerprint, advertising identifier or hardware id (Requirement 11.7). What leaves the device is an opaque, single-use attestation token that only Apple or Google can interpret; what is stored is a bit at Apple, or a row keyed on the Supabase user id.
 - Diagnostic transcript logging defaults to off and requires explicit opt-in (9.5). This matters more than usual here: the content being transcribed is devotional or affirmational practice, which many users will regard as private in a way ordinary dictation is not. Consent copy should say plainly what is uploaded and what is not.
 
 ---
@@ -508,6 +712,8 @@ A threshold cannot be tuned by intuition. This fixture set is what makes tuning 
 ### Edge Function tests
 
 Deno tests with mocked RevenueCat and Deepgram: happy path, insufficient balance, block in flight, grant failure triggering refund, RevenueCat 429 mapping to 503, JWT rejection.
+
+The trial and redeem endpoints get the same treatment, with the attestation providers faked: a DeviceCheck bit already set, an indeterminate verdict mapped to 503, an unsupported platform, a retried grant paying out exactly once, an unknown code and a disabled code producing byte-identical answers, expiry and cap refusals, a second redemption by the same user, and a ledger failure that completes rather than doubles on retry.
 
 ### Manual verification
 

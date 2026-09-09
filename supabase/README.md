@@ -1,9 +1,10 @@
 # Supabase backend for voice counting
 
-One Edge Function (`voice-block`) and three tables — `counta.voice_blocks`,
-`counta.trial_grants`, `counta.matcher_config` — in a dedicated `counta`
-schema. See `specs/voice-phrase-counting/design.md` for the contract and the
-reasoning behind blocks.
+One Edge Function (`voice-block`) and six tables — `counta.voice_blocks`,
+`counta.trial_grants`, `counta.matcher_config`, `counta.vouchers`,
+`counta.voucher_redemptions`, `counta.voucher_attempts` — in a dedicated
+`counta` schema. See `specs/voice-phrase-counting/design.md` for the contract,
+the reasoning behind blocks, and the device gate on the free trial.
 
 > **The deploy target is a shared staging project.** It already hosts other
 > products, each in its own Postgres schema (`mcpl`, `mcp_oauth`), and `public`
@@ -14,8 +15,8 @@ reasoning behind blocks.
 >   anonymous rules — which the other products share. The settings this feature
 >   needs are set by hand in the dashboard instead (see "Deploy to a project").
 > - `supabase db push` is safe here **only because** the migration is additive
->   and confined to `counta`. It creates a schema and three tables and touches
->   nothing in `public`, `mcpl`, `mcp_oauth` or `auth` beyond a foreign key to
+>   and confined to `counta`. It creates a schema and six tables and touches
+>   nothing in `public`, `mcpl`, `mcp_oauth` or `auth` beyond foreign keys to
 >   `auth.users`. Re-read the migration before pushing any change to it.
 
 ## Layout
@@ -37,7 +38,8 @@ supabase/
     testing/fakes.ts                test doubles; never imported by index.ts
     index_test.ts                   Deno tests, no network
     store_test.ts                   pins every query to the counta schema
-  .env.example                      every secret/setting the function reads
+  .env.example                      every secret/setting the function reads,
+                                    plus the task 10 trial and voucher settings
 ```
 
 ## Run locally
@@ -97,6 +99,23 @@ Injected by the runtime (do not set): `SUPABASE_URL`,
 | `RATE_LIMIT_MAX` | 6 | Max grants per user per window |
 | `RATE_LIMIT_WINDOW_MINUTES` | 10 | Rate-limit window |
 
+The trial and voucher endpoints are task 10; the function does not read the
+settings below yet, and they are listed here so the operator can obtain the
+credentials before that work starts rather than during it.
+
+| Variable | Default | Purpose |
+|---|---|---|
+| `TRIAL_CREDITS` | 20 | Credits granted by the one-per-device trial |
+| `APPLE_TEAM_ID` | required on iOS | Apple developer team that owns the DeviceCheck bits |
+| `APPLE_DEVICECHECK_KEY_ID` | required on iOS | Key id of a DeviceCheck-enabled key |
+| `APPLE_DEVICECHECK_PRIVATE_KEY` | required on iOS | `.p8` contents for that key; downloadable exactly once |
+| `APPLE_DEVICECHECK_HOST` | `api.devicecheck.apple.com` | Use `api.development.devicecheck.apple.com` for development-signed builds; the two hosts hold **separate** bit stores |
+| `DEVICECHECK_TRIAL_BIT` | 0 | Which of the team's two bits means "took the Counta trial". The bits are per team, not per app — check the allocation table in the design doc before changing it |
+| `PLAY_INTEGRITY_PACKAGE_NAME` | required on Android | Android application id the verdict must name |
+| `PLAY_INTEGRITY_SERVICE_ACCOUNT_JSON` | required on Android | Google Cloud service account JSON with the Play Integrity API enabled |
+| `VOUCHER_ATTEMPT_MAX` | 10 | Failed redemptions allowed per user per window |
+| `VOUCHER_ATTEMPT_WINDOW_MINUTES` | 60 | Window for the above |
+
 The RevenueCat customer id is the Supabase user id; the client must identify
 the RevenueCat SDK with the same id (task 10.3).
 
@@ -135,7 +154,10 @@ here can bound cost once a client holds an open socket.
   applies to `public` only, so the migration grants explicitly: usage on the
   schema for `anon`, `authenticated` and `service_role`; `select` for
   `authenticated` on the two tables that have an RLS select policy; full DML
-  for `service_role`. `trial_grants` gets no client grant and no policy at all.
+  for `service_role`. `trial_grants` and the three voucher tables get no client
+  grant and no policy at all — for the vouchers because the codes themselves
+  are the secret, and any select policy would let an anonymous session
+  enumerate every live campaign.
 - The design's partial index `where expires_at > now()` is not valid Postgres
   (`now()` is not immutable). A partial **unique** index on
   `(user_id) where not reconciled` takes its place: it serves the in-flight
@@ -143,6 +165,24 @@ here can bound cost once a client holds an open socket.
   race past the function's own check.
 - `counta.voice_blocks` and `counta.trial_grants` have no client write policy;
   all writes go through the service-role client inside the function.
+- `counta.trial_grants` is keyed on the Supabase user id, which makes a retried
+  trial grant idempotent. It is not the device gate: on iOS the durable "this
+  device already took the trial" answer is a bit held by Apple's DeviceCheck
+  service, and on Android there is no such storage at all, so the row is the
+  only record and the gate is weaker. The migration comment and the design's
+  "Trial eligibility and vouchers" section say why, and why a device
+  fingerprint is not the answer.
+- Two voucher rules are database constraints rather than handler logic, for the
+  same reason the one-live-block index is: a unique index on
+  `voucher_redemptions (voucher_id, user_id)` is the one-redemption-per-user
+  rule, and `vouchers_within_cap` makes it impossible to record more
+  redemptions than a campaign allows. Codes fold to upper case for lookup and
+  uniqueness; `expires_at` is nullable and null means never.
+- Create a campaign by hand with the service role, e.g.
+  `insert into counta.vouchers (code, credits, max_redemptions, expires_at)
+   values ('SPRING24', 50, 500, '2026-12-31T23:59:59Z');`
+  Retire one with `update counta.vouchers set enabled = false where ...`
+  rather than deleting it: the redemption ledger references the row.
 - `counta.matcher_config` is created empty. An absent row means "use the compiled
   `MatcherConfig` defaults"; task 14 makes the app fetch it.
 
