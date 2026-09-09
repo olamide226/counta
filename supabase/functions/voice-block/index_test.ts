@@ -157,7 +157,7 @@ Deno.test("grant: mint failure refunds the debit and returns 503", async () => {
 });
 
 Deno.test("grant: a failed block insert refunds the debit and returns 503", async () => {
-  const blocks = new MemoryBlockStore(new Error("voice_blocks insert: boom"));
+  const blocks = new MemoryBlockStore(new Error("counta.voice_blocks insert: boom"));
   const h = harness({ blocks });
   const { status, body } = await call(h.deps, grantReq());
 

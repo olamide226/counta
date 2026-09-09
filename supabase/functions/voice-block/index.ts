@@ -53,6 +53,9 @@ function deps(): Deps {
   const supabaseUrl = requireEnv("SUPABASE_URL");
   const serviceRoleKey = requireEnv("SUPABASE_SERVICE_ROLE_KEY");
 
+  // Left on the default schema: SupabaseBlockStore scopes its own queries to
+  // `counta` (store.ts), and SupabaseAuthenticator only uses `.auth`, which
+  // no schema setting affects.
   const admin = createClient(supabaseUrl, serviceRoleKey, {
     auth: { persistSession: false, autoRefreshToken: false },
   });
