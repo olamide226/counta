@@ -61,12 +61,12 @@ Each task is scoped to be completable in isolation and leaves the app in a worki
   - [x] 6.6 Implement the decrement gesture with a floor of zero
   - _Requirements: 2.4, 2.5, 2.6, 6.1, 6.2, 6.3, 6.4, 9.3_
 
-- [ ] **7. Implement session persistence and recovery**
-  - [ ] 7.1 Define `SessionRecord` and the local database schema
-  - [ ] 7.2 Checkpoint the live count to local storage every 10 s and on every state transition
-  - [ ] 7.3 On launch, detect an uncompleted checkpoint and offer to save it as a recovered session
-  - [ ] 7.4 Build the session history screen, reverse chronological, showing phrase, date and total
-  - [ ] 7.5 Build the session summary screen showing the voice and manual breakdown
+- [x] **7. Implement session persistence and recovery**
+  - [x] 7.1 Define `SessionRecord` and the local database schema
+  - [x] 7.2 Checkpoint the live count to local storage every 10 s and on every state transition
+  - [x] 7.3 On launch, detect an uncompleted checkpoint and offer to save it as a recovered session
+  - [x] 7.4 Build the session history screen, reverse chronological, showing phrase, date and total
+  - [x] 7.5 Build the session summary screen showing the voice and manual breakdown
   - _Requirements: 7.1, 7.2, 7.3, 7.4, 6.4_
 
 - [ ] **8. Build the Edge Function and remove the hardcoded key**
@@ -122,11 +122,16 @@ Each task is scoped to be completable in isolation and leaves the app in a worki
   - _Requirements: 5.1, 5.2, 5.3, 5.4, 5.5, 5.6_
 
 - [ ] **13. Implement permissions and privacy**
-  - [ ] 13.1 Request microphone permission at session start; on denial, explain and offer a settings deep link with no credit spend
-  - [ ] 13.2 Add the first-run disclosure that audio is sent to a third-party recognition provider during voice sessions
-  - [ ] 13.3 Set the Deepgram model improvement program opt-out on every connection
-  - [ ] 13.4 Verify by inspection and test that no audio is ever written to disk
+  - [x] 13.1 Request microphone permission at session start; on denial, explain and offer a settings deep link with no credit spend
+    - `CloudCountingEngine.start()` asks `AudioSource.hasPermission()` before opening the socket and reports `EngineStatus.permissionDenied` on refusal; the counter screen shows `showMicrophoneDeniedDialog` with an Open Settings button backed by `MicrophonePermissionService` (`permission_handler`).
+  - [x] 13.2 Add the first-run disclosure that audio is sent to a third-party recognition provider during voice sessions
+    - `showVoiceDisclosureSheet` gates the mic button until accepted; persisted as `AppSettings.voiceDisclosureSeen` (Hive field 8, default false).
+  - [x] 13.3 Set the Deepgram model improvement program opt-out on every connection
+    - `DeepgramSocket.buildUri` always appends `mip_opt_out=true`.
+  - [x] 13.4 Verify by inspection and test that no audio is ever written to disk
+    - `test/services/counting/no_audio_to_disk_test.dart` asserts nothing under `lib/core/services/counting/` touches the file system, and that the debug screen's only write is the transcript JSON export.
   - [ ] 13.5 Implement the opt-in diagnostics toggle, defaulted off, uploading transcript segments and match decisions only
+    - Deferred: there is no backend to upload to until task 8 (Edge Function) lands. Nothing leaves the device today, which satisfies the default-off half of 9.5.
   - _Requirements: 2.1, 2.2, 9.1, 9.2, 9.4, 9.5, 9.6, 9.7_
 
 - [ ] **14. Implement remote matcher configuration**

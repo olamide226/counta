@@ -1,11 +1,13 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
-import '../../domain/models/count_session.dart';
+import '../../domain/models/session_record.dart';
 import '../../state/providers/counter_provider.dart';
 import '../../state/providers/sessions_provider.dart';
 import '../../state/providers/settings_provider.dart';
 import '../../state/providers/services_provider.dart';
+import '../widgets/session_summary_card.dart';
+import 'counta_sheet.dart';
 
 class SaveSessionSheet extends ConsumerStatefulWidget {
   const SaveSessionSheet({super.key});
@@ -22,11 +24,12 @@ class _SaveSessionSheetState extends ConsumerState<SaveSessionSheet> {
   @override
   void initState() {
     super.initState();
-    // Save a voice session without retyping what you just spent it chanting.
+    // Save a session without retyping its name: a recovered or continued
+    // session already has one, and a voice session has the phrase you just
+    // spent it chanting.
+    final mantra = ref.read(counterProvider).mantra;
     final phrase = ref.read(sessionControllerProvider).activePhrase;
-    if (phrase != null) {
-      _mantraController.text = phrase.raw;
-    }
+    _mantraController.text = mantra ?? phrase?.raw ?? '';
   }
 
   @override
@@ -43,127 +46,80 @@ class _SaveSessionSheetState extends ConsumerState<SaveSessionSheet> {
     final phrase = session.activePhrase;
     final theme = Theme.of(context);
 
-    return Padding(
-      padding: EdgeInsets.only(
-        left: 24,
-        right: 24,
-        top: 24,
-        bottom: MediaQuery.of(context).viewInsets.bottom + 24,
-      ),
-      child: Column(
-        mainAxisSize: MainAxisSize.min,
-        crossAxisAlignment: CrossAxisAlignment.stretch,
-        children: [
-          Text(
-            'Save Session',
-            style: Theme.of(context).textTheme.headlineSmall,
-          ),
-          const SizedBox(height: 8),
-          Text(
-            'Count: ${counter.count}',
-            style: theme.textTheme.titleMedium,
-          ),
-          if (phrase != null) ...[
-            const SizedBox(height: 12),
-            Container(
-              padding: const EdgeInsets.all(12),
-              decoration: BoxDecoration(
-                color: theme.colorScheme.surfaceContainerHighest,
-                borderRadius: BorderRadius.circular(12),
-              ),
-              child: Row(
-                children: [
-                  Icon(
-                    Icons.graphic_eq_rounded,
-                    size: 18,
-                    color: theme.colorScheme.primary,
-                  ),
-                  const SizedBox(width: 10),
-                  Expanded(
-                    child: Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        Text(
-                          '“${phrase.raw}”',
-                          maxLines: 2,
-                          overflow: TextOverflow.ellipsis,
-                          style: theme.textTheme.bodyMedium?.copyWith(
-                            fontWeight: FontWeight.w600,
-                          ),
-                        ),
-                        const SizedBox(height: 2),
-                        Text(
-                          '${session.voiceCount} by voice · '
-                          '${session.manualCount} by tap',
-                          style: theme.textTheme.bodySmall?.copyWith(
-                            color: theme.colorScheme.onSurfaceVariant,
-                          ),
-                        ),
-                      ],
-                    ),
-                  ),
-                ],
-              ),
-            ),
-          ],
-          const SizedBox(height: 16),
-          if (_errorMessage != null)
-            Container(
-              padding: const EdgeInsets.all(12),
-              margin: const EdgeInsets.only(bottom: 12),
-              decoration: BoxDecoration(
-                color: Theme.of(context).colorScheme.errorContainer,
-                borderRadius: BorderRadius.circular(8),
-              ),
-              child: Row(
-                children: [
-                  Icon(
-                    Icons.error_outline,
-                    color: Theme.of(context).colorScheme.error,
-                    size: 20,
-                  ),
-                  const SizedBox(width: 8),
-                  Expanded(
-                    child: Text(
-                      _errorMessage!,
-                      style: TextStyle(
-                        color: Theme.of(context).colorScheme.error,
-                      ),
-                    ),
-                  ),
-                ],
-              ),
-            ),
-          TextField(
-            controller: _mantraController,
-            decoration: const InputDecoration(
-              labelText: 'Mantra',
-              hintText: 'Enter mantra name',
-              border: OutlineInputBorder(),
-            ),
-            textCapitalization: TextCapitalization.words,
-            onChanged: (_) {
-              if (_errorMessage != null) {
-                setState(() {
-                  _errorMessage = null;
-                });
-              }
-            },
-          ),
+    return CountaSheetBody(
+      children: [
+        Text('Save Session', style: Theme.of(context).textTheme.headlineSmall),
+        const SizedBox(height: 8),
+        Text('Count: ${counter.count}', style: theme.textTheme.titleMedium),
+        if (phrase != null) ...[
           const SizedBox(height: 12),
-          TextField(
-            controller: _notesController,
-            decoration: const InputDecoration(
-              labelText: 'Notes (optional)',
-              hintText: 'Add any notes',
-              border: OutlineInputBorder(),
-            ),
-            maxLines: 2,
+          SessionSummaryCard(
+            title: '“${phrase.raw}”',
+            total: counter.count,
+            voiceCount: session.voiceCount,
+            manualCount: session.manualCount,
+            isVoiceSession: true,
+            // The count is already printed above.
+            showTotal: false,
           ),
-          const SizedBox(height: 24),
-          FilledButton(onPressed: _saveSession, child: const Text('Save')),
         ],
-      ),
+        const SizedBox(height: 16),
+        if (_errorMessage != null)
+          Container(
+            padding: const EdgeInsets.all(12),
+            margin: const EdgeInsets.only(bottom: 12),
+            decoration: BoxDecoration(
+              color: Theme.of(context).colorScheme.errorContainer,
+              borderRadius: BorderRadius.circular(8),
+            ),
+            child: Row(
+              children: [
+                Icon(
+                  Icons.error_outline,
+                  color: Theme.of(context).colorScheme.error,
+                  size: 20,
+                ),
+                const SizedBox(width: 8),
+                Expanded(
+                  child: Text(
+                    _errorMessage!,
+                    style: TextStyle(
+                      color: Theme.of(context).colorScheme.error,
+                    ),
+                  ),
+                ),
+              ],
+            ),
+          ),
+        TextField(
+          controller: _mantraController,
+          decoration: const InputDecoration(
+            labelText: 'Mantra',
+            hintText: 'Enter mantra name',
+            border: OutlineInputBorder(),
+          ),
+          textCapitalization: TextCapitalization.words,
+          onChanged: (_) {
+            if (_errorMessage != null) {
+              setState(() {
+                _errorMessage = null;
+              });
+            }
+          },
+        ),
+        const SizedBox(height: 12),
+        TextField(
+          controller: _notesController,
+          decoration: const InputDecoration(
+            labelText: 'Notes (optional)',
+            hintText: 'Add any notes',
+            border: OutlineInputBorder(),
+          ),
+          maxLines: 2,
+        ),
+        const SizedBox(height: 24),
+        FilledButton(onPressed: _saveSession, child: const Text('Save')),
+      ],
     );
   }
 
@@ -185,22 +141,16 @@ class _SaveSessionSheetState extends ConsumerState<SaveSessionSheet> {
       _errorMessage = null;
     });
 
-    final session = CountSession(
+    final notes = _notesController.text.trim();
+    final session = buildSessionRecord(
       mantra: mantra,
-      startedAt: counter.sessionStart,
+      settings: settings,
+      counter: counter,
+      phrase: phrase,
+      voiceCount: controller.voiceCount,
+      manualCount: controller.manualCount,
       endedAt: DateTime.now(),
-      finalCount: counter.count,
-      threshold: counter.threshold,
-      repeatInterval: counter.repeatInterval,
-      soundMode: settings.soundMode,
-      themeModeChoice: settings.themeModeChoice,
-      themeId: settings.themeId,
-      notes: _notesController.text.trim().isNotEmpty
-          ? _notesController.text.trim()
-          : null,
-      phrase: phrase?.raw,
-      voiceCount: phrase != null ? controller.voiceCount : null,
-      manualCount: phrase != null ? controller.manualCount : null,
+      notes: notes.isNotEmpty ? notes : null,
     );
 
     await ref.read(sessionsProvider.notifier).saveSession(session);
@@ -218,9 +168,8 @@ class _SaveSessionSheetState extends ConsumerState<SaveSessionSheet> {
 }
 
 Future<void> showSaveSessionSheet(BuildContext context) {
-  return showModalBottomSheet(
+  return showCountaSheet<void>(
     context: context,
-    isScrollControlled: true,
     builder: (_) => const SaveSessionSheet(),
   );
 }

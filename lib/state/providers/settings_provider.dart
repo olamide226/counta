@@ -63,4 +63,13 @@ class SettingsNotifier extends StateNotifier<AppSettings> {
     state = updated;
     await _repository.saveSettings(updated);
   }
+
+  /// Records that the third-party audio disclosure has been shown, so it is
+  /// only ever presented before the first voice session.
+  Future<void> markVoiceDisclosureSeen() async {
+    if (state.voiceDisclosureSeen) return;
+    final updated = state.copyWith(voiceDisclosureSeen: true);
+    state = updated;
+    await _repository.saveSettings(updated);
+  }
 }

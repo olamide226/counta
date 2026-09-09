@@ -33,4 +33,3 @@ final liveActivityServiceProvider = Provider<LiveActivityService>((ref) {
   service.init();
   return service;
 });
-

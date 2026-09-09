@@ -188,6 +188,51 @@ void main() {
       expect(session.finalCount, 10000);
     });
 
+    test('is completed by default and exposes duration', () {
+      final session = CountSession(
+        mantra: 'Test',
+        startedAt: DateTime(2026, 2, 2, 10),
+        endedAt: DateTime(2026, 2, 2, 10, 45),
+        finalCount: 50,
+        soundMode: SoundMode.vibrate,
+        themeModeChoice: ThemeModeChoice.system,
+        themeId: AppThemeId.mono,
+      );
+
+      expect(session.completed, isTrue);
+      expect(session.creditsConsumed, isNull);
+      expect(session.duration, const Duration(minutes: 45));
+    });
+
+    test('copyWith keeps the id and overrides only what is given', () {
+      final now = DateTime.now();
+      final session = CountSession(
+        id: 'keep-me',
+        mantra: 'Test',
+        startedAt: now,
+        endedAt: now,
+        finalCount: 50,
+        soundMode: SoundMode.vibrate,
+        themeModeChoice: ThemeModeChoice.system,
+        themeId: AppThemeId.mono,
+        phrase: 'test',
+        voiceCount: 30,
+        manualCount: 20,
+      );
+
+      final recovered = session.copyWith(completed: false, creditsConsumed: 2);
+
+      expect(recovered.id, 'keep-me');
+      expect(recovered.completed, isFalse);
+      expect(recovered.creditsConsumed, 2);
+      expect(recovered.mantra, 'Test');
+      expect(recovered.phrase, 'test');
+      expect(recovered.voiceCount, 30);
+      expect(recovered.manualCount, 20);
+      expect(recovered.finalCount, 50);
+      expect(session.completed, isTrue, reason: 'original is untouched');
+    });
+
     test('can include device locale', () {
       final now = DateTime.now();
 

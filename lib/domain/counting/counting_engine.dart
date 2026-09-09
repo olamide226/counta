@@ -10,13 +10,15 @@ enum EngineStatus {
   degraded,
   exhausted,
   error,
+
+  /// The user refused microphone access, so no audio can be captured and no
+  /// socket was opened. Distinct from [error] because the fix is in system
+  /// settings, not a retry.
+  permissionDenied,
 }
 
 /// Source of a count event (voice detection or manual tap).
-enum CountSource {
-  voice,
-  manual,
-}
+enum CountSource { voice, manual }
 
 /// Event emitted whenever a count increment occurs.
 class CountEvent {

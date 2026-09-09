@@ -6,6 +6,7 @@ import '../../domain/models/enums.dart';
 
 const String settingsBoxName = 'settings';
 const String sessionsBoxName = 'sessions';
+const String sessionCheckpointBoxName = 'session_checkpoint';
 
 Future<void> initHive() async {
   await Hive.initFlutter();
@@ -17,10 +18,16 @@ Future<void> initHive() async {
   Hive.registerAdapter(AppSettingsAdapter());
   Hive.registerAdapter(CountSessionAdapter());
 
-  // Open boxes
-  await Hive.openBox<AppSettings>(settingsBoxName);
-  await Hive.openBox<CountSession>(sessionsBoxName);
+  // Concurrently: three independent file opens on the startup path, and the
+  // app shows a spinner until the last one lands.
+  await Future.wait([
+    Hive.openBox<AppSettings>(settingsBoxName),
+    Hive.openBox<CountSession>(sessionsBoxName),
+    Hive.openBox<CountSession>(sessionCheckpointBoxName),
+  ]);
 }
 
 Box<AppSettings> getSettingsBox() => Hive.box<AppSettings>(settingsBoxName);
 Box<CountSession> getSessionsBox() => Hive.box<CountSession>(sessionsBoxName);
+Box<CountSession> getSessionCheckpointBox() =>
+    Hive.box<CountSession>(sessionCheckpointBoxName);

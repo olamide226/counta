@@ -34,7 +34,13 @@ void main() {
       expect(res.isValid, true);
       expect(res.phraseSpec, isNotNull);
       expect(res.phraseSpec!.raw, "I'm rich in wisdom");
-      expect(res.phraseSpec!.normalisedTokens, ['i', 'am', 'rich', 'in', 'wisdom']);
+      expect(res.phraseSpec!.normalisedTokens, [
+        'i',
+        'am',
+        'rich',
+        'in',
+        'wisdom',
+      ]);
       expect(res.phraseSpec!.keyterms, contains("I'm rich in wisdom"));
     });
   });

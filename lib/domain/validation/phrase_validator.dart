@@ -14,26 +14,18 @@ class PhraseValidationResult {
   });
 
   factory PhraseValidationResult.success(PhraseSpec phraseSpec) {
-    return PhraseValidationResult._(
-      isValid: true,
-      phraseSpec: phraseSpec,
-    );
+    return PhraseValidationResult._(isValid: true, phraseSpec: phraseSpec);
   }
 
   factory PhraseValidationResult.error(String message) {
-    return PhraseValidationResult._(
-      isValid: false,
-      errorMessage: message,
-    );
+    return PhraseValidationResult._(isValid: false, errorMessage: message);
   }
 }
 
 class PhraseValidator {
   final MatcherConfig matcherConfig;
 
-  PhraseValidator({
-    this.matcherConfig = const MatcherConfig(),
-  });
+  PhraseValidator({this.matcherConfig = const MatcherConfig()});
 
   /// Normalises and validates a raw phrase input string.
   PhraseValidationResult validate(String rawPhrase) {

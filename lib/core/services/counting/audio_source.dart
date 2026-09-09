@@ -19,6 +19,20 @@ class AudioSourceStalled implements Exception {
       'AudioSourceStalled: no microphone frames for ${silentFor.inSeconds}s';
 }
 
+/// Raised on the audio stream when the user has not granted microphone access.
+///
+/// Typed, and raised on the same channel as [AudioSourceStalled], so callers
+/// learn about a refusal the same way they learn about every other capture
+/// failure. This class is the single owner of the permission decision: asking
+/// again anywhere else races this one and answers for a different moment.
+class AudioSourcePermissionDenied implements Exception {
+  const AudioSourcePermissionDenied();
+
+  @override
+  String toString() =>
+      'AudioSourcePermissionDenied: microphone access was refused';
+}
+
 /// Captures 16 kHz mono PCM16 audio frames from the microphone and streams
 /// them to subscribers.
 class AudioSource {
@@ -39,7 +53,7 @@ class AudioSource {
   static const Duration stallTimeout = Duration(seconds: 3);
 
   AudioSource({AudioRecorder? recorder})
-      : _recorder = recorder ?? AudioRecorder();
+    : _recorder = recorder ?? AudioRecorder();
 
   /// Check microphone permission.
   Future<bool> hasPermission() async {
@@ -49,9 +63,7 @@ class AudioSource {
   /// Start recording audio stream.
   Stream<Uint8List> start({int sampleRate = 16000}) {
     _stopping = null;
-    _controller = StreamController<Uint8List>.broadcast(
-      onCancel: () => stop(),
-    );
+    _controller = StreamController<Uint8List>.broadcast(onCancel: () => stop());
 
     _startCapture(sampleRate);
     return _controller!.stream;
@@ -62,37 +74,35 @@ class AudioSource {
   /// silencing the user's music) only show up on a real device.
   @visibleForTesting
   static RecordConfig recordConfig(int sampleRate) => RecordConfig(
-        encoder: AudioEncoder.pcm16bits,
-        sampleRate: sampleRate,
-        numChannels: 1,
-        iosConfig: const IosRecordConfig(
-          // Counta plays a system click and a haptic on every tap. Without
-          // this, iOS raises an AVAudioSession interruption for those sounds,
-          // and record's observer responds by pausing capture permanently —
-          // the microphone dies mid-session with no error.
-          allowHapticsAndSystemSoundsDuringRecording: true,
-          categoryOptions: [
-            // Without this, activating a playAndRecord session takes the audio
-            // route exclusively and stops whatever the user was listening to.
-            // Counting alongside music or a podcast is a normal way to use the
-            // app, so we share the route instead of seizing it.
-            IosAudioCategoryOption.mixWithOthers,
-            IosAudioCategoryOption.defaultToSpeaker,
-            IosAudioCategoryOption.allowBluetooth,
-            IosAudioCategoryOption.allowBluetoothA2DP,
-            // Keeps capture alive when the mic is muted rather than ending the
-            // session outright (iOS 14.5+, ignored on older versions).
-            IosAudioCategoryOption.overrideMutedMicrophoneInterruption,
-          ],
-        ),
-      );
+    encoder: AudioEncoder.pcm16bits,
+    sampleRate: sampleRate,
+    numChannels: 1,
+    iosConfig: const IosRecordConfig(
+      // Counta plays a system click and a haptic on every tap. Without
+      // this, iOS raises an AVAudioSession interruption for those sounds,
+      // and record's observer responds by pausing capture permanently —
+      // the microphone dies mid-session with no error.
+      allowHapticsAndSystemSoundsDuringRecording: true,
+      categoryOptions: [
+        // Without this, activating a playAndRecord session takes the audio
+        // route exclusively and stops whatever the user was listening to.
+        // Counting alongside music or a podcast is a normal way to use the
+        // app, so we share the route instead of seizing it.
+        IosAudioCategoryOption.mixWithOthers,
+        IosAudioCategoryOption.defaultToSpeaker,
+        IosAudioCategoryOption.allowBluetooth,
+        IosAudioCategoryOption.allowBluetoothA2DP,
+        // Keeps capture alive when the mic is muted rather than ending the
+        // session outright (iOS 14.5+, ignored on older versions).
+        IosAudioCategoryOption.overrideMutedMicrophoneInterruption,
+      ],
+    ),
+  );
 
   Future<void> _startCapture(int sampleRate) async {
     final hasPerm = await hasPermission();
     if (!hasPerm) {
-      _controller?.addError(
-        StateError('Microphone permission not granted'),
-      );
+      _controller?.addError(StateError('Microphone permission not granted'));
       return;
     }
 

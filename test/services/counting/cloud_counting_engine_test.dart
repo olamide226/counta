@@ -30,11 +30,14 @@ class FakeSpeechSocket implements SpeechSocket {
   @override
   String? closeDescription;
 
+  int connectCount = 0;
+
   @override
   Future<void> connect({
     required String apiKeyOrToken,
     PhraseSpec? phrase,
   }) async {
+    connectCount++;
     _currentState = SocketState.connected;
     _stateController.add(_currentState);
   }
@@ -53,8 +56,10 @@ class FakeSpeechSocket implements SpeechSocket {
 
   void emitActivity() => _activityController.add(null);
 
+  final List<Uint8List> sentFrames = [];
+
   @override
-  void sendAudio(Uint8List pcmFrames) {}
+  void sendAudio(Uint8List pcmFrames) => sentFrames.add(pcmFrames);
 
   @override
   Future<void> closeGracefully({int drainTimeoutMs = 2000}) async {
@@ -75,8 +80,15 @@ class FakeAudioSource implements AudioSource {
   int startCount = 0;
   int stopCount = 0;
 
+  /// What the OS answers when capture asks for the microphone.
+  bool permissionGranted = true;
+
+  /// Holds the stream silent: no first frame, no error. Models a microphone
+  /// that has been granted but never delivers, so a stop can race startup.
+  bool silent = false;
+
   @override
-  Future<bool> hasPermission() async => true;
+  Future<bool> hasPermission() async => permissionGranted;
 
   @override
   Stream<Uint8List> start({int sampleRate = 16000}) {
@@ -84,6 +96,19 @@ class FakeAudioSource implements AudioSource {
     // A fresh controller per start, so the engine can restart capture after a
     // stall the same way the real source does.
     _controller = StreamController<Uint8List>.broadcast();
+
+    // The real source answers on the stream, asynchronously: a refusal as a
+    // typed error, and a working microphone as its first frame.
+    scheduleMicrotask(() {
+      if (silent) {
+        return;
+      }
+      if (!permissionGranted) {
+        _controller?.addError(const AudioSourcePermissionDenied());
+      } else {
+        _controller?.add(Uint8List(320));
+      }
+    });
     return _controller!.stream;
   }
 
@@ -127,6 +152,89 @@ void main() {
 
     tearDown(() async {
       await engine.dispose();
+    });
+
+    group('microphone permission', () {
+      test(
+        'denied permission reports permissionDenied and opens no socket',
+        () async {
+          fakeAudio.permissionGranted = false;
+          final statuses = <EngineStatus>[];
+          final diagnostics = <String>[];
+          engine.status.listen(statuses.add);
+          engine.diagnostics.listen(diagnostics.add);
+
+          await engine.start();
+          await Future<void>.delayed(Duration.zero);
+
+          expect(engine.currentStatus, EngineStatus.permissionDenied);
+          expect(statuses.last, EngineStatus.permissionDenied);
+          expect(diagnostics, isNotEmpty);
+          // No streaming time may be spent on a session that cannot capture
+          // audio. Capture is attempted — that is what raises the refusal —
+          // but no socket is ever opened, and the microphone is released.
+          expect(fakeSocket.connectCount, 0);
+          expect(fakeAudio.startCount, 1);
+          expect(fakeAudio.stopCount, greaterThanOrEqualTo(1));
+        },
+      );
+
+      test('capture is confirmed before the socket is opened', () async {
+        await engine.start();
+        await Future<void>.delayed(Duration.zero);
+
+        expect(fakeSocket.connectCount, 1);
+        expect(fakeAudio.startCount, 1);
+        expect(engine.currentStatus, EngineStatus.live);
+      });
+
+      test('audio captured while connecting is not lost', () async {
+        await engine.start();
+        await Future<void>.delayed(Duration.zero);
+
+        // Capture now starts before the socket, so the frames that prove the
+        // microphone works arrive before there is anywhere to send them. They
+        // are held and flushed on connect rather than dropped, which would
+        // silently lose the opening repetitions of every session.
+        expect(fakeSocket.sentFrames, isNotEmpty);
+
+        fakeAudio.emitFrame();
+        await Future<void>.delayed(Duration.zero);
+        expect(fakeSocket.sentFrames, hasLength(2));
+      });
+
+      test('a stop while capture is still unconfirmed does not hang', () async {
+        // The microphone was granted but has not delivered its first frame, so
+        // the confirmation is still pending. Stopping cancels the very
+        // subscription that would settle it; without stop() completing the
+        // confirmation itself, this start never returns.
+        fakeAudio.silent = true;
+        final pendingStart = engine.start();
+        await Future<void>.delayed(Duration.zero);
+        expect(fakeSocket.connectCount, 0);
+
+        await engine.stop();
+        await pendingStart.timeout(
+          const Duration(seconds: 2),
+          onTimeout: () => fail('start() never completed after stop()'),
+        );
+
+        expect(fakeSocket.connectCount, 0);
+        expect(engine.currentStatus, EngineStatus.idle);
+      });
+
+      test(
+        'stop after a denied start is clean and returns an empty summary',
+        () async {
+          fakeAudio.permissionGranted = false;
+          await engine.start();
+
+          final summary = await engine.stop();
+
+          expect(summary.totalCount, 0);
+          expect(engine.currentStatus, EngineStatus.idle);
+        },
+      );
     });
 
     test('start transitions status to connecting then live', () async {

@@ -27,16 +27,18 @@ Widget _wrap({required double width}) {
 
 void main() {
   group('QuickControlsBar', () {
-    testWidgets('does not overflow at the narrow width the info pane can hit',
-        (tester) async {
+    testWidgets('does not overflow at the narrow width the info pane can hit', (
+      tester,
+    ) async {
       // 49px is the width reported in the RenderFlex overflow: the five icon
       // buttons needed 272px and ran 223px past the edge.
       await tester.pumpWidget(_wrap(width: 49));
       expect(tester.takeException(), isNull);
     });
 
-    testWidgets('does not overflow across the full range of pane widths',
-        (tester) async {
+    testWidgets('does not overflow across the full range of pane widths', (
+      tester,
+    ) async {
       for (final width in <double>[1, 20, 49, 100, 180, 319, 320, 400, 800]) {
         await tester.pumpWidget(_wrap(width: width));
         expect(
@@ -47,7 +49,9 @@ void main() {
       }
     });
 
-    testWidgets('keeps all five controls reachable when narrow', (tester) async {
+    testWidgets('keeps all five controls reachable when narrow', (
+      tester,
+    ) async {
       await tester.pumpWidget(_wrap(width: 49));
 
       expect(find.byIcon(Icons.refresh_rounded), findsOneWidget);

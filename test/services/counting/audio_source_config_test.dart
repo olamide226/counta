@@ -17,9 +17,9 @@ void main() {
       // The app plays a system click on every tap. Without this, iOS raises an
       // interruption and record's observer pauses capture permanently.
       expect(
-        AudioSource.recordConfig(16000)
-            .iosConfig
-            .allowHapticsAndSystemSoundsDuringRecording,
+        AudioSource.recordConfig(
+          16000,
+        ).iosConfig.allowHapticsAndSystemSoundsDuringRecording,
         isTrue,
       );
     });

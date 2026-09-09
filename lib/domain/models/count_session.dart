@@ -61,8 +61,24 @@ class CountSession {
   @HiveField(14)
   final int? manualCount;
 
+  /// Whether the session ended cleanly.
+  ///
+  /// False for a record recovered from a checkpoint after the app was killed
+  /// mid-session (requirement 7.2): the counts are real but the end time is
+  /// only as accurate as the last checkpoint. Records written before this
+  /// field existed read back as completed.
+  @HiveField(15, defaultValue: true)
+  final bool completed;
+
+  /// Voice credits debited for this session. Null until block accounting
+  /// exists, and for tap-only sessions.
+  @HiveField(16)
+  final int? creditsConsumed;
+
   /// Whether this session recorded any voice-counted repetitions.
   bool get isVoiceSession => (voiceCount ?? 0) > 0 || phrase != null;
+
+  Duration get duration => endedAt.difference(startedAt);
 
   CountSession({
     String? id,
@@ -80,5 +96,46 @@ class CountSession {
     this.phrase,
     this.voiceCount,
     this.manualCount,
+    this.completed = true,
+    this.creditsConsumed,
   }) : id = id ?? _uuid.v4();
+
+  CountSession copyWith({
+    String? mantra,
+    DateTime? startedAt,
+    DateTime? endedAt,
+    int? finalCount,
+    int? threshold,
+    int? repeatInterval,
+    SoundMode? soundMode,
+    ThemeModeChoice? themeModeChoice,
+    AppThemeId? themeId,
+    String? notes,
+    String? deviceLocale,
+    String? phrase,
+    int? voiceCount,
+    int? manualCount,
+    bool? completed,
+    int? creditsConsumed,
+  }) {
+    return CountSession(
+      id: id,
+      mantra: mantra ?? this.mantra,
+      startedAt: startedAt ?? this.startedAt,
+      endedAt: endedAt ?? this.endedAt,
+      finalCount: finalCount ?? this.finalCount,
+      threshold: threshold ?? this.threshold,
+      repeatInterval: repeatInterval ?? this.repeatInterval,
+      soundMode: soundMode ?? this.soundMode,
+      themeModeChoice: themeModeChoice ?? this.themeModeChoice,
+      themeId: themeId ?? this.themeId,
+      notes: notes ?? this.notes,
+      deviceLocale: deviceLocale ?? this.deviceLocale,
+      phrase: phrase ?? this.phrase,
+      voiceCount: voiceCount ?? this.voiceCount,
+      manualCount: manualCount ?? this.manualCount,
+      completed: completed ?? this.completed,
+      creditsConsumed: creditsConsumed ?? this.creditsConsumed,
+    );
+  }
 }

@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
@@ -8,11 +10,17 @@ import '../../state/providers/session_controller.dart';
 import '../../state/providers/app_lifecycle_provider.dart';
 import '../../state/providers/counter_provider.dart';
 import '../../state/providers/services_provider.dart';
+import '../../core/services/microphone_settings.dart';
+import '../../domain/counting/counting_engine.dart';
+import '../../domain/models/count_session.dart';
+import '../../state/providers/session_recovery.dart';
 import '../../state/providers/settings_provider.dart';
 import '../sheets/alert_config_sheet.dart';
+import '../sheets/recover_session_sheet.dart';
 import '../sheets/save_session_sheet.dart';
 import '../sheets/sound_mode_sheet.dart';
 import '../widgets/count_display.dart';
+import '../widgets/microphone_denied_dialog.dart';
 import '../widgets/quick_controls_bar.dart';
 import '../widgets/resizable_tap_layout.dart';
 import '../widgets/tap_zone.dart';
@@ -31,22 +39,50 @@ class CounterScreen extends ConsumerStatefulWidget {
 
 class _CounterScreenState extends ConsumerState<CounterScreen>
     with WidgetsBindingObserver {
+  ProviderSubscription<AsyncValue<CountSession?>>? _recoverySubscription;
+  bool _recoveryOffered = false;
+
   @override
   void initState() {
     super.initState();
     WidgetsBinding.instance.addObserver(this);
 
-    // Initialize notification service and clear stale notifications from
-    // any previous session that may have been killed or crashed.
-    WidgetsBinding.instance.addPostFrameCallback((_) async {
-      final ns = ref.read(notificationServiceProvider);
-      await ns.init();
-      await ns.cancelAllNotifications();
+    // Independent of recovery. Awaiting these used to hold the sheet behind
+    // two platform round-trips, during which a tap could land on a session
+    // the user had not decided about yet.
+    unawaited(_initNotifications());
+
+    // The screen only reacts: taking the checkpoint and attaching the
+    // checkpointer are `sessionStartupProvider`'s job, done in app
+    // composition before this screen exists.
+    _recoverySubscription = ref.listenManual<AsyncValue<CountSession?>>(
+      sessionStartupProvider,
+      (_, next) => _offerRecovery(next),
+      fireImmediately: true,
+    );
+  }
+
+  Future<void> _initNotifications() async {
+    final ns = ref.read(notificationServiceProvider);
+    await ns.init();
+    await ns.cancelAllNotifications();
+  }
+
+  void _offerRecovery(AsyncValue<CountSession?> startup) {
+    if (_recoveryOffered) return;
+    final checkpoint = startup.valueOrNull;
+    if (checkpoint == null) return;
+    _recoveryOffered = true;
+
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (!mounted) return;
+      showRecoverSessionSheet(context, checkpoint);
     });
   }
 
   @override
   void dispose() {
+    _recoverySubscription?.close();
     WidgetsBinding.instance.removeObserver(this);
     super.dispose();
   }
@@ -64,23 +100,35 @@ class _CounterScreenState extends ConsumerState<CounterScreen>
       MaterialPageRoute(
         builder: (_) => PhraseSetupScreen(
           initialPhrase: sessionController.activePhrase?.raw,
+          // The controller owns the whole voice lifecycle — disclosure,
+          // engine swap, and the fallback to tap counting when the engine
+          // cannot run. The screen only reacts to how it ended.
           onStartSession: (phraseSpec) async {
-            sessionController.setEngine(ref.read(voiceEngineFactoryProvider)());
-            await sessionController.startSession(phraseSpec);
+            final outcome = await sessionController.startVoiceSession(
+              phraseSpec,
+            );
+            if (outcome == EngineStatus.permissionDenied) {
+              await _handleMicrophoneDenied();
+            }
           },
         ),
       ),
     );
   }
 
+  /// The engine refused to start because the microphone was not granted. The
+  /// controller has already handed the count back to the tap engine, so all
+  /// that is left is telling the user where the fix lives.
+  Future<void> _handleMicrophoneDenied() async {
+    if (!mounted) return;
+    await showMicrophoneDeniedDialog(
+      context,
+      onOpenSettings: openMicrophoneSettings,
+    );
+  }
+
   Future<void> _stopVoiceSession(SessionController sessionController) async {
-    try {
-      await sessionController.stop();
-    } finally {
-      // Revert engine to TapCountingEngine even if teardown complained, so the
-      // app is never left holding a dead cloud engine.
-      sessionController.setEngine(ref.read(tapEngineFactoryProvider)());
-    }
+    await sessionController.stopVoiceSession();
 
     // Clear all notifications — the voice session notification and any stale
     // resume notifications from a previous session.

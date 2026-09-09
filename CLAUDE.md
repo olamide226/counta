@@ -37,7 +37,7 @@ domain/models → data/repositories → state/providers → ui/screens
               core/services ------
 ```
 
-- **domain/models/** — Business entities with `@HiveType` annotations for persistence. Immutable with `copyWith()`. Must never import Flutter.
+- **domain/models/** — Business entities with `@HiveType` annotations for persistence. Immutable with `copyWith()`. Must never import Flutter. `buildSessionRecord()` (`session_record.dart`) is the one builder for a `CountSession`, used by both the checkpoint snapshot and the save sheet.
 - **domain/counting/** — Voice-counting domain: the `CountingEngine` and `SpeechSocket` ports, `PhraseMatcher`, `PhraseNormaliser`, `TranscriptSegment`. Pure Dart, no plugins — this is what the unit tests exercise.
 - **domain/validation/** — Input rules, e.g. `PhraseValidator` (2–12 normalised tokens).
 - **data/repositories/** — Hive persistence layer. `SettingsRepository` (single document) and `SessionsRepository` (collection).
@@ -49,18 +49,22 @@ domain/models → data/repositories → state/providers → ui/screens
 - **core/theme/** — `ThemeRegistry` with 5 color schemes, plus presentation extensions like `SoundModePresentation`.
 - **ui/screens/** — Full pages using `ConsumerWidget`/`ConsumerStatefulWidget`.
 - **ui/screens/debug/** — Dev-only tooling, gated behind `BuildConfig.showDebugTools`.
-- **ui/sheets/** — Bottom sheets for alert config, save session, sound mode.
-- **ui/widgets/** — Reusable components (count display, tap zone, controls bar, voice session banner).
+- **ui/sheets/** — Bottom sheets for alert config, save session, sound mode, recovery and the voice disclosure. All of them go through `showCountaSheet` / `CountaSheetBody` so they agree on insets; dialogs belong in `ui/widgets/`, not here.
+- **ui/widgets/** — Reusable components (count display, tap zone, controls bar, voice session banner, session summary card, microphone-denied dialog).
 
 **Layer rule:** dependencies point inward. `domain/` imports nothing from `core/`, `data/`, `state/`, or `ui/`, and never imports Flutter or a plugin. Adapters in `core/services/counting/` implement the ports declared in `domain/counting/`.
 
 ## Voice counting
 
-Two engines implement `CountingEngine`: `TapCountingEngine` (default) and `CloudCountingEngine` (streaming STT). `SessionController.setEngine()` swaps between them; screens get engines from `voiceEngineFactoryProvider` / `tapEngineFactoryProvider` rather than constructing them.
+Two engines implement `CountingEngine`: `TapCountingEngine` (default) and `CloudCountingEngine` (streaming STT). `SessionController` owns the whole voice lifecycle — screens call `startVoiceSession(phrase)` / `stopVoiceSession()` and never swap engines themselves. `startVoiceSession` consults the disclosure gate, installs the voice engine from the injected factory, and on any terminal status (`permissionDenied`, `error`, `exhausted`) disposes the failed engine, rolls the phrase and start time back, and falls back to tap counting. It returns the status the attempt ended at, which is what the screen reacts to. `setEngine()` disposes the engine it replaces.
+
+The third-party audio disclosure is gated on the voice-start flow, not on a screen: `SessionController.disclosureGate` is supplied by the app shell (`app.dart`), which owns the navigator the sheet needs. This keeps the UI dependency pointing inward.
 
 The interface carries `counts`, `status`, `diagnostics`, `incrementManual()` and `decrementManual()` — add capabilities here rather than type-checking for a concrete engine.
 
 `CloudCountingEngine` retries dropped connections for `reconnectWindow` (default 5 min) with jittered backoff, because sessions run 1–2 hours. A socket drop reconnects without restarting the microphone; only a mic stall (`AudioSourceStalled`) restarts capture.
+
+**`AudioSource` is the single owner of the microphone permission.** It asks (the `record` plugin prompts as part of `hasPermission()`) and reports a refusal as a typed `AudioSourcePermissionDenied` on the same error channel as `AudioSourceStalled`. Nothing else may ask — a second question races the first. Capture therefore starts *before* the socket, and has to deliver a real frame before anything is connected, so no streaming time is ever spent on a session that cannot capture audio; frames captured during that window are buffered and flushed on connect. `openMicrophoneSettings()` (`core/services/microphone_settings.dart`) is the only permission UI: it sends the user to system settings, which on iOS is the only way to change a refusal.
 
 **Platform requirements:** iOS declares `UIBackgroundModes: audio` so sessions survive backgrounding, and `AudioSource` sets `allowHapticsAndSystemSoundsDuringRecording` — without it the app's own tap sounds raise an audio-session interruption that permanently pauses recording. Android background recording is **not** supported yet: it needs a foreground service, which `record_android` does not provide.
 
@@ -73,17 +77,26 @@ The interface carries `counts`, `status`, `diagnostics`, `incrementManual()` and
 - `sessionsProvider` — saved session list from Hive
 - `screenWakeServiceProvider` — holds the wakelock while a voice session is in the foreground
 - `hiveInitProvider` — `FutureProvider` for async Hive initialization at startup
+- `sessionStartupProvider` — `FutureProvider<CountSession?>`: takes the previous run's checkpoint, then attaches the checkpointer. Watched by `App`; must run before anything counts
 - `appLifecycleProvider` — handles background/foreground transitions; shows an ongoing notification for a backgrounded voice session instead of a resume prompt
 
 ## Hive Persistence
 
-Two Hive boxes: `'settings'` (single `AppSettings` doc) and `'sessions'` (collection of `CountSession` docs). Type IDs: `AppSettings`=0, `CountSession`=1, `SoundMode`=10, `ThemeModeChoice`=11, `AppThemeId`=12.
+Three Hive boxes: `'settings'` (single `AppSettings` doc), `'sessions'` (collection of `CountSession` docs) and `'session_checkpoint'` (at most one `CountSession`: the session in progress). Type IDs: `AppSettings`=0, `CountSession`=1, `SoundMode`=10, `ThemeModeChoice`=11, `AppThemeId`=12.
 
-`CountSession` fields 12–14 (`phrase`, `voiceCount`, `manualCount`) are nullable so sessions saved before voice counting existed still load.
+`CountSession` fields 12–14 (`phrase`, `voiceCount`, `manualCount`) are nullable so sessions saved before voice counting existed still load. Field 15 `completed` defaults to `true` for the same reason; it is `false` on a record recovered from a checkpoint. Field 16 `creditsConsumed` is nullable until block accounting exists.
+
+**Startup order matters.** `sessionStartupProvider` (`state/providers/session_recovery.dart`) is the app's first step, kicked off from `App`: it calls `SessionCheckpointStore.take()` — read *and* delete — and only then attaches `SessionCheckpointer`. Reading without deleting, or attaching the checkpointer first, lets the first count of the new launch overwrite the crashed run's record before the user has decided anything. The provider exposes the pending `CountSession?`; `CounterScreen` only reacts to it to show `RecoverSessionSheet`. Never read `sessionCheckpointerProvider` from a screen.
+
+`SessionCheckpointer` writes at most once per 10 s, and only when the *persisted* content changed (total, voice/manual split, phrase). Engine status is not persisted, so status churn costs nothing; an idle session holds no timer at all. Because the startup step has already emptied the store, clearing is unconditional.
+
+Retiring a checkpoint happens in exactly one place: `SessionsNotifier.saveSession`. Save paths must not clear it themselves.
 
 ## Testing
 
 Tests live in `test/` mirroring `lib/` structure. Uses `ProviderContainer` with mock overrides. Core business logic (counter provider, alert service, models, themes) is tested; UI and platform services are not.
+
+Shared doubles live in `test/helpers/` — use them rather than growing another copy: `InMemoryCheckpointStore`, `FakeCountingEngine` (configurable `startStatus`, records starts/manual calls/disposal), `testSession(...)`, `withTempHive()`, and the settings/sessions/service mocks.
 
 ## Conventions
 

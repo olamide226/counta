@@ -3,52 +3,8 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:counta/state/providers/counter_provider.dart';
 import 'package:counta/state/providers/settings_provider.dart';
 import 'package:counta/state/providers/services_provider.dart';
-import 'package:counta/core/services/tap_feedback_service.dart';
-import 'package:counta/core/services/notification_service.dart';
-import 'package:counta/domain/models/app_settings.dart';
-import 'package:counta/domain/models/enums.dart';
 
-class MockSettingsRepository {
-  AppSettings getSettings() => AppSettings.defaults();
-  Future<void> saveSettings(AppSettings settings) async {}
-}
-
-class MockTapFeedbackService implements TapFeedbackService {
-  @override
-  Future<void> init() async {}
-
-  @override
-  Future<void> playTapFeedback(SoundMode mode) async {}
-
-  @override
-  void dispose() {}
-}
-
-class MockNotificationService implements NotificationService {
-  @override
-  Future<void> init() async {}
-
-  @override
-  Future<void> showResumeNotification({
-    required int currentCount,
-    String? sessionInfo,
-  }) async {}
-
-  @override
-  Future<void> showVoiceSessionNotification({
-    required int currentCount,
-    required String phrase,
-  }) async {}
-
-  @override
-  Future<void> cancelVoiceSessionNotification() async {}
-
-  @override
-  Future<void> cancelAllNotifications() async {}
-
-  @override
-  void dispose() {}
-}
+import '../helpers/mock_repositories.dart';
 
 void main() {
   TestWidgetsFlutterBinding.ensureInitialized();

@@ -1,9 +1,9 @@
-import 'dart:async';
-
 import 'package:flutter_test/flutter_test.dart';
 import 'package:counta/domain/counting/counting_engine.dart';
 import 'package:counta/core/services/counting/tap_counting_engine.dart';
 import 'package:counta/state/providers/session_controller.dart';
+
+import '../../helpers/fake_counting_engine.dart';
 
 void main() {
   group('TapCountingEngine', () {
@@ -152,13 +152,13 @@ void main() {
         raw: 'I am full of power',
         normalisedTokens: ['i', 'am', 'full', 'of', 'power'],
       );
-      final firstEngine = _RecordingEngine();
+      final firstEngine = FakeCountingEngine();
       controller.setEngine(firstEngine);
 
       await controller.startSession(phrase);
       await controller.stop();
 
-      final resumedEngine = _RecordingEngine();
+      final resumedEngine = FakeCountingEngine();
       controller.setEngine(resumedEngine);
       await controller.startSession();
 
@@ -167,7 +167,7 @@ void main() {
     });
 
     test('manual taps reach whichever engine is active', () async {
-      final engine = _RecordingEngine();
+      final engine = FakeCountingEngine();
       controller.setEngine(engine);
       await controller.startSession();
 
@@ -198,46 +198,4 @@ void main() {
       expect(controller.total, 0);
     });
   });
-}
-
-/// Counts the manual calls it receives, to prove they are not swallowed.
-class _RecordingEngine implements CountingEngine {
-  final _counts = StreamController<CountEvent>.broadcast();
-  final _status = StreamController<EngineStatus>.broadcast();
-  int increments = 0;
-  int decrements = 0;
-  PhraseSpec? lastPhrase;
-
-  @override
-  Stream<CountEvent> get counts => _counts.stream;
-  @override
-  Stream<EngineStatus> get status => _status.stream;
-  @override
-  Stream<String> get diagnostics => const Stream<String>.empty();
-
-  @override
-  Future<void> start([PhraseSpec? phrase]) async {
-    lastPhrase = phrase;
-    _status.add(EngineStatus.live);
-  }
-
-  @override
-  void incrementManual() => increments++;
-
-  @override
-  void decrementManual() => decrements++;
-
-  @override
-  Future<SessionSummary> stop() async => const SessionSummary(
-    voiceCount: 0,
-    manualCount: 0,
-    totalCount: 0,
-    duration: Duration.zero,
-  );
-
-  @override
-  Future<void> dispose() async {
-    await _counts.close();
-    await _status.close();
-  }
 }

@@ -65,6 +65,21 @@ class CloudCountingEngine implements CountingEngine {
   DateTime? _lastSocketActivityAt;
   DateTime? _lastAudioFrameAt;
 
+  /// Completes once capture is confirmed working — first frame in — or fails
+  /// when the microphone refuses. Gates the socket: nothing is connected until
+  /// audio is known to flow.
+  Completer<bool>? _captureConfirmed;
+
+  /// Frames captured before the socket finished its first connect. Capture now
+  /// starts first, so without this the opening moments of every session — and
+  /// any repetition in them — went on the floor.
+  final List<Uint8List> _preConnectFrames = [];
+  bool _awaitingFirstConnect = true;
+
+  /// Roughly ten seconds at 16 kHz / 20 ms frames. A connect that takes longer
+  /// than this has bigger problems than a gap in the audio.
+  static const int _maxPreConnectFrames = 500;
+
   /// True while a reconnect attempt is executing. The attempt closes the old
   /// socket first, which emits `disconnected` — without this guard the engine
   /// would read its own teardown as a fresh drop and stack another reconnect
@@ -147,11 +162,22 @@ class CloudCountingEngine implements CountingEngine {
     _downtime = Duration.zero;
     _lastSocketActivityAt = null;
     _lastAudioFrameAt = null;
+    _preConnectFrames.clear();
+    _awaitingFirstConnect = true;
     _startTime = DateTime.now();
     _phrase = targetPhrase;
     _matcher = PhraseMatcher(target: targetPhrase, config: matcherConfig);
 
     _setStatus(EngineStatus.connecting);
+
+    // Capture first, socket second. The microphone is the thing the user can
+    // refuse, and opening the socket for a session that can never deliver
+    // audio spends streaming time (and, once credits exist, money) on nothing.
+    // `AudioSource` owns the permission decision and reports a refusal on its
+    // error channel, so the engine no longer asks a second time — that second
+    // question raced the first and could answer for a different moment.
+    if (!await _startConfirmedCapture()) return;
+    if (_stopped) return;
 
     // Attach socket state listener
     _socketStateSubscription?.cancel();
@@ -161,6 +187,7 @@ class CloudCountingEngine implements CountingEngine {
           _setStatus(EngineStatus.connecting);
           break;
         case SocketState.connected:
+          _flushPreConnectFrames();
           // Recovered: bank the downtime and reset the retry budget so the
           // next unrelated drop hours later gets a full window of its own.
           final since = _recoveringSince;
@@ -222,12 +249,44 @@ class CloudCountingEngine implements CountingEngine {
         apiKeyOrToken: apiKeyOrToken,
         phrase: targetPhrase,
       );
-      _attachAudio();
     } catch (e) {
       _report('Could not start voice session: $e');
       _setStatus(EngineStatus.error);
+      // Capture is already running by now, so it has to come down with the
+      // failed session rather than hold the microphone open.
+      await _audioSubscription?.cancel();
+      _audioSubscription = null;
+      await _audioSource.stop();
       rethrow;
     }
+  }
+
+  /// Starts capture and waits for it to prove itself, before any socket
+  /// exists. Returns false when the microphone refused or failed, having
+  /// already reported the matching status.
+  Future<bool> _startConfirmedCapture() async {
+    final confirmation = Completer<bool>();
+    _captureConfirmed = confirmation;
+    _attachAudio();
+
+    final started = await confirmation.future;
+    _captureConfirmed = null;
+    if (started) return true;
+
+    // Nothing was connected, so there is nothing to unwind but capture.
+    await _audioSubscription?.cancel();
+    _audioSubscription = null;
+    await _audioSource.stop();
+    return false;
+  }
+
+  void _flushPreConnectFrames() {
+    if (!_awaitingFirstConnect) return;
+    _awaitingFirstConnect = false;
+    for (final frame in _preConnectFrames) {
+      _speechSocket.sendAudio(frame);
+    }
+    _preConnectFrames.clear();
   }
 
   void _attachAudio() {
@@ -236,9 +295,38 @@ class CloudCountingEngine implements CountingEngine {
     _audioSubscription = pcmStream.listen(
       (data) {
         _lastAudioFrameAt = DateTime.now();
+
+        // A frame is the only proof capture actually works: permission may be
+        // granted and the microphone still be taken by another app.
+        final confirmation = _captureConfirmed;
+        if (confirmation != null && !confirmation.isCompleted) {
+          confirmation.complete(true);
+        }
+
+        if (_awaitingFirstConnect) {
+          if (_preConnectFrames.length < _maxPreConnectFrames) {
+            _preConnectFrames.add(data);
+          }
+          return;
+        }
         _speechSocket.sendAudio(data);
       },
       onError: (Object error) {
+        final confirmation = _captureConfirmed;
+        if (confirmation != null && !confirmation.isCompleted) {
+          // Failed before a socket was ever opened, which is the whole point
+          // of starting capture first.
+          if (error is AudioSourcePermissionDenied) {
+            _report('Microphone access is needed for voice counting.');
+            _setStatus(EngineStatus.permissionDenied);
+          } else {
+            _report('Could not start the microphone: $error');
+            _setStatus(EngineStatus.error);
+          }
+          confirmation.complete(false);
+          return;
+        }
+
         if (_stopped) return;
         if (error is AudioSourceStalled) {
           // iOS pauses capture on an audio-session interruption and never
@@ -414,6 +502,15 @@ class CloudCountingEngine implements CountingEngine {
     _reconnectTimer?.cancel();
     _reconnectTimer = null;
     _stopTranscriptionWatchdog();
+    _preConnectFrames.clear();
+
+    // A stop during startup — before capture has delivered its first frame —
+    // cancels the very subscription that would confirm or refuse it. Without
+    // this the pending `start()` waits on a completer nothing can ever finish.
+    final pendingConfirmation = _captureConfirmed;
+    if (pendingConfirmation != null && !pendingConfirmation.isCompleted) {
+      pendingConfirmation.complete(false);
+    }
 
     try {
       await _audioSubscription?.cancel();

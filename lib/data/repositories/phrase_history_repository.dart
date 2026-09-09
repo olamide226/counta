@@ -24,8 +24,9 @@ class HivePhraseHistoryRepository implements PhraseHistoryRepository {
       final rawVal = _box.get(key);
       if (rawVal != null) {
         try {
-          final Map<String, dynamic> jsonMap =
-              rawVal is String ? jsonDecode(rawVal) : Map<String, dynamic>.from(rawVal);
+          final Map<String, dynamic> jsonMap = rawVal is String
+              ? jsonDecode(rawVal)
+              : Map<String, dynamic>.from(rawVal);
           entries.add(PhraseHistoryEntry.fromJson(jsonMap));
         } catch (_) {}
       }

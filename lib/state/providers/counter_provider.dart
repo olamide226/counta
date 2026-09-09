@@ -12,9 +12,10 @@ import 'settings_provider.dart';
 final sessionControllerProvider = ChangeNotifierProvider<SessionController>(
   (ref) => SessionController(
     liveActivityService: ref.watch(liveActivityServiceProvider),
+    voiceEngineFactory: ref.watch(voiceEngineFactoryProvider),
+    tapEngineFactory: ref.watch(tapEngineFactoryProvider),
   ),
 );
-
 
 /// Builds the engine for a voice session.
 ///
@@ -42,7 +43,7 @@ class CounterNotifier extends StateNotifier<CounterState> {
   final SessionController sessionController;
 
   CounterNotifier(this._ref, {required this.sessionController})
-      : super(CounterState(count: 0, sessionStart: DateTime.now())) {
+    : super(CounterState(count: 0, sessionStart: DateTime.now())) {
     _initFromSettings();
     sessionController.addListener(_onSessionChanged);
   }
@@ -120,14 +121,17 @@ class CounterNotifier extends StateNotifier<CounterState> {
   }
 
   void loadSession(CountSession session) {
-    // Seed rather than reset: the controller owns the running total, so
+    // Restore rather than reset: the controller owns the running total, so
     // leaving it at zero here made the next tap collapse the loaded count to 1.
-    sessionController.seed(session.finalCount);
+    // Restoring also brings back the voice/tap split and the phrase, so a
+    // recovered voice session carries on as one.
+    sessionController.restore(session);
     state = CounterState(
       count: session.finalCount,
+      mantra: session.mantra,
       threshold: session.threshold,
       repeatInterval: session.repeatInterval,
-      sessionStart: DateTime.now(),
+      sessionStart: session.startedAt,
     );
   }
 
