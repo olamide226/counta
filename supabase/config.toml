@@ -10,7 +10,10 @@ enabled = true
 port = 54321
 # Schemas to expose in your API. Tables, views and stored procedures in this schema will get API
 # endpoints. `public` and `graphql_public` schemas are included by default.
-schemas = ["public", "graphql_public"]
+# `counta` holds this app's tables (see supabase/migrations); PostgREST only
+# serves schemas listed here, and on the hosted project the same entry must be
+# added by hand under Project Settings -> API -> Exposed schemas.
+schemas = ["public", "graphql_public", "counta"]
 # Extra schemas to add to the search_path of every request.
 extra_search_path = ["public", "extensions"]
 # The maximum number of rows returns from a view, table, or stored procedure. Limits payload size
@@ -151,6 +154,11 @@ max_indexes = 5
 # Vector Buckets is available to Supabase Pro plan.
 # [storage.vector.buckets.documents-openai]
 
+# WARNING: never run `supabase config push` against the hosted project.
+# It is shared staging — other products' auth settings (site URL, JWT expiry,
+# signup and anonymous rules) live in the same project config, and pushing this
+# file would overwrite them. Anonymous sign-in is enabled by hand in the
+# dashboard instead; see supabase/README.md, "Deploy to a project".
 [auth]
 enabled = true
 # The base URL of your website. Used as an allow-list for redirects and for constructing URLs used
