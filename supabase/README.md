@@ -1,27 +1,42 @@
 # Supabase backend for voice counting
 
-One Edge Function (`voice-block`) and three tables (`voice_blocks`,
-`trial_grants`, `matcher_config`). See `specs/voice-phrase-counting/design.md`
-for the contract and the reasoning behind blocks.
+One Edge Function (`voice-block`) and three tables — `counta.voice_blocks`,
+`counta.trial_grants`, `counta.matcher_config` — in a dedicated `counta`
+schema. See `specs/voice-phrase-counting/design.md` for the contract and the
+reasoning behind blocks.
+
+> **The deploy target is a shared staging project.** It already hosts other
+> products, each in its own Postgres schema (`mcpl`, `mcp_oauth`), and `public`
+> belongs to an unrelated website. Two consequences:
+>
+> - **Never run `supabase config push` against it.** That command overwrites
+>   the whole project's auth configuration — site URL, JWT expiry, signup and
+>   anonymous rules — which the other products share. The settings this feature
+>   needs are set by hand in the dashboard instead (see "Deploy to a project").
+> - `supabase db push` is safe here **only because** the migration is additive
+>   and confined to `counta`. It creates a schema and three tables and touches
+>   nothing in `public`, `mcpl`, `mcp_oauth` or `auth` beyond a foreign key to
+>   `auth.users`. Re-read the migration before pushing any change to it.
 
 ## Layout
 
 ```
 supabase/
   config.toml                       local stack config; anonymous sign-in on
-  migrations/*_voice_blocks.sql     tables, indexes, RLS, matcher_config seed
+  migrations/*_voice_blocks.sql     counta schema: tables, indexes, RLS, grants
   functions/deno.json               pinned imports + `deno task test`
   functions/voice-block/
     index.ts                        entrypoint: env -> adapters -> handler
     handler.ts                      pure handler (request + deps -> Response)
     types.ts                        ports: BalanceProvider, TokenMinter, BlockStore
     auth.ts                         JWT verification (local JWKS, getUser fallback)
-    store.ts                        Supabase-backed BlockStore
+    store.ts                        Supabase-backed BlockStore (counta schema)
     providers/http.ts               shared fetch + failure classification
     providers/balance.ts            RevenueCatBalanceProvider
     providers/minter.ts             DeepgramTokenMinter
     testing/fakes.ts                test doubles; never imported by index.ts
     index_test.ts                   Deno tests, no network
+    store_test.ts                   pins every query to the counta schema
   .env.example                      every secret/setting the function reads
 ```
 
@@ -64,9 +79,6 @@ curl -X POST http://127.0.0.1:54321/functions/v1/voice-block/release \
 (anything else is a 400). A refund needs `detections` to be present and zero:
 an omitted count is no report at all, not a report of zero.
 
-```bash
-```
-
 ## Environment the function reads
 
 Injected by the runtime (do not set): `SUPABASE_URL`,
@@ -98,8 +110,19 @@ supabase link --project-ref <your-project-ref>
 supabase db push                                  # applies supabase/migrations
 supabase secrets set --env-file supabase/.env     # or individual NAME=VALUE pairs
 supabase functions deploy voice-block             # verify_jwt=false comes from config.toml
-supabase config push                              # enables anonymous sign-in on the project
 ```
+
+There is deliberately no `supabase config push` here. It would push this
+local `config.toml` over the shared project's auth settings. Do these two
+steps by hand in the dashboard instead — once per project, not per deploy:
+
+1. **Authentication -> Sign In / Providers -> Anonymous sign-ins: enable.**
+   The app signs in anonymously (`supabaseSessionProvider`), so without this
+   every request arrives without a user and the function answers 401.
+2. **Project Settings -> API (Data API) -> Exposed schemas: add `counta`.**
+   PostgREST serves only the schemas on that list. Without it the function's
+   queries fail with `PGRST106` / "schema must be one of the following", which
+   surfaces as a 500 rather than as anything about credits.
 
 Then set the project URL and publishable key in the app `.env` and rebuild.
 Also configure a hard spend limit on the Deepgram project (req 10.4); no code
@@ -107,14 +130,20 @@ here can bound cost once a client holds an open socket.
 
 ## Notes on the schema
 
+- Everything is in the `counta` schema, not `public`, because the project is
+  shared. The cloud default that auto-exposes new tables to the Data API roles
+  applies to `public` only, so the migration grants explicitly: usage on the
+  schema for `anon`, `authenticated` and `service_role`; `select` for
+  `authenticated` on the two tables that have an RLS select policy; full DML
+  for `service_role`. `trial_grants` gets no client grant and no policy at all.
 - The design's partial index `where expires_at > now()` is not valid Postgres
   (`now()` is not immutable). A partial **unique** index on
   `(user_id) where not reconciled` takes its place: it serves the in-flight
   lookup and enforces one live block per user (req 3.8) even when two requests
   race past the function's own check.
-- `voice_blocks` and `trial_grants` have no client write policy; all writes go
-  through the service-role client inside the function.
-- `matcher_config` is created empty. An absent row means "use the compiled
+- `counta.voice_blocks` and `counta.trial_grants` have no client write policy;
+  all writes go through the service-role client inside the function.
+- `counta.matcher_config` is created empty. An absent row means "use the compiled
   `MatcherConfig` defaults"; task 14 makes the app fetch it.
 
 ## Notes on auth and abuse

@@ -32,16 +32,17 @@ This trades away three things a relay would give: a hard mid-stream kill switch,
      │ HTTPS                │ WSS (audio out, transcripts in)
      │                      │
      ▼                      ▼
-┌─────────────────┐   ┌──────────────┐
-│ Supabase        │   │  Deepgram    │
-│  Edge Function  │   │  /v1/listen  │
-│  /voice-block   │   └──────────────┘
-│                 │           ▲
-│  Postgres:      │           │ mints token
-│   voice_blocks  │           │
-│   matcher_config│───────────┘
-│   trial_grants  │
-└────┬────────────┘
+┌────────────────────────┐   ┌──────────────┐
+│ Supabase               │   │  Deepgram    │
+│  Edge Function         │   │  /v1/listen  │
+│  /voice-block          │   └──────────────┘
+│                        │           ▲
+│  Postgres, schema      │           │ mints token
+│  "counta":             │           │
+│    voice_blocks        │           │
+│    matcher_config      │───────────┘
+│    trial_grants        │
+└────┬───────────────────┘
      │ Developer API v2 (balance read, spend, grant)
      ▼
 ┌──────────────┐
@@ -60,7 +61,7 @@ This trades away three things a relay would give: a hard mid-stream kill switch,
      read RevenueCat balance               → 402 if < BLOCK_CREDITS
      spend BLOCK_CREDITS on RevenueCat
      POST Deepgram /v1/auth/grant (ttl=30) → refund + 503 on failure
-     insert voice_blocks row
+     insert counta.voice_blocks row
 4. Edge Function → Client: { token, block_seconds, expires_at, balance_after }
 5. Client opens WSS to Deepgram with Bearer token and keyterm params
 6. Client starts AudioSource, pipes PCM frames to socket
@@ -79,7 +80,7 @@ Block size of 300 seconds balances three pressures: shorter blocks mean more Edg
 | Component | Where | Notes |
 |---|---|---|
 | Edge Function | Supabase Functions (Deno) | Stateless, no cold-start concern for a sub-second HTTP call |
-| `voice_blocks`, `matcher_config`, `trial_grants` | Supabase Postgres | RLS on all three |
+| `counta.voice_blocks`, `counta.matcher_config`, `counta.trial_grants` | Supabase Postgres, `counta` schema | RLS on all three; schema must be in the project's exposed-schemas list |
 | Secrets | Supabase function secrets | `DEEPGRAM_API_KEY`, `REVENUECAT_SECRET_KEY`, `REVENUECAT_PROJECT_ID` |
 | Auth | Supabase anonymous sign-in | Upgradeable to email later without changing this feature |
 
@@ -324,8 +325,23 @@ class PhraseHistoryEntry {
 
 ### Supabase schema
 
+All three tables live in a dedicated `counta` schema rather than in `public`.
+The Supabase project is shared staging: other products already occupy a schema
+each (`mcpl`, `mcp_oauth`) and `public` belongs to an unrelated website, so one
+schema per product is both the house convention and the only way this feature's
+migration can be applied without reaching into someone else's namespace. The
+migration is additive and confined to `counta`; the sole reference outside it is
+the foreign key to `auth.users`.
+
+Because the Data API's auto-expose default covers `public` only, grants are
+explicit, and PostgREST serves `counta` only once it is added to the project's
+exposed-schemas list (a manual dashboard step — see `supabase/README.md`).
+
 ```sql
-create table voice_blocks (
+create schema if not exists counta;
+grant usage on schema counta to anon, authenticated, service_role;
+
+create table counta.voice_blocks (
   id             uuid primary key default gen_random_uuid(),
   user_id        uuid not null references auth.users on delete cascade,
   session_id     uuid not null,
@@ -337,32 +353,46 @@ create table voice_blocks (
   detections     int
 );
 
-create index on voice_blocks (user_id, granted_at desc);
-create index on voice_blocks (user_id) where expires_at > now();
+create index on counta.voice_blocks (user_id, granted_at desc);
+create unique index on counta.voice_blocks (user_id) where not reconciled;
 
-alter table voice_blocks enable row level security;
-create policy "own blocks readable" on voice_blocks
+alter table counta.voice_blocks enable row level security;
+create policy "own blocks readable" on counta.voice_blocks
   for select using (auth.uid() = user_id);
 -- no client insert or update policy: writes come from the Edge Function
--- using the service role key only
+-- using the service role key only, and the grants match
+grant select on counta.voice_blocks to authenticated;
+grant select, insert, update, delete on counta.voice_blocks to service_role;
 
-create table trial_grants (
+create table counta.trial_grants (
   rc_app_user_id text primary key,
   credits        int not null,
   granted_at     timestamptz not null default now()
 );
 
-create table matcher_config (
+-- no client grant and no policy at all: service_role writes it, and the
+-- primary key makes the one-time grant idempotent
+grant select, insert, update, delete on counta.trial_grants to service_role;
+
+create table counta.matcher_config (
   id          int primary key default 1,
   config      jsonb not null,
   updated_at  timestamptz not null default now(),
   constraint singleton check (id = 1)
 );
 
-alter table matcher_config enable row level security;
-create policy "config readable by all authed" on matcher_config
+alter table counta.matcher_config enable row level security;
+create policy "config readable by all authed" on counta.matcher_config
   for select using (auth.role() = 'authenticated');
+grant select on counta.matcher_config to authenticated;
+grant select, insert, update, delete on counta.matcher_config to service_role;
 ```
+
+The live-block index is a partial **unique** index rather than the
+`where expires_at > now()` this section once sketched: `now()` is not
+`IMMUTABLE`, so Postgres rejects that predicate. `not reconciled` is immutable,
+is the set that must stay unique (Requirement 3.8), and serves the in-flight
+lookup as well.
 
 The `trial_grants` primary key on the RevenueCat app user id makes the one-time trial grant idempotent without any additional logic, which matters because the grant path can be retried.
 
@@ -388,7 +418,7 @@ Body: { "block_id", "streamed_secs", "detections", "eligible_for_refund" }
 400 { "error": "invalid_detections" }
 ```
 
-One block is live per user at a time, and renewal is identified by `session_id` rather than inferred from a clock. A grant whose `session_id` matches the caller's live block is the 90% renewal of Requirement 3.9: it is granted and the block it replaces is marked reconciled in the same request, so the invariant still holds. A grant carrying any other `session_id` is a 409 no matter how close the live block is to expiry — treating a nearly expired block as "not live" would hand a second, unrelated session a concurrent block for the length of that window, which is what Requirement 3.8 exists to prevent. A partial unique index on `voice_blocks (user_id) where not reconciled` enforces this in the database as well, so two concurrent requests cannot both pass the check.
+One block is live per user at a time, and renewal is identified by `session_id` rather than inferred from a clock. A grant whose `session_id` matches the caller's live block is the 90% renewal of Requirement 3.9: it is granted and the block it replaces is marked reconciled in the same request, so the invariant still holds. A grant carrying any other `session_id` is a 409 no matter how close the live block is to expiry — treating a nearly expired block as "not live" would hand a second, unrelated session a concurrent block for the length of that window, which is what Requirement 3.8 exists to prevent. A partial unique index on `counta.voice_blocks (user_id) where not reconciled` enforces this in the database as well, so two concurrent requests cannot both pass the check.
 
 Refund eligibility is asserted by the client but validated server-side against `granted_at`: a refund is only issued if the release arrives within 30 seconds of grant and reports zero detections (Requirement 3.11). Client assertion alone is not trusted.
 
@@ -421,7 +451,7 @@ Refund eligibility is asserted by the client but validated server-side against `
 - The Deepgram master API key exists only in Supabase function secrets. It is never returned to a client under any condition (Requirement 3.12).
 - The RevenueCat secret key exists only in function secrets. The client uses the public SDK key, which cannot mutate balances.
 - Credit spend happens server-side, keyed on the JWT subject. A client cannot spend on behalf of another user or grant itself credits.
-- `voice_blocks` has no client write policy. All writes use the service role key from inside the Edge Function.
+- `counta.voice_blocks` has no client write policy. All writes use the service role key from inside the Edge Function.
 - Rate limit `/voice-block` per user id to bound token-grant abuse independently of balance checks.
 - The RevenueCat virtual currency API is rate limited to 480 requests per minute across the project, so the Edge Function must handle 429 with backoff and surface it as 503 rather than as a credit error.
 
