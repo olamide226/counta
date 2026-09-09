@@ -97,11 +97,13 @@ The system has no backend today. This feature introduces exactly one server-side
 
 4.1. WHEN the user opens the paywall THEN the system SHALL display the available credit packs with store-localised prices fetched from RevenueCat.
 4.2. WHEN a purchase completes THEN the system SHALL invalidate the local virtual currency cache and refetch the balance before displaying it.
-4.3. WHEN a first-time user opens the voice feature THEN the system SHALL grant 20 trial credits exactly once, keyed on the RevenueCat app user id.
+4.3. WHEN a first-time user opens the voice feature THEN the system SHALL request a trial grant from the Edge Function, which SHALL grant 20 trial credits at most once per physical device, gated by platform device attestation (Requirement 11) rather than by any identity the app can mint for itself.
 4.4. WHILE a session is active AND the remaining balance falls to 20% of what it was at session start OR below 3 credits, whichever is greater, THE system SHALL display a non-blocking low-balance warning.
 4.5. WHEN the balance reaches zero during a session THEN the system SHALL stop audio capture, preserve the count, and present the paywall.
 4.6. IF a purchase is made while a session is in the exhausted state THEN the system SHALL offer to resume the same session with its existing count intact.
 4.7. The system SHALL NOT grant credits from a client-side purchase callback alone. Grants SHALL originate from RevenueCat's validated purchase flow.
+4.8. The system SHALL NOT grant credits on a client's assertion that it is eligible for the trial or that a voucher code is valid. Every trial grant and every voucher redemption SHALL be decided server-side and applied through the same balance ledger as purchases.
+4.9. WHEN a trial grant or a voucher redemption succeeds THEN the system SHALL invalidate the local virtual currency cache and refetch the balance before displaying it, as it does for a purchase (4.2).
 
 ### Requirement 5: Degraded and offline behaviour
 
@@ -178,3 +180,40 @@ The system has no backend today. This feature introduces exactly one server-side
 10.3. IF a session report is not received within the expected window THEN the system SHALL mark the blocks as unreconciled rather than treating them as an error.
 10.4. THE Deepgram project SHALL be configured with a hard spend limit that bounds total exposure independently of application logic.
 10.5. THE system SHALL expose a query that compares credits debited against Deepgram reported usage over a given period.
+
+### Requirement 11: Device-gated trial eligibility
+
+**User Story:** As the app operator, I want the free trial to be claimable once per physical device, so that a delete-and-reinstall loop cannot mint unlimited free voice minutes.
+
+Anonymous Supabase sign-in and RevenueCat both issue a fresh identity on every install, so an account-keyed trial is farmable by anyone willing to reinstall. Eligibility is therefore decided from a platform attestation the app cannot forge, and the answer is stored where the app cannot reach it.
+
+#### Acceptance Criteria
+
+11.1. WHEN the client requests the trial grant THEN it SHALL send a platform attestation payload, and the Edge Function SHALL decide eligibility from that payload and its own records alone.
+11.2. WHEN the requesting device runs iOS THEN the Edge Function SHALL query Apple's DeviceCheck API for the device's two per-device bits and SHALL refuse the grant if the bit allocated to the voice trial is already set.
+11.3. WHEN an iOS trial grant succeeds THEN the Edge Function SHALL set the allocated DeviceCheck bit before it returns, so that the device is ineligible after app deletion, reinstall, device reset, or a change of the Apple Account signed in on it.
+11.4. THE allocation of the two DeviceCheck bits SHALL be recorded in the design document, because the bits are scoped to the Apple developer team and are shared by every app that team ships.
+11.5. WHEN the requesting device runs Android THEN the Edge Function SHALL verify a Play Integrity token server-side and SHALL refuse the grant unless the verdict reports a genuine, unmodified app binary on a genuine Android device with a licensed Play install.
+11.6. WHEN an Android trial grant succeeds THEN the Edge Function SHALL record the grant against the authenticated user id, and the system SHALL treat the Android gate as weaker than the iOS one, because Play Integrity attests genuineness without offering any persistent per-device storage.
+11.7. THE system SHALL NOT derive, collect, transmit or store a device fingerprint, an advertising identifier, or any hardware identifier for the purpose of trial gating.
+11.8. WHEN a trial grant is retried for a caller or device that has already claimed the trial THEN the Edge Function SHALL report the existing outcome and SHALL NOT grant credits a second time.
+11.9. IF the attestation provider is unreachable, rejects the payload, or returns an indeterminate verdict THEN the Edge Function SHALL refuse the trial grant and SHALL NOT grant credits, and the client SHALL be told the check can be retried.
+11.10. WHERE a platform offers no device attestation, the system SHALL NOT offer the trial on that platform.
+
+### Requirement 12: Voucher redemption
+
+**User Story:** As the app operator, I want to hand out campaign codes that are redeemable for credits, so that I can run promotions and make good on support cases without giving any one person an unlimited supply.
+
+#### Acceptance Criteria
+
+12.1. WHEN the user enters a voucher code THEN the client SHALL submit it to the Edge Function's redeem endpoint authenticated with the same Supabase JWT as the block endpoints, and SHALL make no credit decision of its own.
+12.2. WHEN a submitted code exists, is enabled, has not expired, and has redemptions remaining THEN the Edge Function SHALL grant the code's credit amount through the same balance ledger that purchases and refunds use, and SHALL record the redemption against the caller's user id.
+12.3. A voucher code SHALL be redeemable by many distinct users up to its configured maximum redemption count.
+12.4. A given user SHALL redeem a given voucher at most once, enforced by a database uniqueness constraint rather than by application logic, for the same reason the one-live-block rule is (3.8).
+12.5. WHEN a user submits a code they have already redeemed THEN the Edge Function SHALL report the original redemption and SHALL NOT grant credits again, however many times the request is retried.
+12.6. IF the submitted code does not exist or is disabled THEN the Edge Function SHALL refuse the redemption with a single indistinguishable answer, so that the endpoint cannot be used to discover which codes exist.
+12.7. IF the submitted code has expired or has reached its maximum redemption count THEN the Edge Function SHALL refuse the redemption and SHALL say which of the two applied, so that a user holding a real code is not told it is fake.
+12.8. WHEN a redemption attempt fails THEN the Edge Function SHALL NOT record it as a redemption, and SHALL rate-limit failed attempts per user id so that codes cannot be found by guessing.
+12.9. WHERE a voucher carries an expiry timestamp, the Edge Function SHALL compare it against server time; a voucher with no expiry SHALL never expire.
+12.10. THE app SHALL have no write path to voucher definitions. Codes, credit amounts, redemption caps and expiry SHALL be created and edited by the operator through the service role only.
+12.11. WHEN a voucher is redeemed THEN the Edge Function SHALL log the user id, voucher id, credits granted and timestamp, as it does for a block grant (10.1).
