@@ -9,13 +9,20 @@ import '../../../domain/counting/phrase_matcher.dart';
 import '../../../domain/counting/speech_socket.dart';
 import '../../../domain/counting/transcript_segment.dart';
 
+/// Supplies the credential for the next Deepgram connection.
+///
+/// Invoked on every connect, including reconnects, because production tokens
+/// are short-lived grants from the voice-block Edge Function rather than a
+/// long-lived key. The engine never holds a Deepgram master key itself.
+typedef DeepgramTokenProvider = Future<String> Function();
+
 /// Concrete implementation of [CountingEngine] using cloud streaming STT (Deepgram/SpeechSocket),
 /// [AudioSource] PCM capture, and local [PhraseMatcher].
 class CloudCountingEngine implements CountingEngine {
   final AudioSource _audioSource;
   final SpeechSocket _speechSocket;
   final MatcherConfig matcherConfig;
-  final String apiKeyOrToken;
+  final DeepgramTokenProvider tokenProvider;
 
   /// How long the engine keeps trying to restore a dropped session before it
   /// gives up and reports [EngineStatus.error].
@@ -102,6 +109,7 @@ class CloudCountingEngine implements CountingEngine {
   Duration get downtime => _downtime;
 
   CloudCountingEngine({
+    required this.tokenProvider,
     AudioSource? audioSource,
     SpeechSocket? speechSocket,
     this.matcherConfig = const MatcherConfig(),
@@ -109,11 +117,8 @@ class CloudCountingEngine implements CountingEngine {
     this.maxReconnectBackoff = const Duration(seconds: 15),
     this.transcriptionSilenceTimeout = const Duration(seconds: 20),
     this.transcriptionWatchdogInterval = const Duration(seconds: 5),
-    String? apiKeyOrToken,
   }) : _audioSource = audioSource ?? AudioSource(),
-       _speechSocket = speechSocket ?? DeepgramSocket(),
-       apiKeyOrToken =
-           apiKeyOrToken ?? const String.fromEnvironment('DEEPGRAM_API_KEY');
+       _speechSocket = speechSocket ?? DeepgramSocket();
 
   @override
   Stream<CountEvent> get counts => _countsController.stream;
@@ -244,21 +249,44 @@ class CloudCountingEngine implements CountingEngine {
       }
     });
 
+    // The credential is fetched only once capture has proved itself. Once the
+    // block client lands this call spends credit, and a session that cannot
+    // deliver audio must never spend any (requirement 2.2).
+    String token;
     try {
-      await _speechSocket.connect(
-        apiKeyOrToken: apiKeyOrToken,
-        phrase: targetPhrase,
-      );
+      token = await tokenProvider();
+    } on VoiceUnavailable catch (e) {
+      // Not a failed session — a build that can never start one. Report it as
+      // state so the UI can explain it; rethrowing as well lets the caller
+      // that opened the session keep its sheet open and show the reason.
+      _report(e.message);
+      _setStatus(EngineStatus.notConfigured);
+      await _abandonCapture();
+      rethrow;
     } catch (e) {
       _report('Could not start voice session: $e');
       _setStatus(EngineStatus.error);
-      // Capture is already running by now, so it has to come down with the
-      // failed session rather than hold the microphone open.
-      await _audioSubscription?.cancel();
-      _audioSubscription = null;
-      await _audioSource.stop();
+      await _abandonCapture();
       rethrow;
     }
+
+    try {
+      await _speechSocket.connect(apiKeyOrToken: token, phrase: targetPhrase);
+    } catch (e) {
+      _report('Could not start voice session: $e');
+      _setStatus(EngineStatus.error);
+      await _abandonCapture();
+      rethrow;
+    }
+  }
+
+  /// Releases the microphone after a start that got past capture but failed
+  /// before the session was live. Capture runs before the socket exists, so
+  /// every failure from that point on has to hand it back explicitly.
+  Future<void> _abandonCapture() async {
+    await _audioSubscription?.cancel();
+    _audioSubscription = null;
+    await _audioSource.stop();
   }
 
   /// Starts capture and waits for it to prove itself, before any socket
@@ -416,7 +444,7 @@ class CloudCountingEngine implements CountingEngine {
 
         await _speechSocket.closeGracefully(drainTimeoutMs: 0);
         await _speechSocket.connect(
-          apiKeyOrToken: apiKeyOrToken,
+          apiKeyOrToken: await tokenProvider(),
           phrase: _phrase,
         );
 
