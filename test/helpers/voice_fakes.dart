@@ -7,6 +7,9 @@ import 'package:counta/domain/counting/counting_engine.dart';
 import 'package:counta/domain/counting/speech_socket.dart';
 import 'package:counta/domain/counting/transcript_segment.dart';
 
+// Every importer of the fakes speaks the same segments and phrase.
+export 'transcript_fixtures.dart';
+
 const testToken = 'test-deepgram-token';
 
 class FakeSpeechSocket implements SpeechSocket {
@@ -278,21 +281,3 @@ class ReleaseCall {
       'ReleaseCall($blockId, streamed: $streamedSecs, detections: $detections, '
       'eligible: $eligibleForRefund)';
 }
-
-/// A finalised transcript segment on a connection's own audio timeline.
-TranscriptSegment finalSegment(
-  String text, {
-  double start = 1.0,
-  double duration = 2.0,
-}) => TranscriptSegment(
-  text: text,
-  start: start,
-  duration: duration,
-  isFinal: true,
-  confidence: 0.98,
-);
-
-const testPhrase = PhraseSpec(
-  raw: "I'm rich in wisdom",
-  normalisedTokens: ['i', 'am', 'rich', 'in', 'wisdom'],
-);

@@ -3,19 +3,12 @@ import 'package:counta/domain/counting/counting_engine.dart';
 import 'package:counta/domain/counting/phrase_matcher.dart';
 import 'package:counta/domain/counting/transcript_segment.dart';
 import '../../fixtures/fixture_replay_harness.dart';
+import '../../helpers/transcript_fixtures.dart';
 
 void main() {
   group('PhraseMatcher', () {
     late PhraseMatcher matcher;
-    late PhraseSpec phrase;
-
-    setUp(() {
-      phrase = const PhraseSpec(
-        raw: "I'm rich in wisdom",
-        normalisedTokens: ['i', 'am', 'rich', 'in', 'wisdom'],
-      );
-      matcher = PhraseMatcher(target: phrase);
-    });
+    setUp(() => matcher = PhraseMatcher(target: testPhrase));
 
     test('normaliseText expands contractions and strips punctuation', () {
       final tokens = matcher.normaliseText("I'm rich in wisdom!");
@@ -193,32 +186,28 @@ void main() {
         ],
       );
 
-      TranscriptSegment finalSegment(String text) => TranscriptSegment(
-        text: text,
-        start: 1.0,
-        duration: 3.0,
-        isFinal: true,
-        confidence: 0.9,
-      );
+      // The shared builder, at the length and confidence a long phrase gets.
+      TranscriptSegment saidOnce(String text) =>
+          finalSegment(text, duration: 3.0, confidence: 0.9);
 
       test('accepts a repetition whose middle is garbled', () {
         // Recorded in normal_426: scores 0.70, below the plain threshold.
         final m = PhraseMatcher(target: long);
         final detections = m.ingest(
-          finalSegment('the wisdom of god is how to walk in me'),
+          saidOnce('the wisdom of god is how to walk in me'),
         );
         expect(detections, hasLength(1));
       });
 
       test('does not relax when the head is missing', () {
         final m = PhraseMatcher(target: long);
-        expect(m.ingest(finalSegment('gods wisdom is at work in me')), isEmpty);
+        expect(m.ingest(saidOnce('gods wisdom is at work in me')), isEmpty);
       });
 
       test('does not relax when the tail is missing', () {
         final m = PhraseMatcher(target: long);
         expect(
-          m.ingest(finalSegment('the wisdom of god is how to walk in')),
+          m.ingest(saidOnce('the wisdom of god is how to walk in')),
           isEmpty,
         );
       });
@@ -229,7 +218,7 @@ void main() {
           config: const MatcherConfig(anchoredThreshold: 0.80),
         );
         expect(
-          m.ingest(finalSegment('the wisdom of god is how to walk in me')),
+          m.ingest(saidOnce('the wisdom of god is how to walk in me')),
           isEmpty,
         );
       });
@@ -240,7 +229,7 @@ void main() {
           normalisedTokens: ['i', 'breakthrough'],
         );
         final m = PhraseMatcher(target: short);
-        expect(m.ingest(finalSegment('i did breakthrough')), isEmpty);
+        expect(m.ingest(saidOnce('i did breakthrough')), isEmpty);
       });
     });
 
@@ -341,18 +330,6 @@ void main() {
     });
 
     group('overlapping transcript streams at a block seam', () {
-      /// One finalised segment on a connection's own audio timeline.
-      TranscriptSegment saidAt(
-        double start, {
-        String text = "I'm rich in wisdom",
-      }) => TranscriptSegment(
-        text: text,
-        start: start,
-        duration: 2.0,
-        isFinal: true,
-        confidence: 0.99,
-      );
-
       test('the same audio heard by both connections counts once', () {
         // A renewal overlaps two Deepgram connections deliberately. Each one
         // numbers its own audio timeline from zero, so the engine tells the
@@ -362,8 +339,14 @@ void main() {
         matcher.openStream('old');
         matcher.openStream('new', startOffset: const Duration(seconds: 270));
 
-        final fromOld = matcher.ingest(saidAt(272.0), streamId: 'old');
-        final fromNew = matcher.ingest(saidAt(2.0), streamId: 'new');
+        final fromOld = matcher.ingest(
+          finalSegment(testPhrase.raw, start: 272.0),
+          streamId: 'old',
+        );
+        final fromNew = matcher.ingest(
+          finalSegment(testPhrase.raw, start: 2.0),
+          streamId: 'new',
+        );
 
         expect(fromOld, hasLength(1));
         expect(
@@ -381,20 +364,50 @@ void main() {
         matcher.openStream('old');
         matcher.openStream('new', startOffset: const Duration(seconds: 270));
 
-        expect(matcher.ingest(saidAt(272.0), streamId: 'old'), hasLength(1));
-        expect(matcher.ingest(saidAt(2.15), streamId: 'new'), isEmpty);
-        expect(matcher.ingest(saidAt(1.85), streamId: 'new'), isEmpty);
+        expect(
+          matcher.ingest(
+            finalSegment(testPhrase.raw, start: 272.0),
+            streamId: 'old',
+          ),
+          hasLength(1),
+        );
+        expect(
+          matcher.ingest(
+            finalSegment(testPhrase.raw, start: 2.15),
+            streamId: 'new',
+          ),
+          isEmpty,
+        );
+        expect(
+          matcher.ingest(
+            finalSegment(testPhrase.raw, start: 1.85),
+            streamId: 'new',
+          ),
+          isEmpty,
+        );
       });
 
       test('audio only the new connection heard is still counted', () {
         matcher.openStream('old');
         matcher.openStream('new', startOffset: const Duration(seconds: 270));
 
-        expect(matcher.ingest(saidAt(272.0), streamId: 'old'), hasLength(1));
+        expect(
+          matcher.ingest(
+            finalSegment(testPhrase.raw, start: 272.0),
+            streamId: 'old',
+          ),
+          hasLength(1),
+        );
 
         // Spoken after the outgoing connection was closed and drained.
         matcher.closeStream('old');
-        expect(matcher.ingest(saidAt(4.5), streamId: 'new'), hasLength(1));
+        expect(
+          matcher.ingest(
+            finalSegment(testPhrase.raw, start: 4.5),
+            streamId: 'new',
+          ),
+          hasLength(1),
+        );
       });
 
       test('a phrase split across the two streams is not a match', () {
@@ -405,11 +418,17 @@ void main() {
         matcher.openStream('new', startOffset: const Duration(seconds: 270));
 
         expect(
-          matcher.ingest(saidAt(272.0, text: 'I am rich'), streamId: 'old'),
+          matcher.ingest(
+            finalSegment('I am rich', start: 272.0),
+            streamId: 'old',
+          ),
           isEmpty,
         );
         expect(
-          matcher.ingest(saidAt(3.0, text: 'in wisdom'), streamId: 'new'),
+          matcher.ingest(
+            finalSegment('in wisdom', start: 3.0),
+            streamId: 'new',
+          ),
           isEmpty,
         );
       });
@@ -423,7 +442,10 @@ void main() {
         // mechanism stream identity has.
         matcher.openStream('stream-0');
         expect(
-          matcher.ingest(saidAt(100.0), streamId: 'stream-0'),
+          matcher.ingest(
+            finalSegment(testPhrase.raw, start: 100.0),
+            streamId: 'stream-0',
+          ),
           hasLength(1),
         );
 
@@ -432,31 +454,58 @@ void main() {
           'stream-1',
           startOffset: const Duration(seconds: 120),
         );
-        expect(matcher.ingest(saidAt(0.5), streamId: 'stream-1'), hasLength(1));
+        expect(
+          matcher.ingest(
+            finalSegment(testPhrase.raw, start: 0.5),
+            streamId: 'stream-1',
+          ),
+          hasLength(1),
+        );
       });
 
       test('without the rebase the same reconnect counts nothing', () {
         matcher.openStream('stream-0');
         expect(
-          matcher.ingest(saidAt(100.0), streamId: 'stream-0'),
+          matcher.ingest(
+            finalSegment(testPhrase.raw, start: 100.0),
+            streamId: 'stream-0',
+          ),
           hasLength(1),
         );
 
         matcher.closeStream('stream-0');
         matcher.openStream('stream-1');
-        expect(matcher.ingest(saidAt(0.5), streamId: 'stream-1'), isEmpty);
+        expect(
+          matcher.ingest(
+            finalSegment(testPhrase.raw, start: 0.5),
+            streamId: 'stream-1',
+          ),
+          isEmpty,
+        );
       });
 
       test('a stream nobody opened is not counted', () {
         // Offset and window used to live in two maps, so an id with no
         // registered offset still got a window — and was timed against the
         // session's start rather than against wherever its audio began.
-        expect(matcher.ingest(saidAt(1.0), streamId: 'stream-7'), isEmpty);
+        expect(
+          matcher.ingest(
+            finalSegment(testPhrase.raw, start: 1.0),
+            streamId: 'stream-7',
+          ),
+          isEmpty,
+        );
       });
 
       test('an unnamed stream behaves exactly as it did before', () {
-        expect(matcher.ingest(saidAt(1.0)), hasLength(1));
-        expect(matcher.ingest(saidAt(4.0)), hasLength(1));
+        expect(
+          matcher.ingest(finalSegment(testPhrase.raw, start: 1.0)),
+          hasLength(1),
+        );
+        expect(
+          matcher.ingest(finalSegment(testPhrase.raw, start: 4.0)),
+          hasLength(1),
+        );
       });
     });
   });

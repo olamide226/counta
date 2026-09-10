@@ -104,7 +104,7 @@ Retiring a checkpoint happens in exactly one place: `SessionsNotifier.saveSessio
 
 Tests live in `test/` mirroring `lib/` structure. Uses `ProviderContainer` with mock overrides. Core business logic (counter provider, alert service, models, themes) is tested; UI and platform services are not.
 
-Shared doubles live in `test/helpers/` — use them rather than growing another copy: `InMemoryCheckpointStore`, `FakeCountingEngine` (configurable `startStatus`, records starts/manual calls/disposal), `testSession(...)`, `withTempHive()`, and the settings/sessions/service mocks.
+Shared doubles live in `test/helpers/` — use them rather than growing another copy: `InMemoryCheckpointStore`, `FakeCountingEngine` (configurable `startStatus`, records starts/manual calls/disposal), `testSession(...)`, `withTempHive()`, and the settings/sessions/service mocks. `voice_fakes.dart` holds `FakeSpeechSocket`, `FakeAudioSource` and `FakeBlockService`; because it reaches the `record` plugin through `AudioSource`, the plugin-free `finalSegment(...)` / `testPhrase` live in `transcript_fixtures.dart` (re-exported by the fakes) so the `domain/` tests can import them too.
 
 ## Conventions
 
