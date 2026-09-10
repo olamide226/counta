@@ -1,6 +1,6 @@
 import { assertEquals } from "@std/assert";
-import { handleVoiceBlock } from "./handler.ts";
 import {
+  call,
   CONFIG,
   FakeTokenMinter,
   grantReq,
@@ -12,17 +12,12 @@ import {
   tokenReq,
   USER,
 } from "./testing/fakes.ts";
-import { Deps, ProviderError } from "./types.ts";
+import { ProviderError } from "./types.ts";
 
 // POST /voice-block/token — a fresh Deepgram token for a block the caller
 // already holds. The route exists because the token TTL governs connection
 // establishment only: without it, a socket that drops more than 30 seconds
 // into a 300-second block has no credential left to reconnect with.
-
-async function call(deps: Deps, req: Request) {
-  const res = await handleVoiceBlock(req, deps);
-  return { status: res.status, body: await res.json() };
-}
 
 const UNKNOWN_BLOCK = "44444444-4444-4444-8444-444444444444";
 

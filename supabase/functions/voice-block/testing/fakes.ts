@@ -6,6 +6,7 @@
 // that asked. The deployed function can only ever construct the real adapters.
 // Nothing outside index_test.ts should import this file.
 
+import { handleVoiceBlock } from "../handler.ts";
 import { MemoryRateLimiter } from "../ratelimit.ts";
 import { BlockConflictError, ProviderError } from "../types.ts";
 import type {
@@ -279,7 +280,83 @@ export function harness(
     log: (event, fields) => logs.push({ event, fields }),
     ...overrides,
   };
-  return { deps, balance, minter, blocks, trials, vouchers, ios, android, logs, clock };
+  // Read back off `deps`, not off the locals above. Returning the originals
+  // meant an override was silently ignored by the harness — `h.ios.checks` in
+  // a test that passed its own attestor asserted against a fake nothing had
+  // called, and passed vacuously. The casts are the price: every override in
+  // this suite is one of these doubles, and a test that overrides with
+  // something else simply does not read the field back.
+  return {
+    deps,
+    balance: deps.balance as FakeBalanceProvider,
+    minter: deps.minter as FakeTokenMinter,
+    blocks: deps.blocks as MemoryBlockStore,
+    trials: deps.trials as MemoryTrialStore,
+    vouchers: deps.vouchers as MemoryVoucherStore,
+    ios: deps.attestors.ios as FakeAttestor,
+    android: deps.attestors.android as FakeAttestor,
+    logs,
+    clock,
+  };
+}
+
+/**
+ * Drives the router and reads the body — what every endpoint test does first,
+ * declared identically in four of them before it lived here.
+ */
+export async function call(deps: Deps, req: Request) {
+  const res = await handleVoiceBlock(req, deps);
+  // deno-lint-ignore no-explicit-any -- test bodies are asserted field by field
+  return { status: res.status, body: (await res.json()) as any };
+}
+
+/** A recorded outbound request. */
+export interface Sent {
+  url: string;
+  init: RequestInit;
+  /** The parsed JSON body, or {} for a form-encoded or empty one. */
+  body: Record<string, unknown>;
+  headers: Record<string, string>;
+}
+
+/** A canned answer, or a factory for one when the same call repeats. */
+export type StubResponse = Response | (() => Response);
+
+/**
+ * A fetch stub that records what it was asked and answers from a script.
+ *
+ * Responses are returned in order and the last one repeats, which is what a
+ * retry test wants — pass a factory for those, since a Response body can only
+ * be read once. Five hand-rolled stubs counting their own calls and pushing
+ * their own {url, init} pairs wanted exactly this.
+ */
+export function recorder(responses: readonly StubResponse[]) {
+  const sent: Sent[] = [];
+  const fetchFn: typeof fetch = (input, init) => {
+    let body: Record<string, unknown> = {};
+    try {
+      // The token endpoint is form-encoded; every other call is JSON.
+      body = JSON.parse(String(init?.body ?? "{}"));
+    } catch {
+      body = {};
+    }
+    sent.push({
+      url: String(input),
+      init: init ?? {},
+      body,
+      headers: (init?.headers ?? {}) as Record<string, string>,
+    });
+    const next = responses[sent.length - 1] ?? responses.at(-1)!;
+    return Promise.resolve(typeof next === "function" ? next() : next);
+  };
+  return { sent, fetchFn };
+}
+
+export function jsonResponse(body: unknown, status = 200): Response {
+  return new Response(JSON.stringify(body), {
+    status,
+    headers: { "Content-Type": "application/json" },
+  });
 }
 
 const BASE = "http://localhost:54321/functions/v1";

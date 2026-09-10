@@ -7,26 +7,47 @@ import { handleVoiceBlock } from "./handler.ts";
 import { RevenueCatBalanceProvider } from "./providers/balance.ts";
 import { DeepgramTokenMinter } from "./providers/minter.ts";
 import {
+  call,
   CONFIG,
   FakeTokenMinter,
-  MemoryBlockStore,
   GOOD_TOKEN,
   grantReq,
   harness,
+  jsonResponse,
+  MemoryBlockStore,
+  recorder,
   releaseReq,
   SESSION,
   USER,
 } from "./testing/fakes.ts";
-import { Deps, ProviderError } from "./types.ts";
-
-async function call(deps: Deps, req: Request) {
-  const res = await handleVoiceBlock(req, deps);
-  return { status: res.status, body: await res.json() };
-}
+import { ProviderError } from "./types.ts";
 
 const BASE = "http://localhost:54321/functions/v1";
 const BLOCK = "33333333-3333-4333-8333-000000000001";
 const OTHER_SESSION = "55555555-5555-4555-8555-555555555555";
+
+/** A fresh 429 per attempt: a Response body can only be read once. */
+const throttled = (retryAfter?: string) => () =>
+  new Response("", {
+    status: 429,
+    ...(retryAfter ? { headers: { "Retry-After": retryAfter } } : {}),
+  });
+
+/** The provider under test, pointed at a scripted fetch. */
+function revenueCat(responses: Parameters<typeof recorder>[0], sleeps?: number[]) {
+  const { sent, fetchFn } = recorder(responses);
+  const provider = new RevenueCatBalanceProvider({
+    secretKey: "test",
+    projectId: "proj",
+    currencyCode: "VOICE",
+    fetch: fetchFn,
+    sleep: (ms) => {
+      sleeps?.push(ms);
+      return Promise.resolve();
+    },
+  });
+  return { provider, sent };
+}
 
 // ---------------------------------------------------------------------------
 // Grant
@@ -172,104 +193,57 @@ Deno.test("grant: a failed block insert refunds the debit and returns 503", asyn
 });
 
 Deno.test("grant: a rate-limited balance read fails fast to 503 without sleeping", async () => {
-  let attempts = 0;
-  const fetchStub: typeof fetch = () => {
-    attempts++;
-    return Promise.resolve(
-      new Response("", { status: 429, headers: { "Retry-After": "60" } }),
-    );
-  };
   const sleeps: number[] = [];
-  const balance = new RevenueCatBalanceProvider({
-    secretKey: "test",
-    projectId: "proj",
-    currencyCode: "VOICE",
-    fetch: fetchStub,
-    sleep: (ms) => {
-      sleeps.push(ms);
-      return Promise.resolve();
-    },
-  });
-  const h = harness({ balance });
+  const { provider, sent } = revenueCat([throttled("60")], sleeps);
+  const h = harness({ balance: provider });
   const { status, body } = await call(h.deps, grantReq());
 
   assertEquals(status, 503);
   assertEquals(body, { error: "provider_unavailable" });
   // The read happens before any money moves, so retrying it only burns the
   // seconds the client's token window has left.
-  assertEquals(attempts, 1);
+  assertEquals(sent.length, 1);
   assertEquals(sleeps, []);
   assertEquals(h.minter.minted, 0);
 });
 
 Deno.test("RevenueCat provider: a write retries a 429 twice with a capped backoff", async () => {
-  let attempts = 0;
-  const fetchStub: typeof fetch = () => {
-    attempts++;
-    return Promise.resolve(
-      // A minute of Retry-After would outlive the token this request exists to
-      // mint, so the backoff must clamp it.
-      new Response("", { status: 429, headers: { "Retry-After": "60" } }),
-    );
-  };
   const sleeps: number[] = [];
-  const provider = new RevenueCatBalanceProvider({
-    secretKey: "test",
-    projectId: "proj",
-    currencyCode: "VOICE",
-    fetch: fetchStub,
-    sleep: (ms) => {
-      sleeps.push(ms);
-      return Promise.resolve();
-    },
-  });
+  // A minute of Retry-After would outlive the token this request exists to
+  // mint, so the backoff must clamp it.
+  const { provider, sent } = revenueCat([throttled("60")], sleeps);
 
   const error = await assertRejects(
     () => provider.spend(USER, BLOCK, 5),
     ProviderError,
   );
   assertEquals(error.reason, "rate_limited");
-  assertEquals(attempts, 3); // 1 try + 2 retries
+  assertEquals(sent.length, 3); // 1 try + 2 retries
   assertEquals(sleeps, [2000, 2000]);
 });
 
 Deno.test("RevenueCat provider: recovers after a single 429 and parses the balance", async () => {
-  let attempts = 0;
-  const seen: Array<{ url: string; init?: RequestInit }> = [];
-  const fetchStub: typeof fetch = (input, init) => {
-    attempts++;
-    seen.push({ url: String(input), init });
-    if (attempts === 1) return Promise.resolve(new Response("", { status: 429 }));
-    return Promise.resolve(
-      new Response(
-        JSON.stringify({
-          object: "list",
-          items: [
-            { currency_code: "GEMS", balance: 99 },
-            { currency_code: "VOICE", balance: 7 },
-          ],
-        }),
-        { status: 200, headers: { "Content-Type": "application/json" } },
-      ),
-    );
-  };
-  const provider = new RevenueCatBalanceProvider({
-    secretKey: "test",
-    projectId: "proj",
-    currencyCode: "VOICE",
-    fetch: fetchStub,
-    sleep: () => Promise.resolve(),
-  });
+  const { provider, sent } = revenueCat([
+    throttled(),
+    jsonResponse({
+      object: "list",
+      items: [
+        { currency_code: "GEMS", balance: 99 },
+        { currency_code: "VOICE", balance: 7 },
+      ],
+    }),
+  ]);
 
   assertEquals(await provider.spend(USER, BLOCK, 5), 7);
-  assertEquals(attempts, 2);
-  assertStringIncludes(seen[1].url, `/projects/proj/customers/${USER}/virtual_currencies/transactions`);
-  const sent = JSON.parse(String(seen[1].init?.body));
-  assertEquals(sent.adjustments, { VOICE: -5 });
-  assertEquals(sent.reference, `voice-block:${BLOCK}`);
-  const headers = seen[1].init?.headers as Record<string, string>;
-  assertEquals(headers["Idempotency-Key"], `voice-block:${BLOCK}`);
-  assertEquals(headers["Authorization"], "Bearer test");
+  assertEquals(sent.length, 2);
+  assertStringIncludes(
+    sent[1].url,
+    `/projects/proj/customers/${USER}/virtual_currencies/transactions`,
+  );
+  assertEquals(sent[1].body.adjustments, { VOICE: -5 });
+  assertEquals(sent[1].body.reference, `voice-block:${BLOCK}`);
+  assertEquals(sent[1].headers["Idempotency-Key"], `voice-block:${BLOCK}`);
+  assertEquals(sent[1].headers["Authorization"], "Bearer test");
 });
 
 Deno.test("grant: every ledger call for a block is keyed on the block id", async () => {
@@ -321,10 +295,7 @@ Deno.test("grant: malformed session_id is 400 before any provider call", async (
 Deno.test("Deepgram minter: 429 classifies as rate limited, like RevenueCat's", async () => {
   const minter = new DeepgramTokenMinter({
     apiKey: "master-key",
-    fetch: () =>
-      Promise.resolve(
-        new Response("", { status: 429, headers: { "Retry-After": "3" } }),
-      ),
+    fetch: recorder([throttled("3")]).fetchFn,
   });
 
   const error = await assertRejects(() => minter.mint(30), ProviderError);
@@ -333,23 +304,14 @@ Deno.test("Deepgram minter: 429 classifies as rate limited, like RevenueCat's", 
 });
 
 Deno.test("Deepgram minter: returns the access token from a successful grant", async () => {
-  const seen: Array<{ url: string; init?: RequestInit }> = [];
-  const minter = new DeepgramTokenMinter({
-    apiKey: "master-key",
-    fetch: (input, init) => {
-      seen.push({ url: String(input), init });
-      return Promise.resolve(
-        new Response(JSON.stringify({ access_token: "dg-token", expires_in: 30 }), {
-          status: 200,
-          headers: { "Content-Type": "application/json" },
-        }),
-      );
-    },
-  });
+  const { sent, fetchFn } = recorder([
+    jsonResponse({ access_token: "dg-token", expires_in: 30 }),
+  ]);
+  const minter = new DeepgramTokenMinter({ apiKey: "master-key", fetch: fetchFn });
 
   assertEquals(await minter.mint(30), "dg-token");
-  assertStringIncludes(seen[0].url, "https://api.deepgram.com/v1/auth/grant");
-  assertEquals(JSON.parse(String(seen[0].init?.body)), { ttl_seconds: 30 });
+  assertStringIncludes(sent[0].url, "https://api.deepgram.com/v1/auth/grant");
+  assertEquals(sent[0].body, { ttl_seconds: 30 });
 });
 
 // ---------------------------------------------------------------------------
@@ -526,86 +488,46 @@ Deno.test("routing: non-POST is 405, unknown path is 404", async () => {
 Deno.test("RevenueCat provider: follows the balance cursor rather than reading a zero", async () => {
   // The list is paginated. A currency that fell onto page two would read as a
   // zero balance, which 402s every grant and no amount of buying credit fixes.
-  const pages = [
-    JSON.stringify({
+  const { provider, sent } = revenueCat([
+    jsonResponse({
       object: "list",
       items: [{ currency_code: "GEMS", balance: 99 }],
       next_page:
         `/v2/projects/proj/customers/${USER}/virtual_currencies?starting_after=abc`,
     }),
-    JSON.stringify({
+    jsonResponse({
       object: "list",
       items: [{ currency_code: "VOICE", balance: 12 }],
       next_page: null,
     }),
-  ];
-  const seen: string[] = [];
-  const provider = new RevenueCatBalanceProvider({
-    secretKey: "test",
-    projectId: "proj",
-    currencyCode: "VOICE",
-    fetch: (input) => {
-      seen.push(String(input));
-      return Promise.resolve(
-        new Response(pages[seen.length - 1], {
-          status: 200,
-          headers: { "Content-Type": "application/json" },
-        }),
-      );
-    },
-  });
+  ]);
 
   assertEquals(await provider.getBalance(USER), 12);
-  assertEquals(seen.length, 2);
-  assertStringIncludes(seen[0], "include_empty_balances=true&limit=100");
+  assertEquals(sent.length, 2);
+  assertStringIncludes(sent[0].url, "include_empty_balances=true&limit=100");
   // next_page already carries the /v2 the base URL supplies; it must not be
   // doubled.
   assertEquals(
-    seen[1],
+    sent[1].url,
     `https://api.revenuecat.com/v2/projects/proj/customers/${USER}/virtual_currencies?starting_after=abc`,
   );
 });
 
 Deno.test("RevenueCat provider: a currency on no page is a zero balance", async () => {
-  const provider = new RevenueCatBalanceProvider({
-    secretKey: "test",
-    projectId: "proj",
-    currencyCode: "VOICE",
-    fetch: () =>
-      Promise.resolve(
-        new Response(JSON.stringify({ object: "list", items: [] }), {
-          status: 200,
-          headers: { "Content-Type": "application/json" },
-        }),
-      ),
-  });
+  const { provider } = revenueCat([jsonResponse({ object: "list", items: [] })]);
   assertEquals(await provider.getBalance(USER), 0);
 });
 
 Deno.test("RevenueCat provider: a grant is a positive adjustment keyed on its reference", async () => {
-  const seen: Array<{ url: string; init?: RequestInit }> = [];
-  const provider = new RevenueCatBalanceProvider({
-    secretKey: "test",
-    projectId: "proj",
-    currencyCode: "VOICE",
-    fetch: (input, init) => {
-      seen.push({ url: String(input), init });
-      return Promise.resolve(
-        new Response(
-          JSON.stringify({ items: [{ currency_code: "VOICE", balance: 70 }] }),
-          { status: 200, headers: { "Content-Type": "application/json" } },
-        ),
-      );
-    },
-  });
+  const { provider, sent } = revenueCat([
+    jsonResponse({ items: [{ currency_code: "VOICE", balance: 70 }] }),
+  ]);
 
   assertEquals(await provider.grant(USER, `voucher:${BLOCK}`, 50), 70);
-  assertStringIncludes(seen[0].url, "/virtual_currencies/transactions");
-  const sent = JSON.parse(String(seen[0].init?.body));
-  assertEquals(sent.adjustments, { VOICE: 50 });
-  assertEquals(sent.reference, `voucher:${BLOCK}`);
-  const headers = seen[0].init?.headers as Record<string, string>;
+  assertStringIncludes(sent[0].url, "/virtual_currencies/transactions");
+  assertEquals(sent[0].body.adjustments, { VOICE: 50 });
+  assertEquals(sent[0].body.reference, `voucher:${BLOCK}`);
   // The reference is the idempotency key, which is what makes a retried
   // trial or redemption pay out once (reqs 11.8, 12.5).
-  assertEquals(headers["Idempotency-Key"], `voucher:${BLOCK}`);
+  assertEquals(sent[0].headers["Idempotency-Key"], `voucher:${BLOCK}`);
 });

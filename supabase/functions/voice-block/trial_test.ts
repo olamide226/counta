@@ -1,7 +1,7 @@
 import { assertEquals } from "@std/assert";
-import { handleVoiceBlock } from "./handler.ts";
 import {
   androidAttestor,
+  call,
   DEVICE_TOKEN,
   FakeAttestor,
   harness,
@@ -12,15 +12,10 @@ import {
   trialReq,
   USER,
 } from "./testing/fakes.ts";
-import { AttestationError, Deps, ProviderError } from "./types.ts";
+import { AttestationError, ProviderError } from "./types.ts";
 
 // POST /voice-block/trial — requirement 11, end to end through the handler
 // with the attestation faked. Nothing here reaches Apple or Google.
-
-async function call(deps: Deps, req: Request) {
-  const res = await handleVoiceBlock(req, deps);
-  return { status: res.status, body: await res.json() };
-}
 
 const ANDROID = { platform: "android", integrity_token: INTEGRITY_TOKEN };
 

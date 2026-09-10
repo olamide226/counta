@@ -1,6 +1,7 @@
 import { assertEquals, assertRejects, assertStringIncludes } from "@std/assert";
 import { AppleDeviceCheckAttestor } from "./providers/devicecheck.ts";
 import { PlayIntegrityAttestor } from "./providers/playintegrity.ts";
+import { jsonResponse, recorder } from "./testing/fakes.ts";
 import { AttestationError, ProviderError } from "./types.ts";
 import { base64UrlToBytes } from "./webcrypto.ts";
 
@@ -39,41 +40,6 @@ async function generateKeyPem(algorithm: "ES256" | "RS256"): Promise<string> {
   return `-----BEGIN PRIVATE KEY-----\\n${
     base64.match(/.{1,64}/g)!.join("\\n")
   }\\n-----END PRIVATE KEY-----\\n`;
-}
-
-interface Sent {
-  url: string;
-  init: RequestInit;
-  body: Record<string, unknown>;
-  headers: Record<string, string>;
-}
-
-function recorder(responses: Response[]) {
-  const sent: Sent[] = [];
-  const fetchFn: typeof fetch = (input, init) => {
-    let body: Record<string, unknown> = {};
-    try {
-      // The token endpoint is form-encoded; every other call is JSON.
-      body = JSON.parse(String(init?.body ?? "{}"));
-    } catch {
-      body = {};
-    }
-    sent.push({
-      url: String(input),
-      init: init ?? {},
-      body,
-      headers: (init?.headers ?? {}) as Record<string, string>,
-    });
-    return Promise.resolve(responses[sent.length - 1] ?? responses.at(-1)!);
-  };
-  return { sent, fetchFn };
-}
-
-function jsonResponse(body: unknown, status = 200): Response {
-  return new Response(JSON.stringify(body), {
-    status,
-    headers: { "Content-Type": "application/json" },
-  });
 }
 
 async function deviceCheck(

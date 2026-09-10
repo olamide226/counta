@@ -1,6 +1,6 @@
 import { assertEquals, assertNotEquals } from "@std/assert";
-import { handleVoiceBlock } from "./handler.ts";
 import {
+  call,
   CONFIG,
   harness,
   MemoryVoucherStore,
@@ -11,17 +11,11 @@ import {
   voucher,
   VOUCHER_ID,
 } from "./testing/fakes.ts";
-import { Deps } from "./types.ts";
 
 // POST /voice-block/redeem — requirement 12. The two rules that bound the
 // payout (one redemption per user, the campaign cap) are database constraints
 // and are exercised against a real Postgres by the migration; what is tested
 // here is the endpoint built on top of them.
-
-async function call(deps: Deps, req: Request) {
-  const res = await handleVoiceBlock(req, deps);
-  return { status: res.status, body: await res.json() };
-}
 
 const THIRD_USER = "99999999-9999-4999-8999-999999999999";
 const NOW = new Date("2026-09-07T12:00:00.000Z");
