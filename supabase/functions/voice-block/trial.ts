@@ -121,16 +121,23 @@ export async function trial(
   // device's only claim on a request that then failed. A failure here costs
   // the operator one extra trial instead, which is the cheaper mistake — so
   // it is logged rather than thrown (design: "iOS: DeviceCheck").
-  try {
-    await verdict.claim();
-  } catch (error) {
-    deps.log("trial_claim_failed", {
-      user_id: userId,
-      platform,
-      gate: attestor.gate,
-      message: String(error),
-    });
-  }
+  //
+  // And because it cannot fail the request, it need not delay it either. The
+  // call starts here, on the same ordering as before — the credits and the
+  // grant row are both already written — but the response no longer waits on
+  // an Apple round trip. `afterResponse` is what keeps the worker alive for
+  // it. The catch is not optional: an unobserved rejection would take the
+  // isolate down instead of costing one bit.
+  deps.afterResponse(
+    verdict.claim().catch((error) => {
+      deps.log("trial_claim_failed", {
+        user_id: userId,
+        platform,
+        gate: attestor.gate,
+        message: String(error),
+      });
+    }),
+  );
 
   // 10.1's log shape, for the same reason a block grant has one.
   deps.log("trial_granted", {

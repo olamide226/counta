@@ -566,7 +566,9 @@ DeviceAttestor.check(payload)                          -> 400 rejected,
 BalanceProvider.grant(user, "trial:<user>", credits)   -> 503 on failure
 insert counta.trial_grants                             -> PK collision means a
                                                           concurrent request won
-DeviceAttestation.claim()  (iOS: set the bit)          -> logged, never thrown
+DeviceAttestation.claim()  (iOS: set the bit)          -> started here, awaited
+                                                          after the response;
+                                                          logged, never thrown
 ```
 
 The credits move before either record is written, and the ledger call is keyed
@@ -577,6 +579,8 @@ state the next attempt walks straight through. Writing the row first would
 work too, but then every later "already claimed" answer would have to re-issue
 the grant to stay self-healing, and that spends a RevenueCat write on every
 reinstall for no gain.
+
+The bit write is started last and finished after the response has been sent (`EdgeRuntime.waitUntil`). The ordering is unchanged — the credits and the grant row are both committed before it is called — but a call that cannot fail the request need not delay it either, and this one saves every successful iOS trial an Apple round trip. Its failure is still logged, and the rejection is still caught: an unobserved one would take the isolate down instead of costing one bit.
 
 The bit is set last, and never allowed to fail the request. It is what makes
 the device ineligible for ever (Requirement 11.3), so setting it before the

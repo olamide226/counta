@@ -50,6 +50,23 @@ function buildConfig(): HandlerConfig {
   };
 }
 
+/**
+ * Keeps the worker alive for work started before the response and finishing
+ * after it (the DeviceCheck bit write).
+ *
+ * `EdgeRuntime` is the Supabase edge runtime's global and is absent under
+ * `deno test` and `deno run`. Its absence is not a failure: the promise has
+ * already been started and still runs — all that is lost is the guarantee
+ * that the isolate stays up for it, which is exactly the guarantee only a
+ * deployed worker can give.
+ */
+function afterResponse(work: Promise<unknown>): void {
+  const runtime = (globalThis as {
+    EdgeRuntime?: { waitUntil?: (work: Promise<unknown>) => void };
+  }).EdgeRuntime;
+  runtime?.waitUntil?.(work);
+}
+
 /** One log line shape everywhere, so the function logs stay greppable. */
 function log(event: string, fields: Record<string, unknown>): void {
   console.log(JSON.stringify({ event, ...fields }));
@@ -101,6 +118,7 @@ function deps(): Deps {
     config,
     now: () => new Date(),
     newBlockId: () => crypto.randomUUID(),
+    afterResponse,
     log,
   };
   cachedDeps = built;

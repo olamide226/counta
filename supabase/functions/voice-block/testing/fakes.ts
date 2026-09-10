@@ -238,6 +238,12 @@ export interface Harness {
   android: FakeAttestor;
   logs: Array<{ event: string; fields: Record<string, unknown> }>;
   clock: { now: Date };
+  /**
+   * Waits for the work the handler deferred past the response (the DeviceCheck
+   * bit write). A test that asserts on a claim without calling this is
+   * asserting that the response did not wait for it.
+   */
+  settle: () => Promise<void>;
 }
 
 /**
@@ -258,6 +264,7 @@ export function harness(
   const trials = new MemoryTrialStore();
   const logs: Harness["logs"] = [];
   const clock = { now: new Date("2026-09-07T12:00:00.000Z") };
+  const pending: Array<Promise<unknown>> = [];
   const vouchers = new MemoryVoucherStore(campaigns, clock);
   const ios = new FakeAttestor("devicecheck");
   const android = androidAttestor();
@@ -277,6 +284,9 @@ export function harness(
     config: CONFIG,
     now: () => clock.now,
     newBlockId: () => `33333333-3333-4333-8333-${String(++seq).padStart(12, "0")}`,
+    afterResponse: (work) => {
+      pending.push(work);
+    },
     log: (event, fields) => logs.push({ event, fields }),
     ...overrides,
   };
@@ -297,6 +307,10 @@ export function harness(
     android: deps.attestors.android as FakeAttestor,
     logs,
     clock,
+    settle: async () => {
+      // Drained in a loop: deferred work may defer more.
+      while (pending.length > 0) await Promise.all(pending.splice(0));
+    },
   };
 }
 
@@ -423,24 +437,42 @@ export class FakeAttestor implements DeviceAttestor {
       failClaims?: number;
       /** Android has nowhere to write a claim, so claim() records nothing. */
       records?: boolean;
+      /**
+       * claim() does not settle until releaseClaims() is called — which is
+       * how "the bit was written *after* the response" is provable rather
+       * than merely likely. A handler that awaited it would never answer.
+       */
+      hold?: boolean;
     } = {},
   ) {
     this.tokenField = gate === "devicecheck" ? "device_token" : "integrity_token";
   }
+
+  /** Lets a held claim finish; see the `hold` option. */
+  releaseClaims(): void {
+    this.release?.();
+    this.release = undefined;
+  }
+
+  private release?: () => void;
 
   check(attestation: string): Promise<DeviceAttestation> {
     this.checks.push(attestation);
     if (this.options.failWith) return Promise.reject(this.options.failWith);
     return Promise.resolve({
       eligible: !this.claimed.has(attestation),
-      claim: () => {
+      claim: async () => {
         this.claims.push(attestation);
+        if (this.options.hold) {
+          await new Promise<void>((resolve) => {
+            this.release = resolve;
+          });
+        }
         if ((this.options.failClaims ?? 0) > 0) {
           this.options.failClaims!--;
-          return Promise.reject(new Error("bit write failed"));
+          throw new Error("bit write failed");
         }
         if (this.options.records !== false) this.claimed.add(attestation);
-        return Promise.resolve();
       },
     });
   }

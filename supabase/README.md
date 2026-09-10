@@ -164,6 +164,10 @@ things it is worth knowing before reading a log:
 - `invalid_attestation` (400) is the provider reading the payload and saying
   no. The same token will never pass, so a client that retries it is wasting
   the request.
+- `trial_claim_failed` can appear *after* the `trial_granted` line for the same
+  request. The DeviceCheck bit write runs on `EdgeRuntime.waitUntil` so it does
+  not hold the response open; it cannot fail the grant, and losing it costs one
+  extra trial.
 
 Neither endpoint is reachable without a JWT, and neither trusts anything the
 client says about its own eligibility (req 4.8).

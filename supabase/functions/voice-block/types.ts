@@ -183,6 +183,17 @@ export interface Deps {
   now: () => Date;
   /** New block id, minted before the debit so the ledger can be keyed on it. */
   newBlockId: () => string;
+  /**
+   * Runs work that must finish but must not hold the response open.
+   *
+   * One caller: the DeviceCheck bit write, which is already declared
+   * non-fatal, so making every successful iOS trial wait on an Apple round
+   * trip bought the client nothing. A port rather than a direct
+   * `EdgeRuntime.waitUntil` because a test has to be able to wait for it —
+   * "the claim happened, but after the answer" is the property, and neither
+   * half of that is assertable if the work is invisible.
+   */
+  afterResponse: (work: Promise<unknown>) => void;
   log: LogFn;
 }
 

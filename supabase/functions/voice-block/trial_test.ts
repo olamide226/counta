@@ -19,6 +19,17 @@ import { AttestationError, ProviderError, TrialPlatform } from "./types.ts";
 
 const ANDROID = { platform: "android", integrity_token: INTEGRITY_TOKEN };
 
+const TIMED_OUT = Symbol("timed out");
+
+/** Resolves to TIMED_OUT rather than hanging the suite on a regression. */
+function within<T>(ms: number, work: Promise<T>): Promise<T | typeof TIMED_OUT> {
+  let timer: ReturnType<typeof setTimeout>;
+  const timeout = new Promise<typeof TIMED_OUT>((resolve) => {
+    timer = setTimeout(() => resolve(TIMED_OUT), ms);
+  });
+  return Promise.race([work, timeout]).finally(() => clearTimeout(timer));
+}
+
 Deno.test("trial: grants once, then reports the existing outcome", async () => {
   const h = harness();
 
@@ -29,6 +40,8 @@ Deno.test("trial: grants once, then reports the existing outcome", async () => {
   assertEquals(h.trials.rows[0].gate, "devicecheck");
   assertEquals(h.trials.rows[0].platform, "ios");
   // The bit is set, so the *device* is ineligible from now on (req 11.3).
+  // Settled first: it is written after the response, not during it.
+  await h.settle();
   assertEquals(h.ios.claimed.has(DEVICE_TOKEN), true);
   const granted = h.logs.find((l) => l.event === "trial_granted");
   assertEquals(granted?.fields.user_id, USER);
@@ -173,6 +186,7 @@ Deno.test("trial: Android grants on a genuine verdict and records only the row",
   assertEquals(h.trials.rows[0].platform, "android");
   // Play Integrity has nowhere to write a claim, so the row is the whole
   // record and the gate is weaker than the iOS one by construction (11.6).
+  await h.settle();
   assertEquals(h.android.claims, [INTEGRITY_TOKEN]);
   assertEquals(h.android.claimed.size, 0);
 });
@@ -259,8 +273,36 @@ Deno.test("trial: a failed bit write still grants, and says so in the logs", asy
   assertEquals(status, 200);
   assertEquals(body, { granted: true, credits: 20, balance: 40 });
   assertEquals(h.trials.rows.length, 1);
+  await h.settle();
   assertEquals(ios.claimed.size, 0);
   assertEquals(h.logs.some((l) => l.event === "trial_claim_failed"), true);
+});
+
+Deno.test("trial: the DeviceCheck bit is written after the response, not during it", async () => {
+  // The bit write is non-fatal by design — losing it costs the operator one
+  // extra trial — so there was never a reason for every successful iOS trial
+  // to wait on an Apple round trip. This attestor's claim() does not settle
+  // until it is released, so a handler that awaited it would never answer.
+  const ios = new FakeAttestor("devicecheck", { hold: true });
+  const h = harness({ attestors: { ios } });
+
+  const answered = await within(1000, call(h.deps, trialReq()));
+  if (answered === TIMED_OUT) {
+    throw new Error("the response waited on the DeviceCheck bit write");
+  }
+
+  assertEquals(answered.status, 200);
+  assertEquals(answered.body, { granted: true, credits: 20, balance: 40 });
+  // Started before the response, as the ordering requires: the credits and
+  // the grant row are both already written by the time it is called.
+  assertEquals(ios.claims, [DEVICE_TOKEN]);
+  // But not finished, and the caller did not wait for it.
+  assertEquals(ios.claimed.size, 0);
+  assertEquals(h.trials.rows.length, 1);
+
+  ios.releaseClaims();
+  await h.settle();
+  assertEquals(ios.claimed.has(DEVICE_TOKEN), true);
 });
 
 Deno.test("trial: a grant row written by a concurrent request pays out once", async () => {
