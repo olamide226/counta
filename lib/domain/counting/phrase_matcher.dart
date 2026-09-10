@@ -89,7 +89,21 @@ class PhraseMatcher {
   final PhraseSpec target;
   final MatcherConfig config;
 
-  final List<TokenWithOffset> _window = [];
+  /// One token window per transcript stream.
+  ///
+  /// A stream is one Deepgram *connection*, not one session: every connect
+  /// starts a fresh audio timeline at zero, and a block renewal deliberately
+  /// runs two connections at once. Interleaving two connections' tokens into a
+  /// single ordered window produces slices that span both and matches that
+  /// exist in neither, so each stream gets its own window and they are only
+  /// ever compared through the shared acceptance gate below.
+  final Map<String, List<TokenWithOffset>> _windows = {};
+
+  /// Where each stream's timeline sits on the session timeline, in ms. The
+  /// engine knows this exactly — it is the audio it had already streamed when
+  /// that connection received its first frame.
+  final Map<String, double> _streamOffsetsMs = {};
+
   final List<double> _observedUtteranceDurationsMs = [];
 
   int _windowsEvaluated = 0;
@@ -97,6 +111,27 @@ class PhraseMatcher {
   double? _lastMatchEndMs;
 
   PhraseMatcher({required this.target, this.config = const MatcherConfig()});
+
+  /// Stream id used when a caller does not name one — a session with a single
+  /// connection, and every fixture replay.
+  static const String defaultStreamId = 'default';
+
+  /// Registers a transcript stream and where its zero sits on the session
+  /// timeline.
+  ///
+  /// Calling this again for the same id restarts the stream: a reconnect
+  /// reuses the socket but not its timeline, so its window must not carry
+  /// tokens timestamped against the old one.
+  void openStream(String streamId, {Duration startOffset = Duration.zero}) {
+    _streamOffsetsMs[streamId] = startOffset.inMicroseconds / 1000.0;
+    _windows[streamId] = [];
+  }
+
+  /// Forgets a stream once its connection is closed and drained.
+  void closeStream(String streamId) {
+    _streamOffsetsMs.remove(streamId);
+    _windows.remove(streamId);
+  }
 
   MatcherStats get stats => MatcherStats(
     detectionsCount: _detectionsCount,
@@ -264,7 +299,15 @@ class PhraseMatcher {
   static const int _maxObservedUtterances = 50;
 
   /// Ingests a finalised transcript segment and returns accepted detections.
-  List<Detection> ingest(TranscriptSegment segment) {
+  ///
+  /// [streamId] names the connection the segment came from. Its offsets are
+  /// rebased onto the session timeline with the offset given to [openStream],
+  /// which is what lets two overlapping connections — and everything after a
+  /// reconnect — be compared against the same acceptance gate.
+  List<Detection> ingest(
+    TranscriptSegment segment, {
+    String streamId = defaultStreamId,
+  }) {
     // Requirements 8.5: Count only on finalised segments
     if (!segment.isFinal) return [];
 
@@ -273,6 +316,9 @@ class PhraseMatcher {
 
     if (normalisedTarget.isEmpty) return [];
 
+    final offsetSec = (_streamOffsetsMs[streamId] ?? 0.0) / 1000.0;
+    final window = _windows.putIfAbsent(streamId, () => []);
+
     // Parse words/tokens from segment
     List<TokenWithOffset> newTokens = [];
     if (segment.words.isNotEmpty) {
@@ -280,7 +326,11 @@ class PhraseMatcher {
         final normWords = normaliseText(w.word);
         for (final nw in normWords) {
           newTokens.add(
-            TokenWithOffset(token: nw, startSec: w.start, endSec: w.end),
+            TokenWithOffset(
+              token: nw,
+              startSec: w.start + offsetSec,
+              endSec: w.end + offsetSec,
+            ),
           );
         }
       }
@@ -290,7 +340,7 @@ class PhraseMatcher {
           ? (segment.duration / normWords.length)
           : 0.0;
       for (int i = 0; i < normWords.length; i++) {
-        final startSec = segment.start + (i * durationPerToken);
+        final startSec = segment.start + offsetSec + (i * durationPerToken);
         final endSec = startSec + durationPerToken;
         newTokens.add(
           TokenWithOffset(
@@ -302,7 +352,7 @@ class PhraseMatcher {
       }
     }
 
-    _window.addAll(newTokens);
+    window.addAll(newTokens);
 
     // Evaluate candidate slices and choose the closest match. Searching by
     // length alone let a target plus one noise word beat an exact target.
@@ -311,24 +361,21 @@ class PhraseMatcher {
     final maxSliceLen = (targetLen * config.windowSlack).ceil();
     final maxRetainedWindowLen = maxSliceLen + 3;
 
-    while (_window.isNotEmpty) {
+    while (window.isNotEmpty) {
       _MatchCandidate? best;
 
       for (
-        int sliceLen = min(maxSliceLen, _window.length);
+        int sliceLen = min(maxSliceLen, window.length);
         sliceLen >= minSliceLen;
         sliceLen--
       ) {
         for (
           int startIdx = 0;
-          startIdx <= _window.length - sliceLen;
+          startIdx <= window.length - sliceLen;
           startIdx++
         ) {
           _windowsEvaluated++;
-          final candidateTokens = _window.sublist(
-            startIdx,
-            startIdx + sliceLen,
-          );
+          final candidateTokens = window.sublist(startIdx, startIdx + sliceLen);
           final candidateStringList = candidateTokens
               .map((t) => t.token)
               .toList();
@@ -356,7 +403,7 @@ class PhraseMatcher {
 
       if (best == null) break;
 
-      final candidateTokens = _window.sublist(
+      final candidateTokens = window.sublist(
         best.startIndex,
         best.startIndex + best.length,
       );
@@ -369,7 +416,7 @@ class PhraseMatcher {
         if (elapsedSinceLastMatch < currentRefractoryMs) {
           // This candidate is a duplicate. Retire its tokens so they cannot
           // join the next real repetition and create a cross-boundary match.
-          _window.removeRange(0, best.startIndex + best.length);
+          window.removeRange(0, best.startIndex + best.length);
           continue;
         }
       }
@@ -391,15 +438,15 @@ class PhraseMatcher {
         ),
       );
 
-      _window.removeRange(0, best.startIndex + best.length);
+      window.removeRange(0, best.startIndex + best.length);
     }
 
     // Retain only enough unmatched context to bridge a phrase split across
     // adjacent final segments. This must happen after scanning the newly
     // arrived segment, otherwise a long phrase repeated twice in one segment
     // can be truncated before either repetition is counted.
-    if (_window.length > maxRetainedWindowLen) {
-      _window.removeRange(0, _window.length - maxRetainedWindowLen);
+    if (window.length > maxRetainedWindowLen) {
+      window.removeRange(0, window.length - maxRetainedWindowLen);
     }
 
     return detections;
@@ -425,7 +472,8 @@ class PhraseMatcher {
   }
 
   void reset() {
-    _window.clear();
+    _windows.clear();
+    _streamOffsetsMs.clear();
     _observedUtteranceDurationsMs.clear();
     _cachedMedianMs = null;
     _windowsEvaluated = 0;

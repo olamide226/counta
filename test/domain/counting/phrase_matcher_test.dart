@@ -339,6 +339,106 @@ void main() {
         everyElement('the wisdom of god is at work in me'),
       );
     });
+
+    group('overlapping transcript streams at a block seam', () {
+      /// One finalised segment on a connection's own audio timeline.
+      TranscriptSegment saidAt(
+        double start, {
+        String text = "I'm rich in wisdom",
+      }) => TranscriptSegment(
+        text: text,
+        start: start,
+        duration: 2.0,
+        isFinal: true,
+        confidence: 0.99,
+      );
+
+      test('the same audio heard by both connections counts once', () {
+        // A renewal overlaps two Deepgram connections deliberately. Each one
+        // numbers its own audio timeline from zero, so the engine tells the
+        // matcher where each stream's zero sits on the session timeline: the
+        // outgoing connection has been streaming since t=0, the incoming one
+        // since t=270.
+        matcher.openStream('old');
+        matcher.openStream('new', startOffset: const Duration(seconds: 270));
+
+        final fromOld = matcher.ingest(saidAt(272.0), streamId: 'old');
+        final fromNew = matcher.ingest(saidAt(2.0), streamId: 'new');
+
+        expect(fromOld, hasLength(1));
+        expect(
+          fromNew,
+          isEmpty,
+          reason: 'both connections transcribed the same repetition',
+        );
+      });
+
+      test('recogniser jitter between the copies does not double count', () {
+        // The rebase is exact — it comes from bytes streamed, not from a clock
+        // — but the two recognisers still disagree by tens of milliseconds on
+        // where a word starts. What makes the gate hold is that a duplicate's
+        // *start* lands near the original's start, and so well before its end.
+        matcher.openStream('old');
+        matcher.openStream('new', startOffset: const Duration(seconds: 270));
+
+        expect(matcher.ingest(saidAt(272.0), streamId: 'old'), hasLength(1));
+        expect(matcher.ingest(saidAt(2.15), streamId: 'new'), isEmpty);
+        expect(matcher.ingest(saidAt(1.85), streamId: 'new'), isEmpty);
+      });
+
+      test('audio only the new connection heard is still counted', () {
+        matcher.openStream('old');
+        matcher.openStream('new', startOffset: const Duration(seconds: 270));
+
+        expect(matcher.ingest(saidAt(272.0), streamId: 'old'), hasLength(1));
+
+        // Spoken after the outgoing connection was closed and drained.
+        matcher.closeStream('old');
+        expect(matcher.ingest(saidAt(4.5), streamId: 'new'), hasLength(1));
+      });
+
+      test('a phrase split across the two streams is not a match', () {
+        // The windows are per stream precisely so that half a repetition on
+        // one connection cannot be completed by half of the *duplicate* on the
+        // other, inventing a second count out of audio containing one.
+        matcher.openStream('old');
+        matcher.openStream('new', startOffset: const Duration(seconds: 270));
+
+        expect(
+          matcher.ingest(saidAt(272.0, text: 'I am rich'), streamId: 'old'),
+          isEmpty,
+        );
+        expect(
+          matcher.ingest(saidAt(3.0, text: 'in wisdom'), streamId: 'new'),
+          isEmpty,
+        );
+      });
+
+      test('a reconnect keeps counting once its timeline is rebased', () {
+        // Regression: a reconnected socket restarts Deepgram's clock at zero.
+        // Fed in raw, every later repetition looked like it happened long
+        // before the last accepted match and was suppressed for the rest of
+        // the session — voice counting stopped dead after the first drop.
+        matcher.openStream('live');
+        expect(matcher.ingest(saidAt(100.0), streamId: 'live'), hasLength(1));
+
+        matcher.openStream('live', startOffset: const Duration(seconds: 120));
+        expect(matcher.ingest(saidAt(0.5), streamId: 'live'), hasLength(1));
+      });
+
+      test('without the rebase the same reconnect counts nothing', () {
+        matcher.openStream('live');
+        expect(matcher.ingest(saidAt(100.0), streamId: 'live'), hasLength(1));
+
+        matcher.openStream('live');
+        expect(matcher.ingest(saidAt(0.5), streamId: 'live'), isEmpty);
+      });
+
+      test('an unnamed stream behaves exactly as it did before', () {
+        expect(matcher.ingest(saidAt(1.0)), hasLength(1));
+        expect(matcher.ingest(saidAt(4.0)), hasLength(1));
+      });
+    });
   });
 
   group('FixtureReplayHarness', () {
