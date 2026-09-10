@@ -408,6 +408,8 @@ export const INTEGRITY_TOKEN = "fake-integrity-token";
  * an AttestationError for a verdict, a ProviderError for an unreachable one.
  */
 export class FakeAttestor implements DeviceAttestor {
+  /** Whatever the real adapter for this gate reads (types.ts). */
+  readonly tokenField: string;
   readonly checks: string[] = [];
   readonly claims: string[] = [];
   /** Devices that have already taken the trial (iOS: the bit is set). */
@@ -422,7 +424,9 @@ export class FakeAttestor implements DeviceAttestor {
       /** Android has nowhere to write a claim, so claim() records nothing. */
       records?: boolean;
     } = {},
-  ) {}
+  ) {
+    this.tokenField = gate === "devicecheck" ? "device_token" : "integrity_token";
+  }
 
   check(attestation: string): Promise<DeviceAttestation> {
     this.checks.push(attestation);

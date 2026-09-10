@@ -250,6 +250,18 @@ export interface DeviceAttestor {
   /** Recorded on the grant row. */
   readonly gate: TrialGate;
   /**
+   * The request-body field this platform's attestation arrives in —
+   * `device_token` for DeviceCheck, `integrity_token` for Play Integrity.
+   *
+   * On the port beside `gate` because it is a fact about this adapter's
+   * protocol, not about the endpoint. The handler used to hold its own table
+   * of it, next to its own list of supported platforms, next to the keys of
+   * the injected map: three statements of the same thing, and a third platform
+   * would have had to be added to all three. Now it touches index.ts and its
+   * adapter.
+   */
+  readonly tokenField: string;
+  /**
    * Rejects with AttestationError for a verdict-level refusal and with
    * ProviderError when the provider could not be reached at all.
    */

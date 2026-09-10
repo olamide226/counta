@@ -27,6 +27,7 @@ import { lazyKey, signJwt } from "./jwt.ts";
  */
 export class PlayIntegrityAttestor implements DeviceAttestor {
   readonly gate: TrialGate = "play_integrity";
+  readonly tokenField = "integrity_token";
 
   private readonly fetchFn: typeof fetch;
   private readonly now: () => number;

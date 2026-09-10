@@ -670,7 +670,7 @@ That stops emulators, rooted-device farms, repackaged builds and scripted signup
 
 The obvious way to close the gap is a device fingerprint — hardware ids, an advertising id, a hash of build properties. Both stores prohibit it for this purpose, so it appears nowhere in this design (Requirement 11.7). If Android farming turns out to be material in practice, the honest levers are a smaller Android trial, a trial that requires a signed-in Google account rather than an anonymous one, or no Android trial at all. Each is a product decision, not a technical trick.
 
-Platforms with no attestation at all (macOS, Windows, Linux, web) are not offered the trial (Requirement 11.10); the endpoint answers `platform_unsupported`.
+Platforms with no attestation at all (macOS, Windows, Linux, web) are not offered the trial (Requirement 11.10); the endpoint answers `platform_unsupported`. Which platforms *are* offered it is the set of attestors the entrypoint injected, and each attestor names the body field its payload arrives in, so a third platform is an adapter and a line in `index.ts` rather than an edit to the handler. It also makes "no such platform" and "this platform has no configured gate" one branch instead of two that have to keep answering alike.
 
 ### Credentials the operator must obtain
 

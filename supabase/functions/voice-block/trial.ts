@@ -26,28 +26,44 @@ export async function trial(
   const { config, trials, balance } = deps;
 
   const body = await readJson(req);
-  const platform = platformOf(body?.platform);
-  const attestor = platform ? deps.attestors[platform] : undefined;
-  if (!platform || !attestor) {
-    // Requirements 11.10 and 10.9: a platform with no attestation is not
-    // offered the trial at all rather than offered one that always fails.
-    // An operator who has not configured a gate lands here too, which is why
-    // the platform is logged: `ios` in this line is a misconfiguration, not a
-    // desktop build asking a question it should not have asked.
+  const requested = body?.platform;
+  // Which platforms are supported *is* the injected map. Requirements 11.10
+  // and 10.9: a platform with no attestation is not offered the trial rather
+  // than offered one that always fails, and an operator who has configured no
+  // gate lands in the same place — which is why this is one branch and not
+  // two that have to be kept answering alike. The platform is logged because
+  // `ios` in this line is a misconfiguration, not a desktop build asking a
+  // question it should not have asked.
+  const attestor = typeof requested === "string"
+    ? deps.attestors[requested as TrialPlatform]
+    : undefined;
+  if (!attestor) {
     deps.log("trial_platform_unsupported", {
       user_id: userId,
-      platform: body?.platform ?? null,
+      platform: requested ?? null,
     });
     return json(409, { error: "platform_unsupported" });
   }
+  // Sound: `attestors` is keyed by TrialPlatform, so a hit means this string
+  // is one of them.
+  const platform = requested as TrialPlatform;
 
-  const attestation = body?.[ATTESTATION_FIELD[platform]];
+  // Which field carries the payload belongs to the adapter, not here: the
+  // handler has no business knowing that DeviceCheck says `device_token`.
+  const attestation = body?.[attestor.tokenField];
   if (typeof attestation !== "string" || attestation.length === 0) {
     return json(400, { error: "invalid_attestation" });
   }
 
-  // 11.8, and the cheap answer first: a user who already holds a grant is
-  // told so without spending an attestation call on it.
+  // 11.8, and the cheap answer first: a user who already holds a grant is told
+  // so without spending an attestation call on it.
+  //
+  // Sequential where handler.ts:85 would run the pair in parallel, and
+  // deliberately. Parallelising trades a Postgres lookup on the first-time
+  // path — which today pays for it and finds nothing — for an Apple or Google
+  // round trip on every repeat caller, and every reinstall is a repeat caller.
+  // The two round trips are not comparable: one is metered by a third party
+  // and one is not.
   const existing = await trials.find(userId);
   if (existing) {
     deps.log("trial_already_claimed", {
@@ -176,13 +192,3 @@ function refuse(
     ? json(400, { error: "invalid_attestation" })
     : json(503, { error: "attestation_unavailable" });
 }
-
-/** The two platforms with an attestation to offer (req 11.10). */
-function platformOf(value: unknown): TrialPlatform | null {
-  return value === "ios" || value === "android" ? value : null;
-}
-
-const ATTESTATION_FIELD: Record<TrialPlatform, string> = {
-  ios: "device_token",
-  android: "integrity_token",
-};

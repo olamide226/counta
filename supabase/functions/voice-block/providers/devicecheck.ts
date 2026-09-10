@@ -22,6 +22,7 @@ import { lazyKey, signJwt } from "./jwt.ts";
  */
 export class AppleDeviceCheckAttestor implements DeviceAttestor {
   readonly gate: TrialGate = "devicecheck";
+  readonly tokenField = "device_token";
 
   private readonly fetchFn: typeof fetch;
   private readonly now: () => number;
