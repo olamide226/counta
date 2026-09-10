@@ -18,7 +18,7 @@ void main() {
       fakeAudio = FakeAudioSource();
       engine = CloudCountingEngine(
         tokenProvider: () async => testToken,
-        speechSocket: fakeSocket,
+        socketFactory: () => fakeSocket,
         audioSource: fakeAudio,
       );
     });
@@ -139,7 +139,7 @@ void main() {
         final localEngine = CloudCountingEngine(
           tokenProvider: () async =>
               throw const VoiceUnavailable('Voice counting is not wired up.'),
-          speechSocket: socket,
+          socketFactory: () => socket,
           audioSource: FakeAudioSource(),
         );
         addTearDown(localEngine.dispose);
@@ -171,7 +171,7 @@ void main() {
         final socket = FakeSpeechSocket();
         final localEngine = CloudCountingEngine(
           tokenProvider: () async => throw StateError('no block token'),
-          speechSocket: socket,
+          socketFactory: () => socket,
           audioSource: FakeAudioSource(),
         );
         addTearDown(localEngine.dispose);
@@ -255,7 +255,7 @@ void main() {
       final throwingSocket = _ThrowingCloseSocket();
       final localEngine = CloudCountingEngine(
         tokenProvider: () async => testToken,
-        speechSocket: throwingSocket,
+        socketFactory: () => throwingSocket,
         audioSource: FakeAudioSource(),
       );
 
@@ -315,7 +315,7 @@ void main() {
         final localAudio = FakeAudioSource();
         final localEngine = CloudCountingEngine(
           tokenProvider: () async => testToken,
-          speechSocket: localSocket,
+          socketFactory: () => localSocket,
           audioSource: localAudio,
           transcriptionSilenceTimeout: const Duration(milliseconds: 80),
           transcriptionWatchdogInterval: const Duration(milliseconds: 10),
@@ -345,7 +345,7 @@ void main() {
         final localAudio = FakeAudioSource();
         final localEngine = CloudCountingEngine(
           tokenProvider: () async => testToken,
-          speechSocket: localSocket,
+          socketFactory: () => localSocket,
           audioSource: localAudio,
           transcriptionSilenceTimeout: const Duration(milliseconds: 70),
           transcriptionWatchdogInterval: const Duration(milliseconds: 10),
@@ -372,7 +372,7 @@ void main() {
       final failing = _FailingReconnectSocket();
       final localEngine = CloudCountingEngine(
         tokenProvider: () async => testToken,
-        speechSocket: failing,
+        socketFactory: () => failing,
         audioSource: FakeAudioSource(),
         reconnectWindow: const Duration(minutes: 5),
         maxReconnectBackoff: const Duration(milliseconds: 20),
@@ -398,7 +398,7 @@ void main() {
       final failing = _FailingReconnectSocket();
       final localEngine = CloudCountingEngine(
         tokenProvider: () async => testToken,
-        speechSocket: failing,
+        socketFactory: () => failing,
         audioSource: FakeAudioSource(),
         reconnectWindow: const Duration(milliseconds: 120),
         maxReconnectBackoff: const Duration(milliseconds: 10),

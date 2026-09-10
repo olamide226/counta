@@ -176,10 +176,6 @@ class CloudCountingEngine implements CountingEngine {
   /// Every socket this engine is responsible for closing.
   final Set<SpeechSocket> _ownedSockets = {};
 
-  /// False when the engine was handed a single socket instance rather than a
-  /// factory, which makes an overlapping renewal impossible.
-  final bool _canRenew;
-
   PhraseMatcher? _matcher;
   PhraseSpec? _phrase;
   EngineStatus _status = EngineStatus.idle;
@@ -275,7 +271,6 @@ class CloudCountingEngine implements CountingEngine {
     this.tokenProvider,
     this.blockService,
     AudioSource? audioSource,
-    SpeechSocket? speechSocket,
     SpeechSocketFactory? socketFactory,
     this.matcherConfig = const MatcherConfig(),
     this.renewalFraction = 0.9,
@@ -293,15 +288,10 @@ class CloudCountingEngine implements CountingEngine {
          'production, or a token provider in a dev build.',
        ),
        _audioSource = audioSource ?? AudioSource(),
-       // A single injected socket cannot overlap with itself, so a session
-       // built that way never renews. Production passes neither and gets the
-       // real factory.
-       _canRenew = socketFactory != null || speechSocket == null,
-       _socketFactory =
-           socketFactory ??
-           (speechSocket != null ? (() => speechSocket) : DeepgramSocket.new) {
-    if (speechSocket != null) _ownedSockets.add(speechSocket);
-  }
+       // A renewal needs two connections at once, so the engine is given a way
+       // to make them rather than one instance to keep. Production passes
+       // nothing and gets the real factory.
+       _socketFactory = socketFactory ?? DeepgramSocket.new;
 
   @override
   Stream<CountEvent> get counts => _countsController.stream;
@@ -595,10 +585,6 @@ class CloudCountingEngine implements CountingEngine {
     active.cancel();
 
     if (_stopped || blockService == null || active.block.blockSeconds <= 0) {
-      return;
-    }
-    if (!_canRenew) {
-      _report('Voice counting cannot renew its streaming time in this build.');
       return;
     }
 
