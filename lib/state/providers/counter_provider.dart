@@ -58,14 +58,14 @@ final deepgramTokenProviderProvider = Provider<DeepgramTokenProvider>(
 /// wiring in the UI layer.
 final voiceEngineFactoryProvider = Provider<CountingEngine Function()>((ref) {
   final blocks = ref.watch(blockServiceProvider);
-  final devToken = ref.read(deepgramTokenProviderProvider);
-  return () => CloudCountingEngine(
-    blockService: blocks,
-    // Exactly one credential source. A configured build pays for its
-    // streaming time; falling back to a dev key when the block service is
-    // present would be a way to stream without paying.
-    tokenProvider: blocks == null ? devToken : null,
-  );
+  // Exactly one credential source. A configured build pays for its streaming
+  // time; falling back to a dev key when the block service is present would
+  // be a way to stream without paying — so the fallback is not even built.
+  final devToken = blocks == null
+      ? ref.read(deepgramTokenProviderProvider)
+      : null;
+  return () =>
+      CloudCountingEngine(blockService: blocks, tokenProvider: devToken);
 });
 
 /// Builds the engine used when no voice session is running.
