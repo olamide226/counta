@@ -88,6 +88,13 @@ export interface VoiceBlockRow {
   detections: number | null;
 }
 
+/** The block-grant budget's view of a user's window (BlockStore.grantsSince). */
+export interface GrantWindow {
+  count: number;
+  /** Oldest grant in the window, or null when there were none. */
+  oldest: Date | null;
+}
+
 export interface BlockStore {
   /** The user's unreconciled, unexpired block, if any. */
   findLiveBlock(userId: string, now: Date): Promise<VoiceBlockRow | null>;
@@ -97,8 +104,12 @@ export interface BlockStore {
    * never released and has no report to record.
    */
   supersede(blockId: string): Promise<void>;
-  /** Number of blocks granted to the user since `since` (rate limiting). */
-  countGrantsSince(userId: string, since: Date): Promise<number>;
+  /**
+   * The user's grants since `since` (rate limiting): how many, and when the
+   * oldest of them was. The oldest is what says when the window has room
+   * again, and it costs nothing to ask for alongside the count.
+   */
+  grantsSince(userId: string, since: Date): Promise<GrantWindow>;
   /**
    * Reconciles the user's unreconciled blocks that have already expired.
    *
@@ -137,7 +148,21 @@ export interface BlockStore {
  */
 export interface RateLimiter {
   /** Records this hit and reports whether it is within budget. */
-  allow(key: string, now: Date): boolean;
+  allow(key: string, now: Date): RateDecision;
+}
+
+/**
+ * What a budget decided, in the shape every budget here answers in.
+ *
+ * `retryAfterSeconds` is the whole reason this is a record rather than a
+ * boolean: a 429 with no hint leaves the client guessing, and the three
+ * limiters used to give three different answers to that (respond.ts).
+ * Meaningless when `allowed`, and never zero when it is not — a hint of zero
+ * invites an immediate retry that is refused again.
+ */
+export interface RateDecision {
+  allowed: boolean;
+  retryAfterSeconds: number;
 }
 
 export interface Authenticator {

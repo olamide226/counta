@@ -3,6 +3,7 @@ import {
   AttemptBudget,
   BlockConflictError,
   BlockStore,
+  GrantWindow,
   RedeemOutcome,
   TrialGrantRow,
   TrialStore,
@@ -67,13 +68,23 @@ export class SupabaseBlockStore implements BlockStore {
     if (error) throw new Error(`counta.voice_blocks supersede: ${error.message}`);
   }
 
-  async countGrantsSince(userId: string, since: Date): Promise<number> {
-    const { count, error } = await this.table()
-      .select("id", { count: "exact", head: true })
+  async grantsSince(userId: string, since: Date): Promise<GrantWindow> {
+    // One round trip for both halves: `count: exact` counts the whole filtered
+    // set however small the page is, so ordering ascending and taking one row
+    // hands back the oldest grant in the window alongside it. That oldest is
+    // what the 429's Retry-After is computed from (handler.ts).
+    const { data, count, error } = await this.table()
+      .select("granted_at", { count: "exact" })
       .eq("user_id", userId)
-      .gte("granted_at", since.toISOString());
+      .gte("granted_at", since.toISOString())
+      .order("granted_at", { ascending: true })
+      .limit(1);
     if (error) throw new Error(`counta.voice_blocks count: ${error.message}`);
-    return count ?? 0;
+    const oldest = (data as Array<{ granted_at: string }> | null)?.[0];
+    return {
+      count: count ?? 0,
+      oldest: oldest ? new Date(oldest.granted_at) : null,
+    };
   }
 
   async retireExpired(userId: string, now: Date): Promise<void> {

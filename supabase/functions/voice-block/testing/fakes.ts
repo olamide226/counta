@@ -17,6 +17,7 @@ import type {
   Deps,
   DeviceAttestation,
   DeviceAttestor,
+  GrantWindow,
   HandlerConfig,
   RedeemOutcome,
   TokenMinter,
@@ -168,13 +169,18 @@ export class MemoryBlockStore implements BlockStore {
     return Promise.resolve();
   }
 
-  countGrantsSince(userId: string, since: Date): Promise<number> {
-    return Promise.resolve(
-      this.rows.filter((r) =>
+  grantsSince(userId: string, since: Date): Promise<GrantWindow> {
+    const inWindow = this.rows
+      .filter((r) =>
         r.user_id === userId &&
         new Date(r.granted_at).getTime() >= since.getTime()
-      ).length,
-    );
+      )
+      .map((r) => new Date(r.granted_at))
+      .sort((a, b) => a.getTime() - b.getTime());
+    return Promise.resolve({
+      count: inWindow.length,
+      oldest: inWindow[0] ?? null,
+    });
   }
 
   insert(
@@ -321,8 +327,13 @@ export function harness(
  */
 export async function call(deps: Deps, req: Request) {
   const res = await handleVoiceBlock(req, deps);
-  // deno-lint-ignore no-explicit-any -- test bodies are asserted field by field
-  return { status: res.status, body: (await res.json()) as any };
+  return {
+    status: res.status,
+    // Half of the 429 contract is a header, so it comes back with the body.
+    headers: res.headers,
+    // deno-lint-ignore no-explicit-any -- test bodies are asserted field by field
+    body: (await res.json()) as any,
+  };
 }
 
 /** A recorded outbound request. */

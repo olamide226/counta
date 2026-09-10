@@ -277,7 +277,15 @@ Deno.test("grant: per-user rate limit returns 429", async () => {
 
   const limited = await call(h.deps, grantReq());
   assertEquals(limited.status, 429);
-  assertEquals(limited.body, { error: "rate_limited" });
+  // The window runs from the oldest grant in it, and the hint says so in both
+  // places: the header the client reads and the body a JSON-only caller does.
+  const elapsed = CONFIG.rateLimitMax * 30;
+  const retryAfter = CONFIG.rateLimitWindowMinutes * 60 - elapsed;
+  assertEquals(limited.body, {
+    error: "rate_limited",
+    retry_after_seconds: retryAfter,
+  });
+  assertEquals(limited.headers.get("Retry-After"), String(retryAfter));
 
   // Outside the window the limit lifts.
   h.clock.now = new Date(h.clock.now.getTime() + CONFIG.rateLimitWindowMinutes * 60_000);

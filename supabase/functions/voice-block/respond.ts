@@ -3,11 +3,43 @@
 // redeem.ts, token.ts) can use them without importing the router that
 // dispatches to them.
 
-export function json(status: number, body: Record<string, unknown>): Response {
+export function json(
+  status: number,
+  body: Record<string, unknown>,
+  headers: Record<string, string> = {},
+): Response {
   return new Response(JSON.stringify(body), {
     status,
-    headers: { "Content-Type": "application/json" },
+    headers: { "Content-Type": "application/json", ...headers },
   });
+}
+
+/**
+ * The one 429 this function answers, from all three of its budgets.
+ *
+ * The three are metered in three different places — rows in
+ * `counta.voice_blocks` for a block grant, the worker's memory for a token
+ * mint, `counta.voucher_attempts` inside the redemption transaction for a
+ * guess — and that is deliberate, because what each one is protecting differs
+ * (ratelimit.ts). What is not defensible is three *answers*: two of them used
+ * to say `{"error":"rate_limited"}` with no hint at all and the third
+ * `{"error":"too_many_attempts","retry_after_seconds":n}`, and none of the
+ * three set the `Retry-After` header the client actually reads
+ * (`lib/core/services/counting/block_client.dart`, on the branch that adds
+ * it, parses the header and nothing else). Its retry hint was therefore always
+ * empty, and the engine fell back to a fixed delay while its comment claimed
+ * the server had told it how long to wait.
+ *
+ * Both are written here: the header for the client and any proxy between, the
+ * body field for a caller reading JSON only. One responder is what keeps them
+ * from disagreeing.
+ */
+export function rateLimited(retryAfterSeconds: number): Response {
+  return json(
+    429,
+    { error: "rate_limited", retry_after_seconds: retryAfterSeconds },
+    { "Retry-After": String(retryAfterSeconds) },
+  );
 }
 
 /** Parses a JSON object body; null for anything else, including no body. */

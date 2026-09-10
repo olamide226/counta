@@ -1,4 +1,4 @@
-import type { RateLimiter } from "./types.ts";
+import type { RateDecision, RateLimiter } from "./types.ts";
 
 /**
  * A sliding-window counter held in the worker's memory.
@@ -24,20 +24,24 @@ export class MemoryRateLimiter implements RateLimiter {
     private readonly windowMs: number,
   ) {}
 
-  allow(key: string, now: Date): boolean {
-    const cutoff = now.getTime() - this.windowMs;
-    const kept = (this.hits.get(key) ?? []).filter((at) => at > cutoff);
+  allow(key: string, now: Date): RateDecision {
+    const at = now.getTime();
+    const cutoff = at - this.windowMs;
+    const kept = (this.hits.get(key) ?? []).filter((hit) => hit > cutoff);
     if (kept.length >= this.max) {
       // Recorded without the new hit: counting refusals of refusals would let
       // the window renew itself for as long as the caller kept knocking, so
       // the block could never lift (the same rule the voucher limiter follows).
       this.hits.set(key, kept);
-      return false;
+      return {
+        allowed: false,
+        retryAfterSeconds: secondsUntilClear(kept[0], this.windowMs, at),
+      };
     }
-    kept.push(now.getTime());
+    kept.push(at);
     this.hits.set(key, kept);
     if (this.hits.size > MAX_KEYS) this.sweep(cutoff);
-    return true;
+    return { allowed: true, retryAfterSeconds: 0 };
   }
 
   /**
@@ -54,3 +58,20 @@ export class MemoryRateLimiter implements RateLimiter {
 
 /** Enough that a sweep is rare; small enough that a worker cannot bloat. */
 const MAX_KEYS = 10_000;
+
+/**
+ * When a sliding window whose oldest hit is `oldestMs` has room again.
+ *
+ * Shared with the block-grant budget in handler.ts, which counts rows instead
+ * of holding hits in memory but slides the same window over them, and it is
+ * the arithmetic `counta.redeem_voucher` does in SQL for the third. Never
+ * below a second: a hint of zero invites an immediate retry that is refused
+ * again, and a client that trusts it spins.
+ */
+export function secondsUntilClear(
+  oldestMs: number,
+  windowMs: number,
+  nowMs: number,
+): number {
+  return Math.max(1, Math.ceil((oldestMs + windowMs - nowMs) / 1000));
+}

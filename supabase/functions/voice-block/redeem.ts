@@ -1,4 +1,4 @@
-import { json, readJson } from "./respond.ts";
+import { json, rateLimited, readJson } from "./respond.ts";
 import { Deps, RedeemOutcome } from "./types.ts";
 
 // POST /voice-block/redeem — campaign voucher codes (req 12).
@@ -46,11 +46,9 @@ export async function redeem(
     deps.log("voucher_rate_limited", {
       user_id: userId,
       attempts: result.attempts,
-    });
-    return json(429, {
-      error: "too_many_attempts",
       retry_after_seconds: result.retry_after_seconds,
     });
+    return rateLimited(result.retry_after_seconds);
   }
 
   if (result.outcome !== "redeemed" && result.outcome !== "already_redeemed") {

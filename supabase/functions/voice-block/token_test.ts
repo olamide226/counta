@@ -109,7 +109,14 @@ Deno.test("token: the mint budget is per user and lifts with its window", async 
 
   const limited = await call(h.deps, tokenReq(body));
   assertEquals(limited.status, 429);
-  assertEquals(limited.body, { error: "rate_limited" });
+  // The same answer the block budget gives, from a different store: the hint
+  // in the body and in the header, counted from the oldest mint in the window.
+  const retryAfter = CONFIG.tokenMintWindowMinutes * 60;
+  assertEquals(limited.body, {
+    error: "rate_limited",
+    retry_after_seconds: retryAfter,
+  });
+  assertEquals(limited.headers.get("Retry-After"), String(retryAfter));
   assertEquals(h.logs.some((l) => l.event === "token_rate_limited"), true);
   // Refused before Deepgram was asked: an unmetered mint route is an
   // unmetered path to provider credentials.

@@ -169,10 +169,12 @@ Deno.test("redeem: failed attempts are rate limited, and the block can lift", as
 
   const limited = await call(h.deps, redeemReq({ code: "GUESS-AGAIN" }));
   assertEquals(limited.status, 429);
+  const retryAfter = CONFIG.voucherAttemptWindowMinutes * 60;
   assertEquals(limited.body, {
-    error: "too_many_attempts",
-    retry_after_seconds: CONFIG.voucherAttemptWindowMinutes * 60,
+    error: "rate_limited",
+    retry_after_seconds: retryAfter,
   });
+  assertEquals(limited.headers.get("Retry-After"), String(retryAfter));
   // A refused refusal records nothing: counting it would let the window renew
   // itself for as long as the caller kept knocking, so it could never lift.
   assertEquals(h.vouchers.attempts.length, CONFIG.voucherAttemptMax);

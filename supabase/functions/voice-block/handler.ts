@@ -1,5 +1,6 @@
 import { redeem } from "./redeem.ts";
-import { isUuid, json, readJson } from "./respond.ts";
+import { secondsUntilClear } from "./ratelimit.ts";
+import { isUuid, json, rateLimited, readJson } from "./respond.ts";
 import { mintToken } from "./token.ts";
 import { trial } from "./trial.ts";
 import { BlockConflictError, Deps, ProviderError } from "./types.ts";
@@ -81,13 +82,25 @@ async function grant(req: Request, deps: Deps, userId: string): Promise<Response
   const windowStart = new Date(
     now.getTime() - config.rateLimitWindowMinutes * 60_000,
   );
-  const [recent, live] = await Promise.all([
-    blocks.countGrantsSince(userId, windowStart),
+  const [grants, live] = await Promise.all([
+    blocks.grantsSince(userId, windowStart),
     blocks.findLiveBlock(userId, now),
   ]);
-  if (recent >= config.rateLimitMax) {
-    deps.log("rate_limited", { user_id: userId, recent });
-    return json(429, { error: "rate_limited" });
+  if (grants.count >= config.rateLimitMax) {
+    // The oldest grant in the window is what says when it has room again —
+    // the same arithmetic the mint budget does in memory and the redemption
+    // transaction does in SQL, so all three publish one answer (respond.ts).
+    const retryAfter = secondsUntilClear(
+      (grants.oldest ?? now).getTime(),
+      config.rateLimitWindowMinutes * 60_000,
+      now.getTime(),
+    );
+    deps.log("rate_limited", {
+      user_id: userId,
+      recent: grants.count,
+      retry_after_seconds: retryAfter,
+    });
+    return rateLimited(retryAfter);
   }
 
   // 3.8 / 3.9: one live block per user, with renewal identified rather than

@@ -74,7 +74,7 @@ Deno.test("store: every query is scoped to the counta schema", async () => {
 
   await store.findLiveBlock("user-1", now);
   await store.supersede("block-1");
-  await store.countGrantsSince("user-1", now);
+  await store.grantsSince("user-1", now);
   await store.retireExpired("user-1", now);
   await store.findById("block-1", "user-1");
   await store.reconcile("block-1", { streamed_secs: 1, detections: 0 });

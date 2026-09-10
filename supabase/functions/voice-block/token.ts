@@ -1,4 +1,4 @@
-import { isUuid, json, readJson } from "./respond.ts";
+import { isUuid, json, rateLimited, readJson } from "./respond.ts";
 import { Deps } from "./types.ts";
 
 // POST /voice-block/token — a fresh streaming token for a block the caller
@@ -38,9 +38,14 @@ export async function mintToken(
   // grant route checks its limit first: a mint is cheap but it is not free,
   // and an unmetered route that hands out provider credentials is exactly the
   // thing not to leave lying around.
-  if (!deps.tokenLimiter.allow(userId, now)) {
-    deps.log("token_rate_limited", { user_id: userId, block_id: blockId });
-    return json(429, { error: "rate_limited" });
+  const budget = deps.tokenLimiter.allow(userId, now);
+  if (!budget.allowed) {
+    deps.log("token_rate_limited", {
+      user_id: userId,
+      block_id: blockId,
+      retry_after_seconds: budget.retryAfterSeconds,
+    });
+    return rateLimited(budget.retryAfterSeconds);
   }
 
   // Unknown, someone else's, already reconciled and expired are deliberately
