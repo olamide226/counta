@@ -55,3 +55,6 @@ supabase/.branches/
 /android/app/release
 
 .claude/worktrees/
+
+# Internal notes, never committed
+*.internal.md
