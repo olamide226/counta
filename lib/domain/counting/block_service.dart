@@ -1,5 +1,3 @@
-import 'dart:async';
-
 /// A unit of pre-paid streaming time granted by the voice-block service.
 ///
 /// Holding streaming time in blocks is what bounds the operator's exposure:
@@ -32,8 +30,6 @@ class VoiceBlock {
 
   /// Credit balance after the block was debited.
   final int balanceAfter;
-
-  Duration get duration => Duration(seconds: blockSeconds);
 
   @override
   String toString() =>
@@ -202,10 +198,6 @@ abstract class BlockService {
     required int detections,
     required bool eligibleForRefund,
   });
-
-  /// Balance in credits, emitted whenever the server states one — on a grant,
-  /// on a refusal for lack of credit, and on a refund.
-  Stream<int> get balanceUpdates;
 
   Future<void> dispose();
 }

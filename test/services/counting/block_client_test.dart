@@ -57,7 +57,7 @@ void main() {
   setUp(() => sent = <_Sent>[]);
 
   group('BlockClient.acquire', () {
-    test('200 yields a block and publishes the balance', () async {
+    test('200 yields a block', () async {
       final client = clientAnswering(200, {
         'block_id': blockId,
         'token': 'dg-token',
@@ -67,19 +67,13 @@ void main() {
       });
       addTearDown(client.dispose);
 
-      final balances = <int>[];
-      final sub = client.balanceUpdates.listen(balances.add);
-
       final block = await client.acquire(sessionId);
 
       expect(block.id, blockId);
       expect(block.deepgramToken, 'dg-token');
       expect(block.blockSeconds, 300);
-      expect(block.duration, const Duration(seconds: 300));
       expect(block.balanceAfter, 34);
       expect(block.expiresAt.toUtc(), DateTime.utc(2026, 9, 10, 12, 5));
-      await pumpEventQueue();
-      expect(balances, [34]);
 
       // The grant is a POST to the function root carrying the session id, with
       // the caller's JWT — the renewal contract is keyed on that session id.
@@ -88,8 +82,6 @@ void main() {
       expect(sent.single.body, {'session_id': sessionId});
       expect(sent.single.request.headers['Authorization'], 'Bearer jwt-token');
       expect(sent.single.request.headers['apikey'], 'publishable-key');
-
-      await sub.cancel();
     });
 
     test('402 carries the balance and what a block costs', () async {
@@ -99,8 +91,6 @@ void main() {
         'required': 5,
       });
       addTearDown(client.dispose);
-      final balances = <int>[];
-      final sub = client.balanceUpdates.listen(balances.add);
 
       await expectLater(
         client.acquire(sessionId),
@@ -110,12 +100,6 @@ void main() {
               .having((e) => e.required, 'required', 5),
         ),
       );
-
-      // A refusal for lack of credit is still a statement of the balance, and
-      // the paywall needs it.
-      await pumpEventQueue();
-      expect(balances, [2]);
-      await sub.cancel();
     });
 
     test('409 carries when the live block expires', () async {
@@ -295,8 +279,6 @@ void main() {
     test('200 mints a credential against the same block', () async {
       final client = clientAnswering(200, {'token': 'dg-2', 'expires_in': 30});
       addTearDown(client.dispose);
-      final balances = <int>[];
-      final sub = client.balanceUpdates.listen(balances.add);
 
       expect(await client.refreshToken(blockId), 'dg-2');
 
@@ -305,10 +287,6 @@ void main() {
         Uri.parse('https://project.supabase.co/functions/v1/voice-block/token'),
       );
       expect(sent.single.body, {'block_id': blockId});
-      // The endpoint never debits, so there is no balance movement to report.
-      await pumpEventQueue();
-      expect(balances, isEmpty);
-      await sub.cancel();
     });
 
     test('404 says the block is gone, not that the request was bad', () async {
@@ -371,8 +349,6 @@ void main() {
     test('reports usage to /release and returns the refund verdict', () async {
       final client = clientAnswering(200, {'refunded': true, 'balance': 39});
       addTearDown(client.dispose);
-      final balances = <int>[];
-      final sub = client.balanceUpdates.listen(balances.add);
 
       final result = await client.release(
         blockId,
@@ -383,8 +359,6 @@ void main() {
 
       expect(result.refunded, isTrue);
       expect(result.balance, 39);
-      await pumpEventQueue();
-      expect(balances, [39]);
 
       expect(
         sent.single.request.url,
@@ -400,7 +374,6 @@ void main() {
         'detections': 0,
         'eligible_for_refund': true,
       });
-      await sub.cancel();
     });
 
     test('a used block reports no refund and no balance', () async {

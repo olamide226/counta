@@ -1,4 +1,3 @@
-import 'dart:async';
 import 'dart:convert';
 
 import 'package:http/http.dart' as http;
@@ -42,24 +41,16 @@ class BlockClient implements BlockService {
   /// worse than one that fails fast and says so.
   final Duration timeout;
 
-  final StreamController<int> _balance = StreamController<int>.broadcast();
-
-  @override
-  Stream<int> get balanceUpdates => _balance.stream;
-
   @override
   Future<VoiceBlock> acquire(String sessionId) async {
     final body = await _post(_functionUrl, {'session_id': sessionId});
 
     switch (body.status) {
       case 200:
-        final block = _blockFrom(body.json, body.status);
-        _publishBalance(block.balanceAfter);
-        return block;
+        return _blockFrom(body.json, body.status);
       case 402:
         final balance = _asInt(body.json['balance']) ?? 0;
         final required = _asInt(body.json['required']) ?? 0;
-        _publishBalance(balance);
         throw BlockInsufficientCredit(balance: balance, required: required);
       case 409:
         throw BlockInFlight(expiresAt: _asDate(body.json['expires_at']));
@@ -102,11 +93,9 @@ class BlockClient implements BlockService {
 
     if (body.status != 200) throw _commonFailure(body);
 
-    final balance = _asInt(body.json['balance']);
-    if (balance != null) _publishBalance(balance);
     return BlockRelease(
       refunded: body.json['refunded'] == true,
-      balance: balance,
+      balance: _asInt(body.json['balance']),
     );
   }
 
@@ -156,10 +145,6 @@ class BlockClient implements BlockService {
           reason: reason is String ? reason : 'unexpected_status',
         );
     }
-  }
-
-  void _publishBalance(int value) {
-    if (!_balance.isClosed) _balance.add(value);
   }
 
   Future<_Body> _post(Uri url, Map<String, dynamic> payload) async {
@@ -228,7 +213,6 @@ class BlockClient implements BlockService {
 
   @override
   Future<void> dispose() async {
-    await _balance.close();
     if (_ownsClient) _http.close();
   }
 }

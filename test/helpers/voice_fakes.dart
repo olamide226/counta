@@ -188,16 +188,12 @@ class FakeBlockService implements BlockService {
 
   final List<String> acquiredSessionIds = [];
   final List<ReleaseCall> releases = [];
-  final _balance = StreamController<int>.broadcast();
 
   int _granted = 0;
   bool disposed = false;
 
   /// Every block this service has handed out, in order.
   final List<VoiceBlock> granted = [];
-
-  @override
-  Stream<int> get balanceUpdates => _balance.stream;
 
   @override
   Future<VoiceBlock> acquire(String sessionId) async {
@@ -218,7 +214,6 @@ class FakeBlockService implements BlockService {
       balanceAfter: balance -= 5,
     );
     granted.add(block);
-    if (!_balance.isClosed) _balance.add(block.balanceAfter);
     return block;
   }
 
@@ -259,7 +254,6 @@ class FakeBlockService implements BlockService {
   @override
   Future<void> dispose() async {
     disposed = true;
-    await _balance.close();
   }
 }
 
