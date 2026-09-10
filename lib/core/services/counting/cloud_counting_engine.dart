@@ -647,8 +647,9 @@ class CloudCountingEngine implements CountingEngine {
         'until this block ends.',
       );
     } on BlockRateLimited catch (e) {
-      // The server said how wide its window is; coming back sooner only earns
-      // another 429.
+      // Honour the window when the server named one — coming back sooner only
+      // earns another 429. It does not always name one, and
+      // `_retryRenewalLater` falls back to its own delay when it did not.
       _report('Could not renew voice counting: ${e.message}');
       _retryRenewalLater(e.retryAfter);
     } on BlockInFlight catch (e) {

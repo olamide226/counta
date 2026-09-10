@@ -167,6 +167,46 @@ void main() {
       );
     });
 
+    test('429 reads the retry hint from the body too', () async {
+      // The function states its window in the body, like every other field of
+      // its contract; only the Supabase gateway sets the header. Reading just
+      // the header left `retryAfter` permanently null against the function's
+      // own 429, and the engine fell back to a delay inside the window it had
+      // just been refused in.
+      final client = clientAnswering(429, {
+        'error': 'rate_limited',
+        'retry_after': 90,
+      });
+      addTearDown(client.dispose);
+
+      await expectLater(
+        client.acquire(sessionId),
+        throwsA(
+          isA<BlockRateLimited>().having(
+            (e) => e.retryAfter,
+            'retryAfter',
+            const Duration(seconds: 90),
+          ),
+        ),
+      );
+    });
+
+    test('a 429 that names no window at all has no hint', () async {
+      final client = clientAnswering(429, {'error': 'rate_limited'});
+      addTearDown(client.dispose);
+
+      await expectLater(
+        client.acquire(sessionId),
+        throwsA(
+          isA<BlockRateLimited>().having(
+            (e) => e.retryAfter,
+            'retryAfter',
+            isNull,
+          ),
+        ),
+      );
+    });
+
     test('503 is a provider outage', () async {
       final client = clientAnswering(503, {'error': 'provider_unavailable'});
       addTearDown(client.dispose);

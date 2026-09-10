@@ -196,13 +196,28 @@ class BlockClient implements BlockService {
     } catch (_) {
       json = const {};
     }
-    return _Body(response.statusCode, json, _retryAfterOf(response));
+    return _Body(response.statusCode, json, _retryAfterOf(response, json));
   }
 
-  static Duration? _retryAfterOf(http.Response response) {
-    final header = response.headers['retry-after'];
-    final seconds = header == null ? null : int.tryParse(header.trim());
-    return seconds == null ? null : Duration(seconds: seconds);
+  /// How long the server wants us to wait, read from wherever it said so.
+  ///
+  /// Two places state it and either may be the only one: the Supabase gateway
+  /// rate-limits with the standard `Retry-After` header, while the function
+  /// states its own window in the body alongside every other field of its
+  /// contract. Reading only the header left [BlockRateLimited.retryAfter]
+  /// permanently null against the function's own 429, so the engine always
+  /// fell back to its hard-coded delay and came back inside the window it had
+  /// just been refused in.
+  static Duration? _retryAfterOf(
+    http.Response response,
+    Map<String, dynamic> json,
+  ) {
+    final header = response.headers['retry-after']?.trim();
+    final seconds =
+        (header == null ? null : int.tryParse(header)) ??
+        _asInt(json['retry_after']);
+    if (seconds == null || seconds < 0) return null;
+    return Duration(seconds: seconds);
   }
 
   static int? _asInt(Object? value) =>
