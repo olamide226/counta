@@ -3,6 +3,8 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 
 import '../../core/config/app_env.dart';
+import '../../core/services/counting/block_client.dart';
+import '../../domain/counting/block_service.dart';
 
 /// Initialises Supabase and signs the device in anonymously.
 ///
@@ -31,6 +33,39 @@ final supabaseSessionProvider = FutureProvider<Session?>((ref) async {
     refresh: () async => (await auth.refreshSession()).session,
     signInAnonymously: () async => (await auth.signInAnonymously()).session,
   );
+});
+
+/// The app's one route to the voice-block Edge Function.
+///
+/// Null when the build carries no Supabase configuration, which is what makes
+/// a tap-only build (and every unit test) construct no HTTP client at all.
+final blockServiceProvider = Provider<BlockService?>((ref) {
+  if (!AppEnv.hasSupabase) return null;
+
+  final client = BlockClient(
+    functionUrl: Uri.parse('${AppEnv.supabaseUrl}/functions/v1/voice-block'),
+    anonKey: AppEnv.supabasePublishableKey,
+    accessToken: () async {
+      // Waits for anonymous sign-in rather than racing it: a session started
+      // in the first seconds of a cold launch would otherwise look signed out
+      // and be refused a block it is entitled to.
+      final session = await ref.read(supabaseSessionProvider.future);
+      if (session == null) return null;
+      if (!session.isExpired) return session.accessToken;
+
+      // A long practice outlives an access token, so the credential is read
+      // per request and refreshed here rather than captured at session start.
+      try {
+        final refreshed = await Supabase.instance.client.auth.refreshSession();
+        return refreshed.session?.accessToken;
+      } on AuthException catch (error) {
+        debugPrint('Supabase session refresh failed: ${error.message}');
+        return null;
+      }
+    },
+  );
+  ref.onDispose(client.dispose);
+  return client;
 });
 
 /// Chooses the session to run with, given whatever the SDK has persisted.

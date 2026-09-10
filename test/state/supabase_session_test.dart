@@ -1,6 +1,7 @@
 import 'dart:convert';
 
 import 'package:counta/state/providers/supabase_providers.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 
@@ -95,6 +96,18 @@ void main() {
       );
 
       expect(resolved, same(fresh));
+    });
+  });
+
+  group('blockServiceProvider', () {
+    test('a build with no Supabase configuration has no block service', () {
+      // Voice counting is unavailable rather than half-wired: with no backend
+      // there is nothing that could pay for streaming time, so no HTTP client
+      // is built and the engine falls back to the dev-token path.
+      final container = ProviderContainer();
+      addTearDown(container.dispose);
+
+      expect(container.read(blockServiceProvider), isNull);
     });
   });
 }

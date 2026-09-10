@@ -10,6 +10,7 @@ import '../../domain/models/count_session.dart';
 import '../../domain/models/counter_state.dart';
 import 'services_provider.dart';
 import 'settings_provider.dart';
+import 'supabase_providers.dart';
 
 final sessionControllerProvider = ChangeNotifierProvider<SessionController>(
   (ref) => SessionController(
@@ -19,14 +20,15 @@ final sessionControllerProvider = ChangeNotifierProvider<SessionController>(
   ),
 );
 
-/// Supplies the Deepgram credential for each voice connection.
+/// Supplies the Deepgram credential when there is no block service.
 ///
-/// Release builds have no credential source until the block client (task 9)
-/// exchanges a Supabase session for a short-lived token, and a dev build
-/// without `DEEPGRAM_API_KEY` has none either. Both raise [VoiceUnavailable],
-/// which the engine turns into [EngineStatus.notConfigured] and the UI shows
-/// as a message — an unhandled async error here failed every voice session in
-/// release with nothing on screen to say why.
+/// The fallback for a build with no Supabase configuration: a dev key, or
+/// [VoiceUnavailable] when even that is missing. The engine turns that into
+/// [EngineStatus.notConfigured] and the UI shows the message — an unhandled
+/// async error here failed every voice session with nothing on screen to say
+/// why. A configured build never reaches this: its credential arrives with a
+/// block from [blockServiceProvider], which is the only path that can pay for
+/// streaming time.
 ///
 /// The [DevSecrets] read is compile-time dead in release, because
 /// [BuildConfig.showDebugTools] is a constant.
@@ -54,12 +56,17 @@ final deepgramTokenProviderProvider = Provider<DeepgramTokenProvider>(
 /// Exists so screens never construct a microphone + WebSocket stack
 /// themselves — that made the counter screen untestable and put platform
 /// wiring in the UI layer.
-final voiceEngineFactoryProvider = Provider<CountingEngine Function()>(
-  (ref) =>
-      () => CloudCountingEngine(
-        tokenProvider: ref.read(deepgramTokenProviderProvider),
-      ),
-);
+final voiceEngineFactoryProvider = Provider<CountingEngine Function()>((ref) {
+  final blocks = ref.watch(blockServiceProvider);
+  final devToken = ref.read(deepgramTokenProviderProvider);
+  return () => CloudCountingEngine(
+    blockService: blocks,
+    // Exactly one credential source. A configured build pays for its
+    // streaming time; falling back to a dev key when the block service is
+    // present would be a way to stream without paying.
+    tokenProvider: blocks == null ? devToken : null,
+  );
+});
 
 /// Builds the engine used when no voice session is running.
 final tapEngineFactoryProvider = Provider<CountingEngine Function()>(
