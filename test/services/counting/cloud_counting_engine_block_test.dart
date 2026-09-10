@@ -158,6 +158,102 @@ void main() {
       }
     });
 
+    group('terminal failures tear the whole session down', () {
+      test('a start that cannot connect disarms the renewal timer', () {
+        fakeAsync((async) {
+          final blocks = FakeBlockService(blockSeconds: 10);
+          final engine = CloudCountingEngine(
+            blockService: blocks,
+            audioSource: audio,
+            socketFactory: () {
+              final socket = _RefusingSocket('s${sockets.length + 1}');
+              sockets.add(socket);
+              return socket;
+            },
+            transcriptionSilenceTimeout: const Duration(days: 1),
+            transcriptionWatchdogInterval: const Duration(days: 1),
+          );
+
+          engine.start(testPhrase).catchError((Object _) {});
+          async.flushMicrotasks();
+
+          expect(engine.currentStatus, EngineStatus.error);
+          expect(audio.stopCount, greaterThanOrEqualTo(1));
+          expect(blocks.releases.single.blockId, 'block-1');
+
+          // The block bought for the failed start armed a renewal timer that
+          // nothing cancelled: with no microphone and no socket, the engine
+          // went on buying a block every nine seconds for the life of the app.
+          async.elapse(const Duration(minutes: 10));
+          async.flushMicrotasks();
+          expect(blocks.acquiredSessionIds, hasLength(1));
+
+          engine.dispose();
+          async.flushTimers();
+        });
+      });
+
+      test('giving up on a reconnect releases the block and the mic', () async {
+        final blocks = FakeBlockService(blockSeconds: 300);
+        final socket = _RefusableSocket('s1');
+        final engine = CloudCountingEngine(
+          blockService: blocks,
+          audioSource: audio,
+          socketFactory: () {
+            sockets.add(socket);
+            return socket;
+          },
+          reconnectWindow: const Duration(milliseconds: 100),
+          maxReconnectBackoff: const Duration(milliseconds: 10),
+          transcriptionSilenceTimeout: const Duration(days: 1),
+          transcriptionWatchdogInterval: const Duration(days: 1),
+        );
+        addTearDown(engine.dispose);
+
+        await engine.start(testPhrase);
+        await pumpEventQueue();
+        final stopsBefore = audio.stopCount;
+
+        socket.failConnects = true;
+        socket.emitDrop(reason: 'server hung up');
+        await Future<void>.delayed(const Duration(milliseconds: 400));
+
+        expect(engine.currentStatus, EngineStatus.error);
+        // An errored session used to keep the microphone open and go on
+        // buying blocks it had no socket for.
+        expect(audio.stopCount, greaterThan(stopsBefore));
+        expect(blocks.releases.single.blockId, 'block-1');
+        expect(blocks.acquiredSessionIds, hasLength(1));
+      });
+
+      test('a reconnect with nothing to restore does not strand', () async {
+        // A microphone stall during the block round trip schedules a
+        // reconnect while the session still has no socket. The attempt used
+        // to return early, leaving `reconnecting` with capture torn down, no
+        // timer, and no way back to `live` or `error`.
+        final blocks = _SlowAcquireService(const Duration(milliseconds: 500));
+        final engine = CloudCountingEngine(
+          blockService: blocks,
+          audioSource: audio,
+          socketFactory: makeSocket,
+          reconnectWindow: const Duration(milliseconds: 60),
+          maxReconnectBackoff: const Duration(milliseconds: 10),
+          transcriptionSilenceTimeout: const Duration(days: 1),
+          transcriptionWatchdogInterval: const Duration(days: 1),
+        );
+        addTearDown(engine.dispose);
+
+        engine.start(testPhrase).catchError((Object _) {});
+        await pumpEventQueue();
+        audio.emitStall();
+
+        await Future<void>.delayed(const Duration(milliseconds: 250));
+
+        expect(engine.currentStatus, isNot(EngineStatus.reconnecting));
+        expect(engine.currentStatus, EngineStatus.error);
+      });
+    });
+
     group('renewal at 90% (3.9)', () {
       test('the next block is requested at nine tenths of this one', () {
         fakeAsync((async) {
@@ -609,6 +705,37 @@ class _RefusingSocket extends FakeSpeechSocket {
     PhraseSpec? phrase,
   }) async {
     throw StateError('cannot connect');
+  }
+}
+
+/// A socket that can be told to refuse the *next* connect, standing in for a
+/// server that hangs up and then will not have the session back.
+class _RefusableSocket extends FakeSpeechSocket {
+  _RefusableSocket(super.name);
+
+  bool failConnects = false;
+
+  @override
+  Future<void> connect({
+    required String apiKeyOrToken,
+    PhraseSpec? phrase,
+  }) async {
+    if (failConnects) throw StateError('cannot reconnect');
+    return super.connect(apiKeyOrToken: apiKeyOrToken, phrase: phrase);
+  }
+}
+
+/// Grants after a delay, so a test can act during the round trip the way a
+/// real device does on a slow network.
+class _SlowAcquireService extends FakeBlockService {
+  _SlowAcquireService(this.delay);
+
+  final Duration delay;
+
+  @override
+  Future<VoiceBlock> acquire(String sessionId) async {
+    await Future<void>.delayed(delay);
+    return super.acquire(sessionId);
   }
 }
 

@@ -351,17 +351,29 @@ class CloudCountingEngine implements CountingEngine {
     if (!await _startConfirmedCapture()) return;
     if (_stopped) return;
 
-    // Reports the status and releases the microphone itself before it throws;
-    // the caller still gets the reason.
+    // Tears the whole session down itself before it throws; the caller still
+    // gets the reason.
     final token = await _acquireStartCredential();
+
+    // The session can end while the grant is in flight — a microphone stall
+    // during the round trip is enough. Opening a socket on it would stream
+    // audio nobody is listening to and leave a renewal timer armed.
+    if (_stopped) {
+      await _releaseBlock();
+      return;
+    }
 
     try {
       await _connect(token, asPrimary: true);
     } catch (e) {
-      _report('Could not start voice session: $e');
-      _setStatus(EngineStatus.error);
-      await _abandonCapture();
-      await _releaseBlock();
+      // Every terminal failure goes through the one teardown. Reporting the
+      // status and letting go of the microphone was not enough: the renewal
+      // timer `_adoptBlock` armed stayed armed, and bought a block every few
+      // minutes for the life of the app with nothing attached to it.
+      await _endStreaming(
+        EngineStatus.error,
+        'Could not start voice session: $e',
+      );
       rethrow;
     }
   }
@@ -379,14 +391,13 @@ class CloudCountingEngine implements CountingEngine {
         // Not a failed session — a build that can never start one. Report it
         // as state so the UI can explain it; rethrowing as well lets the
         // caller that opened the session keep its sheet open and show why.
-        _report(e.message);
-        _setStatus(EngineStatus.notConfigured);
-        await _abandonCapture();
+        await _endStreaming(EngineStatus.notConfigured, e.message);
         rethrow;
       } catch (e) {
-        _report('Could not start voice session: $e');
-        _setStatus(EngineStatus.error);
-        await _abandonCapture();
+        await _endStreaming(
+          EngineStatus.error,
+          'Could not start voice session: $e',
+        );
         rethrow;
       }
     }
@@ -398,17 +409,14 @@ class CloudCountingEngine implements CountingEngine {
       return block.deepgramToken;
     } on BlockInsufficientCredit catch (e) {
       // The paywall's cue. Nothing was debited and no socket was opened.
-      _report(
+      await _endStreaming(
+        EngineStatus.exhausted,
         'Out of voice minutes: ${e.balance} left, and a session needs '
         '${e.required}.',
       );
-      _setStatus(EngineStatus.exhausted);
-      await _abandonCapture();
       rethrow;
     } on BlockFailure catch (e) {
-      _report(e.message);
-      _setStatus(EngineStatus.error);
-      await _abandonCapture();
+      await _endStreaming(EngineStatus.error, e.message);
       rethrow;
     }
   }
@@ -537,7 +545,7 @@ class CloudCountingEngine implements CountingEngine {
     _renewalTimer = null;
     _blockExpiryTimer = null;
 
-    if (blockService == null || block.blockSeconds <= 0) return;
+    if (_stopped || blockService == null || block.blockSeconds <= 0) return;
     if (!_canRenew) {
       _report('Voice counting cannot renew its streaming time in this build.');
       return;
@@ -906,11 +914,16 @@ class CloudCountingEngine implements CountingEngine {
     // covers a few seconds, which is nothing across a 1–2 hour session — a
     // tunnel, a lift, or a Wi-Fi handover routinely exceeds it.
     if (recoveringFor >= reconnectWindow) {
-      _report(
-        'Could not restore voice counting after '
-        '${recoveringFor.inMinutes} min of retrying. Tap the mic to restart.',
+      // Through the same teardown as every other terminal end. Reporting the
+      // status alone left the microphone open and the renewal timer armed, so
+      // an errored session went on buying blocks it could not use.
+      unawaited(
+        _endStreaming(
+          EngineStatus.error,
+          'Could not restore voice counting after '
+          '${recoveringFor.inMinutes} min of retrying. Tap the mic to restart.',
+        ),
       );
-      _setStatus(EngineStatus.error);
       return;
     }
 
@@ -924,14 +937,17 @@ class CloudCountingEngine implements CountingEngine {
 
       _reconnectInFlight = true;
       try {
-        if (restartAudio) {
-          cancelQuietly(_audioSubscription);
-          _audioSubscription = null;
-          await _audioSource.stop();
-        }
+        if (restartAudio) await _abandonCapture();
 
         final primary = _primary;
-        if (primary == null) return;
+        if (primary == null) {
+          // Reachable while a session is still starting: a microphone stall
+          // during the block round trip schedules a reconnect before any
+          // socket exists. Returning here left the engine in `reconnecting`
+          // with no timer, no capture and no path to `live` or `error`, so
+          // hand the attempt to the retry budget like any other failure.
+          throw StateError('there is no voice connection to restore');
+        }
 
         await primary.socket.closeGracefully(drainTimeoutMs: 0);
         await primary.socket.connect(
