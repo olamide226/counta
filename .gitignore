@@ -11,6 +11,7 @@
 .svn/
 .swiftpm/
 migrate_working_dir/
+tmp/
 
 # IntelliJ related
 *.iml
@@ -39,7 +40,31 @@ app.*.symbols
 # Obfuscation related
 app.*.map.json
 
+# Environment & Secrets
+.env
+*.env
+!.env.example
+
+# Supabase CLI local state
+supabase/.temp/
+supabase/.branches/
+
 # Android Studio will place build artifacts here
 /android/app/debug
 /android/app/profile
 /android/app/release
+
+.claude/worktrees/
+
+# Internal notes, never committed
+*.internal.md
+
+# Android signing material. Also covered by android/.gitignore; repeated here
+# so the rule is visible from the repo root and cannot be lost if that file is
+# regenerated. This is a public repo — a leaked upload key is unrecoverable.
+android/key.properties
+!android/key.properties.example
+*.jks
+*.keystore
+# Play Console service account credentials, if the owner ever adds automation.
+play-service-account*.json

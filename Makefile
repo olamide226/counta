@@ -1,4 +1,4 @@
-.PHONY: help setup format lint analyze test test-coverage build-runner clean build-ios build-android build-macos build-web run run-ios run-android run-web doctor
+.PHONY: help setup format lint analyze test test-coverage build-runner clean build-ios build-appbundle appbundle build-android build-macos build-web run run-ios run-android run-web doctor
 
 # Default target
 help:
@@ -93,6 +93,21 @@ build-ios:
 	@echo "✅ iOS build complete!"
 
 # Build for Android
+# Play-ready Android App Bundle.
+#
+# Play requires an AAB for a new app; the APK target below is for direct
+# download. requireReleaseSigning makes android/app/build.gradle.kts fail
+# loudly rather than fall back to the debug key, because a debug-signed AAB is
+# only rejected once it reaches the Play Console.
+build-appbundle:
+	@echo "🤖 Building Play-ready Android App Bundle..."
+	ORG_GRADLE_PROJECT_requireReleaseSigning=true \
+		flutter build appbundle --release
+	@echo "✅ AAB ready at build/app/outputs/bundle/release/app-release.aab"
+	@echo "   Upload it to Play Console › Testing › Internal testing › Create new release."
+
+appbundle: build-appbundle
+
 build-android:
 	@echo "🤖 Building Android APK..."
 	flutter build apk
