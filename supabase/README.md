@@ -32,6 +32,7 @@ supabase/
   functions/deno.json               pinned imports + `deno task test`
   functions/voice-block/
     index.ts                        entrypoint: env -> adapters -> handler
+    attestors.ts                    which platforms get a trial gate, from env
     handler.ts                      router; the five POST routes share one JWT check
     token.ts                        POST /token   (re-mint for a block you hold)
     trial.ts                        POST /trial   (device-gated free trial)
@@ -55,6 +56,7 @@ supabase/
     redeem_test.ts                  requirement 12
     attestation_test.ts             the two attestors' wire shape, fetch stubbed
     store_test.ts                   pins every query to the counta schema
+    attestors_test.ts               a broken credential costs one platform only
   .env.example                      every secret and setting the function reads
 ```
 
@@ -196,13 +198,18 @@ The trial and voucher settings:
 | `VOUCHER_ATTEMPT_WINDOW_MINUTES` | 60 | Window for the above |
 
 **The three Apple variables and the two Google ones are all-or-nothing per
-platform.** With none of a platform's credentials set, that platform has no
+platform.** With none of a platform's credentials set — or with a value that
+cannot be used, such as a `PLAY_INTEGRITY_SERVICE_ACCOUNT_JSON` that does not
+parse or carries no `client_email`/`private_key` — that platform has no
 attestor and `/trial` answers `409 platform_unsupported` for it — which is the
 same answer macOS and web get, and is deliberate: an operator who has not set
 DeviceCheck up yet should lose the trial, not the block endpoints that pay for
 the whole feature. Watch for `trial_platform_unsupported` with
 `platform: "ios"` in the logs; on a phone that is a misconfiguration, not a
-desktop build asking a question it should not have asked.
+desktop build asking a question it should not have asked. A credential that was
+set but is unusable also logs `attestor_unavailable` once at startup, which is
+the difference between "we turned this off" and "somebody pasted the secret
+wrong".
 
 Vouchers need no credentials at all — the codes live in `counta.vouchers`.
 

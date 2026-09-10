@@ -183,8 +183,11 @@ export interface Deps {
   now: () => Date;
   /** New block id, minted before the debit so the ledger can be keyed on it. */
   newBlockId: () => string;
-  log: (event: string, fields: Record<string, unknown>) => void;
+  log: LogFn;
 }
+
+/** One structured log line. Every event in this function goes through it. */
+export type LogFn = (event: string, fields: Record<string, unknown>) => void;
 
 // ---------------------------------------------------------------------------
 // Trial (req 11) and vouchers (req 12)
