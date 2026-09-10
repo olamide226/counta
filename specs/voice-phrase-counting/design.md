@@ -489,12 +489,25 @@ Body: { "platform": "ios",     "device_token":    "<base64 DCDevice token>" }
 Body: { "platform": "android", "integrity_token": "<Play Integrity token>" }
 
 200 { "granted": true,  "credits": 20, "balance": 20 }
-200 { "granted": false, "reason": "already_claimed" }
+200 { "granted": false, "reason": "already_claimed" }              // the device
+200 { "granted": false, "reason": "already_claimed", "credits": 20 } // this user
 400 { "error": "invalid_attestation" }
 401 { "error": "unauthenticated" }
 409 { "error": "platform_unsupported" }
 503 { "error": "attestation_unavailable" }
+503 { "error": "provider_unavailable" }
 ```
+
+The two 503s are different failures and the client can treat them alike but an
+operator cannot. `attestation_unavailable` is Apple or Google being
+unreachable, answering `UNEVALUATED`, or rejecting our own credentials — the
+device is undecided and the trial stays unclaimed (Requirement 11.9).
+`provider_unavailable` is the ledger call failing after the device passed.
+
+The `credits` field distinguishes the two "already claimed" answers without the
+client having to care: with it, this *caller* has a `counta.trial_grants` row;
+without it, this *device* has the DeviceCheck bit set under some other,
+earlier, anonymous user.
 
 ```
 POST /functions/v1/voice-block/redeem
@@ -502,7 +515,7 @@ Authorization: Bearer <supabase-jwt>
 Body: { "code": "SPRING24" }
 
 200 { "redeemed": true,  "credits": 50, "balance": 71 }
-200 { "redeemed": false, "reason": "already_redeemed", "credits": 50 }
+200 { "redeemed": false, "reason": "already_redeemed", "credits": 50, "balance": 71 }
 400 { "error": "invalid_request" }
 401 { "error": "unauthenticated" }
 404 { "error": "voucher_invalid" }
@@ -517,6 +530,39 @@ Both new endpoints sit behind the same JWT verification as the block endpoints a
 "Already claimed" and "already redeemed" are 200s carrying a negative result rather than errors. They are the expected answer to an ordinary question — every reinstall asks the trial endpoint, and a user who taps Redeem twice asks the second one — and in both cases the client does what it would have done anyway: show the current balance. Reserving the 4xx codes for genuinely malformed or refused requests keeps the client's error handling about errors.
 
 `voucher_invalid` deliberately covers both "no such code" and "disabled", with no way to tell them apart (Requirement 12.6): distinguishing them turns the endpoint into an oracle for discovering live codes. Expiry and exhaustion do get their own answers (12.7), because those reach a user holding a real code, and telling that user the code is fake is worse than the little the distinction leaks. Failed attempts are counted per user in `counta.voucher_attempts` and rate limited, which is what actually bounds guessing.
+
+Ordering inside a trial grant matters as much as it does inside a block grant:
+
+```
+verify JWT
+platform is ios or android, and has a configured gate  -> 409 platform_unsupported
+counta.trial_grants row for this user?                 -> 200 granted:false
+DeviceAttestor.check(payload)                          -> 400 rejected,
+                                                          503 indeterminate,
+                                                          200 granted:false if
+                                                          the bit is set
+BalanceProvider.grant(user, "trial:<user>", credits)   -> 503 on failure
+insert counta.trial_grants                             -> PK collision means a
+                                                          concurrent request won
+DeviceAttestation.claim()  (iOS: set the bit)          -> logged, never thrown
+```
+
+The credits move before either record is written, and the ledger call is keyed
+on the user id. That key is what makes every step after it recoverable: a
+retry re-issues the *same* grant, which the ledger applies once, so a failure
+anywhere below leaves the caller with credits, no grant row and no bit — a
+state the next attempt walks straight through. Writing the row first would
+work too, but then every later "already claimed" answer would have to re-issue
+the grant to stay self-healing, and that spends a RevenueCat write on every
+reinstall for no gain.
+
+The bit is set last, and never allowed to fail the request. It is what makes
+the device ineligible for ever (Requirement 11.3), so setting it before the
+credits landed would burn a device's only claim on a request that then failed;
+refusing a grant the user has already been given because the bit write failed
+would cost them the feature. Losing a bit costs the operator one extra trial,
+which is the cheaper of the two mistakes — so the failure is logged loudly and
+the grant stands.
 
 Ordering inside a redemption matters as much as it does inside a block grant:
 
@@ -558,12 +604,16 @@ DCDevice token  --------> sign ES256 JWT (team key)
                                                      <----  bit0, bit1, last_update_time
                           bit0 set?  --------------------->  200 { granted: false }
                           BalanceProvider grant(...)
-                          POST /v1/update_two_bits   ---->   bit0 := 1
                           insert counta.trial_grants
+                          POST /v1/update_two_bits   ---->   bit0 := 1
                 200 { granted: true, credits: 20 }
 ```
 
-The bit is set *after* the credits are granted and before the response, so a crash between the two costs the operator one extra trial rather than silently burning a device's only claim. A device Apple has never seen answers "failed to find bit state", which is read as unclaimed.
+The bit is set *after* the credits are granted and before the response, so a crash between the two costs the operator one extra trial rather than silently burning a device's only claim. The grant row goes in first for the same reason in miniature: if the bit write is the thing that fails, this caller at least cannot ask again.
+
+A device Apple has never seen has no bit state, and Apple answers that with a **200** whose body is not the bit document. Apple's own docs give a "descriptive string" column rather than a wire contract, and the strings observed in production differ from it, so the implementation matches on the *absence* of `bit0`/`bit1` and reads that as unclaimed. Nothing branches on Apple's body text; the status code decides and the body only reaches the logs.
+
+The two bits are individually optional on `update_two_bits`, and Apple does not document what omitting one does to its stored value. Both are therefore always sent, with the sibling app's bit written back exactly as the query returned it — guessing wrong would silently clobber another product's flag.
 
 #### DeviceCheck bit allocation
 
@@ -582,6 +632,10 @@ Android has no DeviceCheck equivalent. Play Integrity attests that a genuine, un
 
 1. a Play Integrity verdict, verified server-side, requiring device integrity, an app recognised by Play, and a licensed install, and
 2. a row in `counta.trial_grants` keyed on the Supabase user id.
+
+Concretely, the Edge Function mints a Google access token with the service account's JWT-bearer grant, calls `POST https://playintegrity.googleapis.com/v1/{package}:decodeIntegrityToken`, and accepts the verdict only when it names this package, was minted within the last ten minutes, and reports `appRecognitionVerdict: PLAY_RECOGNIZED`, `MEETS_DEVICE_INTEGRITY` among the device verdicts, and `appLicensingVerdict: LICENSED`. `MEETS_BASIC_INTEGRITY` alone is not enough, and an empty device-verdict array is Google's positive statement that the device shows signs of attack.
+
+A verdict Google marks `UNEVALUATED` is not a refusal — it is not an answer. Reading it as "no" would permanently deny a legitimate device that happened to ask during a Play Store outage, so it becomes the 503 of Requirement 11.9 and the trial stays unclaimed. The freshness window is there because a leaked genuine token, replayed across many fresh anonymous accounts, would otherwise buy a trial each for the price of one real device.
 
 That stops emulators, rooted-device farms, repackaged builds and scripted signups, which is most of the volume abuse. It does **not** stop a person with a real phone deleting the app, signing in anonymously again, and taking a second trial. **The Android trial gate is weaker than the iOS one, and no amount of design fixes that**; saying so plainly here is better than an implementation that reads as equivalent.
 

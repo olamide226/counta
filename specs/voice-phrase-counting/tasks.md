@@ -97,15 +97,15 @@ Each task is scoped to be completable in isolation and leaves the app in a worki
   - [ ] 10.2 Create the voice-minute virtual currency in RevenueCat and associate the products with grant amounts
   - [ ] 10.3 Add `purchases_flutter`, initialise with the public SDK key, and identify the user against the Supabase user id
   - [ ] 10.4 Implement `EntitlementService`: fetch offerings, present the paywall, execute purchase, invalidate the virtual currency cache and refetch balance
-  - [ ] 10.5 Implement `POST /voice-block/trial`: JWT verification, platform dispatch, grant through the same `BalanceProvider` as purchases, `counta.trial_grants` row, and `granted: false` rather than an error when the device has already claimed it
-  - [ ] 10.6 Implement the iOS gate: `DCDevice.current.generateToken()` in the client, and server-side `query_two_bits` / `update_two_bits` signed with the team's DeviceCheck key, setting the allocated bit after the grant
-  - [ ] 10.7 Record the DeviceCheck bit allocation in the design table and in `DEVICECHECK_TRIAL_BIT` before the first call ships, so a sibling app on the same Apple team cannot collide with it
-  - [ ] 10.8 Implement the Android gate: request a Play Integrity token in the client, verify it server-side, and refuse the grant unless the verdict reports device integrity, a Play-recognised app and a licensed install
-  - [ ] 10.9 Refuse the trial on any platform without attestation, and hide the trial affordance there rather than letting it fail
-  - [ ] 10.10 Implement `POST /voice-block/redeem`: look the code up by `upper(code)`, claim a slot and insert the redemption in one transaction (a `counta.redeem_voucher` function over RPC), grant keyed on the redemption id, and answer identically for an unknown and a disabled code
-  - [ ] 10.11 Rate-limit failed redemptions per user against `counta.voucher_attempts` and return 429 with `retry_after_seconds`
-  - [ ] 10.12 Write Deno tests for both endpoints with faked attestation: bit already set, indeterminate verdict to 503, unsupported platform, retried grant paying out once, unknown and disabled codes answering identically, expiry and cap refusals, second redemption by the same user, ledger failure completing on retry
-  - [ ] 10.13 Document the operator setup: the Apple DeviceCheck key and team id, the Play Integrity service account, and how a campaign code is created with the service role
+  - [x] 10.5 Implement `POST /voice-block/trial`: JWT verification, platform dispatch, grant through the same `BalanceProvider` as purchases, `counta.trial_grants` row, and `granted: false` rather than an error when the device has already claimed it
+  - [ ] 10.6 Implement the iOS gate: `DCDevice.current.generateToken()` in the client, and server-side `query_two_bits` / `update_two_bits` signed with the team's DeviceCheck key, setting the allocated bit after the grant — *server half done (`providers/devicecheck.ts`); the client still has to mint the token*
+  - [x] 10.7 Record the DeviceCheck bit allocation in the design table and in `DEVICECHECK_TRIAL_BIT` before the first call ships, so a sibling app on the same Apple team cannot collide with it
+  - [ ] 10.8 Implement the Android gate: request a Play Integrity token in the client, verify it server-side, and refuse the grant unless the verdict reports device integrity, a Play-recognised app and a licensed install — *server half done (`providers/playintegrity.ts`); the client still has to request the token*
+  - [ ] 10.9 Refuse the trial on any platform without attestation, and hide the trial affordance there rather than letting it fail — *the endpoint answers `platform_unsupported`; hiding the affordance is client work*
+  - [x] 10.10 Implement `POST /voice-block/redeem`: look the code up by `upper(code)`, claim a slot and insert the redemption in one transaction (a `counta.redeem_voucher` function over RPC), grant keyed on the redemption id, and answer identically for an unknown and a disabled code
+  - [x] 10.11 Rate-limit failed redemptions per user against `counta.voucher_attempts` and return 429 with `retry_after_seconds`
+  - [x] 10.12 Write Deno tests for both endpoints with faked attestation: bit already set, indeterminate verdict to 503, unsupported platform, retried grant paying out once, unknown and disabled codes answering identically, expiry and cap refusals, second redemption by the same user, ledger failure completing on retry
+  - [x] 10.13 Document the operator setup: the Apple DeviceCheck key and team id, the Play Integrity service account, and how a campaign code is created with the service role
   - _Requirements: 4.1, 4.2, 4.3, 4.7, 4.8, 4.9, 11.1, 11.2, 11.3, 11.4, 11.5, 11.6, 11.7, 11.8, 11.9, 11.10, 12.1, 12.2, 12.3, 12.4, 12.5, 12.6, 12.7, 12.8, 12.9, 12.10, 12.11_
 
 - [ ] **11. Wire credit state into the session UI**
