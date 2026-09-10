@@ -25,11 +25,15 @@ if (keystorePropertiesFile.exists()) {
     FileInputStream(keystorePropertiesFile).use { keystoreProperties.load(it) }
 }
 
-/** Every field must be present; a half-filled file is a mistake, not a fallback. */
+/**
+ * Every field must be present; a half-filled file is a mistake, not a fallback.
+ *
+ * No separate existence check: when the file is absent nothing was loaded, so
+ * every getProperty is null and `all` is already false.
+ */
 val uploadKeyFields = listOf("storeFile", "storePassword", "keyAlias", "keyPassword")
 val hasUploadKey: Boolean =
-    keystorePropertiesFile.exists() &&
-        uploadKeyFields.all { !keystoreProperties.getProperty(it).isNullOrBlank() }
+    uploadKeyFields.all { !keystoreProperties.getProperty(it).isNullOrBlank() }
 
 /**
  * Set by `make build-appbundle` (as ORG_GRADLE_PROJECT_requireReleaseSigning).
@@ -39,31 +43,32 @@ val hasUploadKey: Boolean =
  * Console must never silently take that fallback — Play rejects the upload
  * hours later with an unhelpful message — so the store-bound targets ask for a
  * hard failure here instead.
+ *
+ * It gates on all four fields above rather than on the file existing, which is
+ * the failure that actually happens: a key.properties copied from the example
+ * and only half filled in reads as "configured" to anything that just stats
+ * the path, and then signs with nothing.
  */
 val requireReleaseSigning: Boolean =
     (project.findProperty("requireReleaseSigning") as String?)?.toBoolean() ?: false
 
-if (!hasUploadKey) {
-    if (requireReleaseSigning) {
-        throw GradleException(
-            buildString {
-                appendLine("No upload key configured, but this build is marked as store-bound.")
-                appendLine("Expected android/key.properties with: ${uploadKeyFields.joinToString(", ")}")
-                appendLine("Copy android/key.properties.example and fill it in.")
-                append("See docs/RELEASING.md, 'Android release signing'.")
-            },
-        )
-    }
-    logger.lifecycle(
-        "counta: android/key.properties not found — release builds will be signed " +
-            "with the debug key. Fine for `flutter run --release`; NOT uploadable to Play.",
+if (!hasUploadKey && requireReleaseSigning) {
+    throw GradleException(
+        buildString {
+            appendLine("No upload key configured, but this build is marked as store-bound.")
+            appendLine("Expected android/key.properties with: ${uploadKeyFields.joinToString(", ")}")
+            appendLine("Copy android/key.properties.example and fill it in.")
+            append("See docs/RELEASING.md, 'Android release signing'.")
+        },
     )
 }
 
-/** Relative `storeFile` paths resolve against android/, where key.properties lives. */
-fun resolveKeystoreFile(path: String): File {
-    val candidate = File(path)
-    return if (candidate.isAbsolute) candidate else rootProject.file(path)
+if (!hasUploadKey) {
+    logger.lifecycle(
+        "counta: no upload key in android/key.properties — release builds will be " +
+            "signed with the debug key. Fine for `flutter run --release`; NOT " +
+            "uploadable to Play.",
+    )
 }
 
 android {
@@ -95,7 +100,10 @@ android {
     signingConfigs {
         if (hasUploadKey) {
             create("release") {
-                storeFile = resolveKeystoreFile(keystoreProperties.getProperty("storeFile"))
+                // rootProject is android/, where key.properties lives, so a
+                // relative storeFile resolves against it and an absolute one
+                // is returned unchanged.
+                storeFile = rootProject.file(keystoreProperties.getProperty("storeFile"))
                 storePassword = keystoreProperties.getProperty("storePassword")
                 keyAlias = keystoreProperties.getProperty("keyAlias")
                 keyPassword = keystoreProperties.getProperty("keyPassword")
@@ -105,13 +113,10 @@ android {
 
     buildTypes {
         release {
-            signingConfig =
-                if (hasUploadKey) {
-                    signingConfigs.getByName("release")
-                } else {
-                    // Keeps `flutter run --release` working without a keystore.
-                    signingConfigs.getByName("debug")
-                }
+            // The debug fallback keeps `flutter run --release` working without
+            // a keystore; store-bound builds never reach it, because
+            // requireReleaseSigning has already failed the configuration above.
+            signingConfig = signingConfigs.getByName(if (hasUploadKey) "release" else "debug")
         }
     }
 }
