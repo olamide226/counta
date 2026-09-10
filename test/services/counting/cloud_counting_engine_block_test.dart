@@ -426,6 +426,69 @@ void main() {
         });
       });
 
+      test('renewal is timed off the server expiry, not the local clock', () {
+        fakeAsync((async) {
+          // The grant round trip has already spent a third of this block: the
+          // server stops paying at 200 s whatever `block_seconds` says.
+          final blocks = FakeBlockService(
+            blockSeconds: 300,
+            expiresIn: const Duration(seconds: 200),
+          );
+          final engine = engineWith(blocks);
+
+          engine.start(testPhrase);
+          async.flushMicrotasks();
+
+          async.elapse(const Duration(seconds: 179));
+          async.flushMicrotasks();
+          expect(blocks.acquiredSessionIds, hasLength(1));
+
+          // Nine tenths of what is actually left. Nine tenths of 300 s would
+          // have asked seventy seconds after the server stopped paying.
+          async.elapse(const Duration(seconds: 1));
+          async.flushMicrotasks();
+          expect(blocks.acquiredSessionIds, hasLength(2));
+
+          engine.dispose();
+          async.flushTimers();
+        });
+      });
+
+      test('a rate-limited renewal comes back when the server said', () {
+        fakeAsync((async) {
+          final blocks = FakeBlockService(
+            blockSeconds: 300,
+            failures: const [
+              null,
+              BlockRateLimited(retryAfter: Duration(seconds: 20)),
+            ],
+          );
+          final engine = engineWith(
+            blocks,
+            renewalRetryDelay: const Duration(seconds: 10),
+          );
+
+          engine.start(testPhrase);
+          async.flushMicrotasks();
+          async.elapse(const Duration(seconds: 270));
+          async.flushMicrotasks();
+          expect(blocks.acquiredSessionIds, hasLength(2));
+
+          // The client's own ten seconds would land inside the window the
+          // server just named, and earn another 429.
+          async.elapse(const Duration(seconds: 15));
+          async.flushMicrotasks();
+          expect(blocks.acquiredSessionIds, hasLength(2));
+
+          async.elapse(const Duration(seconds: 6));
+          async.flushMicrotasks();
+          expect(blocks.acquiredSessionIds, hasLength(3));
+
+          engine.dispose();
+          async.flushTimers();
+        });
+      });
+
       test('a renewal connection that dies leaves the seam alone', () {
         fakeAsync((async) {
           final blocks = FakeBlockService(blockSeconds: 300);

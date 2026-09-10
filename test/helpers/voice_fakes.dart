@@ -156,9 +156,15 @@ class FakeBlockService implements BlockService {
     this.balance = 100,
     this.failures = const [],
     this.refreshFailures = const [],
+    this.expiresIn,
   });
 
   final int blockSeconds;
+
+  /// When the server says the block stops being live, if that is not simply
+  /// [blockSeconds] from now — a slow grant round trip has already spent part
+  /// of the block by the time the client sees it.
+  final Duration? expiresIn;
   int balance;
 
   /// Answers by acquire attempt: index 0 is the session's first block. A null
@@ -198,7 +204,9 @@ class FakeBlockService implements BlockService {
       id: 'block-$_granted',
       deepgramToken: 'token-$_granted',
       blockSeconds: blockSeconds,
-      expiresAt: DateTime.now().add(Duration(seconds: blockSeconds)),
+      expiresAt: DateTime.now().add(
+        expiresIn ?? Duration(seconds: blockSeconds),
+      ),
       balanceAfter: balance -= 5,
     );
     granted.add(block);

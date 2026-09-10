@@ -66,6 +66,40 @@ void cancelQuietly(StreamSubscription<Object?>? subscription) {
   subscription?.cancel().catchError((Object _) {});
 }
 
+/// The block currently paying for streaming, and everything that has to move
+/// with it.
+///
+/// As six loose fields and two timers these already disagreed —
+/// `_releaseBlock` left the detection count standing, so the next block
+/// started with the last one's total. `_active == null` is now the single
+/// test for "no live block".
+class _ActiveBlock {
+  _ActiveBlock(this.block) : grantedAt = DateTime.now();
+
+  final VoiceBlock block;
+  final DateTime grantedAt;
+
+  /// Detections counted while this block was paying. Reported on release, and
+  /// what the refund assertion of requirement 3.11 rests on.
+  int detections = 0;
+
+  /// Fires at [CloudCountingEngine.renewalFraction] of the block, and is
+  /// reused as the retry timer when a renewal fails.
+  Timer? renewalTimer;
+
+  /// Fires when the server's own expiry passes.
+  Timer? expiryTimer;
+
+  int get streamedSecs => DateTime.now().difference(grantedAt).inSeconds;
+
+  void cancel() {
+    renewalTimer?.cancel();
+    renewalTimer = null;
+    expiryTimer?.cancel();
+    expiryTimer = null;
+  }
+}
+
 /// Concrete implementation of [CountingEngine] using cloud streaming STT
 /// (Deepgram/SpeechSocket), [AudioSource] PCM capture, local [PhraseMatcher],
 /// and pre-paid blocks from [BlockService].
@@ -157,15 +191,13 @@ class CloudCountingEngine implements CountingEngine {
   /// any other session id as a conflict.
   String? _sessionId;
 
-  VoiceBlock? _block;
+  _ActiveBlock? _active;
 
   /// A block that has been paid for but whose socket has not connected yet.
   /// Held so a failed connect retries with the block already bought instead of
   /// buying another.
   VoiceBlock? _pendingBlock;
 
-  DateTime? _blockGrantedAt;
-  int _detectionsThisBlock = 0;
   int _blocksUsed = 0;
 
   /// Set when a renewal was refused for lack of credit. The current block runs
@@ -174,8 +206,6 @@ class CloudCountingEngine implements CountingEngine {
   bool _outOfCredit = false;
   bool _renewalInFlight = false;
 
-  Timer? _renewalTimer;
-  Timer? _blockExpiryTimer;
   Timer? _overlapTimer;
 
   /// True once the session's streaming is over — stopped by the user, or
@@ -241,7 +271,7 @@ class CloudCountingEngine implements CountingEngine {
 
   /// The block currently paying for streaming, or null in dev-token mode and
   /// once the session has been released.
-  VoiceBlock? get currentBlock => _block;
+  VoiceBlock? get currentBlock => _active?.block;
 
   String? get sessionId => _sessionId;
 
@@ -328,10 +358,8 @@ class CloudCountingEngine implements CountingEngine {
     _awaitingFirstConnect = true;
     _capturedBytes = 0;
     _streamSeq = 0;
-    _block = null;
+    _active = null;
     _pendingBlock = null;
-    _blockGrantedAt = null;
-    _detectionsThisBlock = 0;
     _blocksUsed = 0;
     _outOfCredit = false;
     _renewalInFlight = false;
@@ -555,36 +583,35 @@ class CloudCountingEngine implements CountingEngine {
   // --- Block lifecycle -----------------------------------------------------
 
   void _adoptBlock(VoiceBlock block) {
-    _block = block;
-    _blockGrantedAt = DateTime.now();
-    _detectionsThisBlock = 0;
+    _active?.cancel();
+    final active = _ActiveBlock(block);
+    _active = active;
     _blocksUsed++;
-    _scheduleRenewal(block);
+    _scheduleRenewal(active);
   }
 
-  void _scheduleRenewal(VoiceBlock block) {
-    _renewalTimer?.cancel();
-    _blockExpiryTimer?.cancel();
-    _renewalTimer = null;
-    _blockExpiryTimer = null;
+  void _scheduleRenewal(_ActiveBlock active) {
+    active.cancel();
 
-    if (_stopped || blockService == null || block.blockSeconds <= 0) return;
+    if (_stopped || blockService == null || active.block.blockSeconds <= 0) {
+      return;
+    }
     if (!_canRenew) {
       _report('Voice counting cannot renew its streaming time in this build.');
       return;
     }
 
-    final totalMs = block.blockSeconds * 1000;
-    // 3.9: renew at 90% of the block, leaving the remaining tenth to open and
-    // confirm the next connection before the paid time runs out.
-    _renewalTimer = Timer(
-      Duration(milliseconds: (totalMs * renewalFraction).round()),
-      _renewBlock,
-    );
-    _blockExpiryTimer = Timer(
-      Duration(milliseconds: totalMs),
-      () => _onBlockExpired(block),
-    );
+    // The server's own expiry, not adopt time plus `blockSeconds`: the round
+    // trip that granted the block has already spent some of it, and timing
+    // from the local clock lets a renewal drift past the moment the server
+    // stops paying.
+    final remaining = active.block.expiresAt.difference(DateTime.now());
+    final left = remaining.isNegative ? Duration.zero : remaining;
+
+    // 3.9: renew at 90% of what is left, leaving the remaining tenth to open
+    // and confirm the next connection before the paid time runs out.
+    active.renewalTimer = Timer(left * renewalFraction, _renewBlock);
+    active.expiryTimer = Timer(left, () => _onBlockExpired(active));
   }
 
   Future<void> _renewBlock() async {
@@ -618,6 +645,17 @@ class CloudCountingEngine implements CountingEngine {
         'Voice minutes have run out (${e.balance} left). Counting continues '
         'until this block ends.',
       );
+    } on BlockRateLimited catch (e) {
+      // The server said how wide its window is; coming back sooner only earns
+      // another 429.
+      _report('Could not renew voice counting: ${e.message}');
+      _retryRenewalLater(e.retryAfter);
+    } on BlockInFlight catch (e) {
+      // Recoverable by waiting for the stale block to expire, and the server
+      // told us when that is.
+      _report('Could not renew voice counting: ${e.message}');
+      final expiresAt = e.expiresAt;
+      _retryRenewalLater(expiresAt?.difference(DateTime.now()));
     } on BlockFailure catch (e) {
       _report('Could not renew voice counting: ${e.message}');
       _retryRenewalLater();
@@ -630,10 +668,17 @@ class CloudCountingEngine implements CountingEngine {
     }
   }
 
-  void _retryRenewalLater() {
-    if (_stopped) return;
-    _renewalTimer?.cancel();
-    _renewalTimer = Timer(renewalRetryDelay, _renewBlock);
+  /// Comes back for the next block after [after], or after
+  /// [renewalRetryDelay] when the server named no time of its own. Bounded by
+  /// the current block's expiry timer, which ends streaming either way.
+  void _retryRenewalLater([Duration? after]) {
+    final active = _active;
+    if (_stopped || active == null) return;
+    active.renewalTimer?.cancel();
+    active.renewalTimer = Timer(
+      after != null && after > renewalRetryDelay ? after : renewalRetryDelay,
+      _renewBlock,
+    );
   }
 
   /// Runs both connections over the same audio for [renewalOverlap], then
@@ -698,8 +743,8 @@ class CloudCountingEngine implements CountingEngine {
     await outgoing.socket.dispose();
   }
 
-  void _onBlockExpired(VoiceBlock block) {
-    if (_stopped || !identical(_block, block)) return;
+  void _onBlockExpired(_ActiveBlock active) {
+    if (_stopped || !identical(_active, active)) return;
     // Nothing succeeded it before the paid time ran out. Streaming past that
     // would be using time nobody paid for.
     unawaited(
@@ -738,12 +783,9 @@ class CloudCountingEngine implements CountingEngine {
     final service = blockService;
     if (service == null) return;
 
-    final block = _block;
-    final grantedAt = _blockGrantedAt;
-    final detections = _detectionsThisBlock;
-    _block = null;
-    _blockGrantedAt = null;
-    _detectionsThisBlock = 0;
+    final active = _active;
+    active?.cancel();
+    _active = null;
 
     // A renewal that bought a block and then could not connect it holds one
     // too, and that block is the live one server-side. Left unreported it
@@ -752,14 +794,12 @@ class CloudCountingEngine implements CountingEngine {
     final pending = _pendingBlock;
     _pendingBlock = null;
 
-    if (block != null) {
+    if (active != null) {
       await _reportUsage(
         service,
-        block,
-        streamedSecs: grantedAt == null
-            ? 0
-            : DateTime.now().difference(grantedAt).inSeconds,
-        detections: detections,
+        active.block,
+        streamedSecs: active.streamedSecs,
+        detections: active.detections,
       );
     }
     if (pending != null) {
@@ -799,10 +839,7 @@ class CloudCountingEngine implements CountingEngine {
   }
 
   void _cancelTimers() {
-    _renewalTimer?.cancel();
-    _renewalTimer = null;
-    _blockExpiryTimer?.cancel();
-    _blockExpiryTimer = null;
+    _active?.cancel();
     _overlapTimer?.cancel();
     _overlapTimer = null;
     _reconnectTimer?.cancel();
@@ -1074,12 +1111,12 @@ class CloudCountingEngine implements CountingEngine {
   /// only a drop in the block's first tenth could ever have recovered. The
   /// token endpoint mints a new one against the same block and debits nothing.
   Future<String> _reconnectCredential() async {
-    final block = _block;
+    final active = _active;
     final service = blockService;
-    if (block != null) {
+    if (active != null) {
       return service == null
-          ? block.deepgramToken
-          : service.refreshToken(block.id);
+          ? active.block.deepgramToken
+          : service.refreshToken(active.block.id);
     }
     final provider = tokenProvider;
     if (provider == null) {
@@ -1118,7 +1155,8 @@ class CloudCountingEngine implements CountingEngine {
   void _handleDetection(Detection detection) {
     _voiceCount++;
     _seq++;
-    _detectionsThisBlock++;
+    final active = _active;
+    if (active != null) active.detections++;
 
     final event = CountEvent(
       seq: _seq,
