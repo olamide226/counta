@@ -425,6 +425,48 @@ void main() {
           async.flushTimers();
         });
       });
+
+      test('a block bought for a renewal that failed is still released', () {
+        fakeAsync((async) {
+          final blocks = FakeBlockService(blockSeconds: 300);
+          final engine = CloudCountingEngine(
+            blockService: blocks,
+            audioSource: audio,
+            socketFactory: () {
+              final socket = sockets.isEmpty
+                  ? FakeSpeechSocket('s1')
+                  : _RefusingSocket('s${sockets.length + 1}');
+              sockets.add(socket);
+              return socket;
+            },
+            renewalRetryDelay: const Duration(seconds: 5),
+            transcriptionSilenceTimeout: const Duration(days: 1),
+            transcriptionWatchdogInterval: const Duration(days: 1),
+          );
+
+          engine.start(testPhrase);
+          async.flushMicrotasks();
+          async.elapse(const Duration(seconds: 270));
+          async.flushMicrotasks();
+          expect(blocks.acquiredSessionIds, hasLength(2));
+
+          engine.stop();
+          async.flushMicrotasks();
+
+          // block-2 is the live one server-side. Releasing only block-1 left
+          // it running for its full 300 s: the user's next session was
+          // refused with a 409 and the block they paid for was never
+          // reported on.
+          expect(blocks.releases.map((r) => r.blockId), ['block-1', 'block-2']);
+          final pending = blocks.releases.last;
+          expect(pending.streamedSecs, 0);
+          expect(pending.detections, 0);
+          expect(pending.eligibleForRefund, isTrue);
+
+          engine.dispose();
+          async.flushTimers();
+        });
+      });
     });
 
     group('402 at renewal (3.10)', () {

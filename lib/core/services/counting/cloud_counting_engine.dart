@@ -576,7 +576,12 @@ class CloudCountingEngine implements CountingEngine {
       // than a second concurrent session, so it grants and supersedes instead
       // of answering 409.
       final block = _pendingBlock ??= await service.acquire(sessionId);
-      if (_stopped) return;
+      if (_stopped) {
+        // The teardown that set `_stopped` released whatever was live before
+        // this grant landed, so this one has to hand itself back.
+        await _releaseBlock();
+        return;
+      }
 
       final next = await _connect(block.deepgramToken, asPrimary: false);
       _pendingBlock = null;
@@ -681,23 +686,49 @@ class CloudCountingEngine implements CountingEngine {
     await _releaseBlock();
   }
 
-  /// Reports what the current block was used for, and asks for the refund of
-  /// requirement 3.11 when it delivered nothing.
+  /// Reports what every block this session is holding was used for, and asks
+  /// for the refund of requirement 3.11 for the ones that delivered nothing.
   Future<void> _releaseBlock() async {
     final service = blockService;
-    final block = _block;
-    if (service == null || block == null) return;
+    if (service == null) return;
 
+    final block = _block;
     final grantedAt = _blockGrantedAt;
-    final streamedSecs = grantedAt == null
-        ? 0
-        : DateTime.now().difference(grantedAt).inSeconds;
     final detections = _detectionsThisBlock;
     _block = null;
     _blockGrantedAt = null;
+    _detectionsThisBlock = 0;
 
+    // A renewal that bought a block and then could not connect it holds one
+    // too, and that block is the live one server-side. Left unreported it
+    // refuses the user's next session with a 409 for its full duration and is
+    // never reclaimed, so it goes back with the honest zeroes it earned.
+    final pending = _pendingBlock;
+    _pendingBlock = null;
+
+    if (block != null) {
+      await _reportUsage(
+        service,
+        block,
+        streamedSecs: grantedAt == null
+            ? 0
+            : DateTime.now().difference(grantedAt).inSeconds,
+        detections: detections,
+      );
+    }
+    if (pending != null) {
+      await _reportUsage(service, pending, streamedSecs: 0, detections: 0);
+    }
+  }
+
+  Future<void> _reportUsage(
+    BlockService service,
+    VoiceBlock block, {
+    required int streamedSecs,
+    required int detections,
+  }) async {
     try {
-      await service
+      final release = await service
           .release(
             block.id,
             streamedSecs: streamedSecs,
@@ -709,6 +740,11 @@ class CloudCountingEngine implements CountingEngine {
                 detections == 0 && streamedSecs <= refundWindow.inSeconds,
           )
           .timeout(releaseTimeout);
+      if (release.refunded) {
+        _report(
+          'That block was too short to charge for; your minutes are back.',
+        );
+      }
     } catch (_) {
       // Best effort by design (requirement 15.3): a block nobody reported on
       // is left unreconciled server-side. Ending a session must not wait on a
