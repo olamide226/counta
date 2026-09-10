@@ -99,7 +99,9 @@ export class SupabaseBlockStore implements BlockStore {
     userId: string,
   ): Promise<VoiceBlockRow | null> {
     const { data, error } = await this.table()
-      .select("id,credits,granted_at,reconciled")
+      // expires_at is read as well as granted_at: /release decides on the
+      // grant time and /token on the expiry, and both go through this row.
+      .select("id,credits,granted_at,expires_at,reconciled")
       .eq("id", blockId)
       .eq("user_id", userId)
       .maybeSingle();

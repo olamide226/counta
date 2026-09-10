@@ -30,10 +30,12 @@ supabase/
   functions/deno.json               pinned imports + `deno task test`
   functions/voice-block/
     index.ts                        entrypoint: env -> adapters -> handler
-    handler.ts                      router; the four POST routes share one JWT check
+    handler.ts                      router; the five POST routes share one JWT check
+    token.ts                        POST /token   (re-mint for a block you hold)
     trial.ts                        POST /trial   (device-gated free trial)
     redeem.ts                       POST /redeem  (voucher codes)
-    respond.ts                      json() and readJson(), shared by every route
+    respond.ts                      json(), readJson() and isUuid(), shared by every route
+    ratelimit.ts                    per-worker sliding window, used by /token
     types.ts                        ports: BalanceProvider, TokenMinter, BlockStore,
                                     DeviceAttestor, TrialStore, VoucherStore
     auth.ts                         JWT verification (local JWKS, getUser fallback)
@@ -46,6 +48,7 @@ supabase/
     providers/playintegrity.ts      PlayIntegrityAttestor (Android gate)
     testing/fakes.ts                test doubles; never imported by index.ts
     index_test.ts                   block routes and the upstream providers
+    token_test.ts                   POST /token
     trial_test.ts                   requirement 11, attestation faked
     redeem_test.ts                  requirement 12
     attestation_test.ts             the two attestors' wire shape, fetch stubbed
@@ -90,6 +93,22 @@ curl -X POST http://127.0.0.1:54321/functions/v1/voice-block/release \
   -H "Authorization: Bearer $USER_JWT" -H "Content-Type: application/json" \
   -d '{"block_id":"<from grant>","streamed_secs":12,"detections":0,"eligible_for_refund":true}'
 ```
+
+```bash
+# A fresh Deepgram token for a block you already hold, for a socket that
+# dropped mid-block. Mints, never debits.
+curl -X POST http://127.0.0.1:54321/functions/v1/voice-block/token \
+  -H "Authorization: Bearer $USER_JWT" -H "Content-Type: application/json" \
+  -d '{"block_id":"<from grant>"}'
+```
+
+The 30-second token TTL governs opening a connection, not the life of one
+already open, so a block outlives its token by design. `/token` is what lets a
+socket that drops 200 seconds in come back: re-granting instead would read as
+a renewal (the `session_id` matches) and debit a whole block per dropped
+socket. Unknown, someone else's, already released and expired blocks all
+answer `404 block_not_found` — a block that is not yours must not be
+distinguishable from one that does not exist.
 
 `streamed_secs` and `detections` must be non-negative integers when present
 (anything else is a 400). A refund needs `detections` to be present and zero:
@@ -148,6 +167,8 @@ Injected by the runtime (do not set): `SUPABASE_URL`,
 | `REFUND_WINDOW_SECONDS` | 30 | Release within this window with zero detections is refunded |
 | `RATE_LIMIT_MAX` | 6 | Max grants per user per window |
 | `RATE_LIMIT_WINDOW_MINUTES` | 10 | Rate-limit window |
+| `TOKEN_MINT_MAX` | 20 | Max `/token` mints per user per window, counted in the worker's memory |
+| `TOKEN_MINT_WINDOW_MINUTES` | 5 | Window for the above |
 
 The trial and voucher settings:
 

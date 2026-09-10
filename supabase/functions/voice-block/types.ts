@@ -127,6 +127,19 @@ export interface BlockStore {
   ): Promise<boolean>;
 }
 
+/**
+ * A budget on a route that writes nothing and so has no rows to count.
+ *
+ * One method, deliberately: `allow` both asks and records, because a limiter
+ * that separates the two invites a caller to check and then forget to charge.
+ * `ratelimit.ts` holds the only implementation; it is a port so tests can
+ * drive the window without a clock.
+ */
+export interface RateLimiter {
+  /** Records this hit and reports whether it is within budget. */
+  allow(key: string, now: Date): boolean;
+}
+
 export interface Authenticator {
   /** Resolves the Supabase user id for a bearer token, or null if invalid. */
   userIdForToken(token: string): Promise<string | null>;
@@ -139,6 +152,9 @@ export interface HandlerConfig {
   refundWindowSeconds: number;
   rateLimitMax: number;
   rateLimitWindowMinutes: number;
+  /** Token mints allowed per user per window on /token. */
+  tokenMintMax: number;
+  tokenMintWindowMinutes: number;
   /** Credits the one-per-device trial pays out (req 4.3). */
   trialCredits: number;
   /** Failed voucher redemptions allowed per user per window (req 12.8). */
@@ -151,6 +167,8 @@ export interface Deps {
   balance: BalanceProvider;
   minter: TokenMinter;
   blocks: BlockStore;
+  /** Budget for /token, which mints a credential but writes no row. */
+  tokenLimiter: RateLimiter;
   trials: TrialStore;
   vouchers: VoucherStore;
   /**

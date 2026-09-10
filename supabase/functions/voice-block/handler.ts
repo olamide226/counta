@@ -1,18 +1,16 @@
 import { redeem } from "./redeem.ts";
-import { json, readJson } from "./respond.ts";
+import { isUuid, json, readJson } from "./respond.ts";
+import { mintToken } from "./token.ts";
 import { trial } from "./trial.ts";
 import { BlockConflictError, Deps, ProviderError } from "./types.ts";
 
-// Pure request handler for the four POST routes under /voice-block. No
+// Pure request handler for the five POST routes under /voice-block. No
 // Deno.env, no network: everything arrives through `deps`, which is what makes
 // index_test.ts possible without a running stack.
 //
 // Every route verifies the same JWT and every credit movement goes through the
 // same BalanceProvider, so there is one code path that moves money and one
 // place to audit it (design: Edge Function contract).
-
-const UUID_RE =
-  /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 
 /** Suffix -> route. The bare function name is the block grant. */
 const ROUTES: Record<
@@ -21,6 +19,7 @@ const ROUTES: Record<
 > = {
   "/voice-block": grant,
   "/release": release,
+  "/token": mintToken,
   "/trial": trial,
   "/redeem": redeem,
 };
@@ -72,7 +71,7 @@ async function grant(req: Request, deps: Deps, userId: string): Promise<Response
 
   const body = await readJson(req);
   const sessionId = body?.session_id;
-  if (typeof sessionId !== "string" || !UUID_RE.test(sessionId)) {
+  if (typeof sessionId !== "string" || !isUuid(sessionId)) {
     return json(400, { error: "invalid_session_id" });
   }
 
@@ -198,7 +197,7 @@ async function release(req: Request, deps: Deps, userId: string): Promise<Respon
 
   const body = await readJson(req);
   const blockId = body?.block_id;
-  if (typeof blockId !== "string" || !UUID_RE.test(blockId)) {
+  if (typeof blockId !== "string" || !isUuid(blockId)) {
     return json(400, { error: "invalid_block_id" });
   }
   // A refund costs real money, so it may only be granted on a count the client

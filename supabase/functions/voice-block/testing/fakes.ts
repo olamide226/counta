@@ -6,6 +6,7 @@
 // that asked. The deployed function can only ever construct the real adapters.
 // Nothing outside index_test.ts should import this file.
 
+import { MemoryRateLimiter } from "../ratelimit.ts";
 import { BlockConflictError, ProviderError } from "../types.ts";
 import type {
   Authenticator,
@@ -202,6 +203,10 @@ export const CONFIG: HandlerConfig = {
   refundWindowSeconds: 30,
   rateLimitMax: 6,
   rateLimitWindowMinutes: 10,
+  // Small on purpose: a test that has to mint twenty tokens to reach the
+  // limit is a test nobody reads.
+  tokenMintMax: 4,
+  tokenMintWindowMinutes: 5,
   trialCredits: 20,
   voucherAttemptMax: 3,
   voucherAttemptWindowMinutes: 60,
@@ -247,6 +252,10 @@ export function harness(
     balance,
     minter,
     blocks,
+    tokenLimiter: new MemoryRateLimiter(
+      CONFIG.tokenMintMax,
+      CONFIG.tokenMintWindowMinutes * 60_000,
+    ),
     trials,
     vouchers,
     attestors: { ios, android },
@@ -286,6 +295,11 @@ export const releaseReq = (
   body: unknown,
   token: string | null = GOOD_TOKEN,
 ) => req("/voice-block/release", body, token);
+
+export const tokenReq = (
+  body: unknown,
+  token: string | null = GOOD_TOKEN,
+) => req("/voice-block/token", body, token);
 
 // ---------------------------------------------------------------------------
 // Trial (req 11) and vouchers (req 12)

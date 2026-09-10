@@ -478,6 +478,23 @@ Body: { "block_id", "streamed_secs", "detections", "eligible_for_refund" }
 400 { "error": "invalid_detections" }
 ```
 
+```
+POST /functions/v1/voice-block/token
+Authorization: Bearer <supabase-jwt>
+Body: { "block_id": "<uuid>" }
+
+200 { "token": "<deepgram jwt>", "expires_in": 30 }
+400 { "error": "invalid_request" }
+401 { "error": "unauthenticated" }
+404 { "error": "block_not_found" }
+429 { "error": "rate_limited" }
+503 { "error": "provider_unavailable" }
+```
+
+`/token` mints a fresh streaming credential for a block the caller already holds, and **never debits**. It exists because the 30-second token TTL governs connection establishment only: a socket already open stays authorised for its lifetime, but a socket that *drops* 200 seconds into a 300-second block has no credential left to open a new one, so only the first 10% of a block could survive a network blip. Asking `/voice-block` for another grant is worse than useless — a grant carrying the live block's `session_id` is read as the renewal of Requirement 3.9 and would debit a whole block per dropped socket. The block was paid for when it was granted; a user must not be charged for a bad network.
+
+Ownership, the reconciled flag and the expiry are all checked server-side against `counta.voice_blocks`, and unknown, not-the-caller's, already-released and expired blocks are deliberately one answer: a block belonging to another user must be indistinguishable from one that does not exist, or the endpoint becomes an oracle for live block ids. The route is rate limited per user (`TOKEN_MINT_MAX` per `TOKEN_MINT_WINDOW_MINUTES`) because a mint is cheap but not free, and an unmetered route that hands out provider credentials is exactly the thing not to leave lying around. That budget is held in the worker's memory rather than in Postgres — a token mint writes no row, so metering it with a database round trip would cost more than the thing being metered; the trade is a per-worker rather than a per-user bound, on a route that already requires a live block.
+
 One block is live per user at a time, and renewal is identified by `session_id` rather than inferred from a clock. A grant whose `session_id` matches the caller's live block is the 90% renewal of Requirement 3.9: it is granted and the block it replaces is marked reconciled in the same request, so the invariant still holds. A grant carrying any other `session_id` is a 409 no matter how close the live block is to expiry — treating a nearly expired block as "not live" would hand a second, unrelated session a concurrent block for the length of that window, which is what Requirement 3.8 exists to prevent. A partial unique index on `counta.voice_blocks (user_id) where not reconciled` enforces this in the database as well, so two concurrent requests cannot both pass the check.
 
 Refund eligibility is asserted by the client but validated server-side against `granted_at`: a refund is only issued if the release arrives within 30 seconds of grant and reports zero detections (Requirement 3.11). Client assertion alone is not trusted.

@@ -10,6 +10,7 @@ import { AppleDeviceCheckAttestor } from "./providers/devicecheck.ts";
 import { DeepgramTokenMinter } from "./providers/minter.ts";
 import { PlayIntegrityAttestor } from "./providers/playintegrity.ts";
 import { SupabaseAuthenticator } from "./auth.ts";
+import { MemoryRateLimiter } from "./ratelimit.ts";
 import {
   SupabaseBlockStore,
   SupabaseTrialStore,
@@ -47,6 +48,8 @@ function buildConfig(): HandlerConfig {
     refundWindowSeconds: intEnv("REFUND_WINDOW_SECONDS", 30),
     rateLimitMax: intEnv("RATE_LIMIT_MAX", 6),
     rateLimitWindowMinutes: intEnv("RATE_LIMIT_WINDOW_MINUTES", 10),
+    tokenMintMax: intEnv("TOKEN_MINT_MAX", 20),
+    tokenMintWindowMinutes: intEnv("TOKEN_MINT_WINDOW_MINUTES", 5),
     trialCredits: intEnv("TRIAL_CREDITS", 20),
     voucherAttemptMax: intEnv("VOUCHER_ATTEMPT_MAX", 10),
     voucherAttemptWindowMinutes: intEnv("VOUCHER_ATTEMPT_WINDOW_MINUTES", 60),
@@ -130,12 +133,17 @@ function deps(): Deps {
     auth: { persistSession: false, autoRefreshToken: false },
   });
 
+  const config = buildConfig();
   const built: Deps = {
     auth: new SupabaseAuthenticator({
       client: admin,
       jwksUrl: `${supabaseUrl}/auth/v1/.well-known/jwks.json`,
     }),
     blocks: new SupabaseBlockStore(admin),
+    tokenLimiter: new MemoryRateLimiter(
+      config.tokenMintMax,
+      config.tokenMintWindowMinutes * 60_000,
+    ),
     trials: new SupabaseTrialStore(admin),
     vouchers: new SupabaseVoucherStore(admin),
     attestors: buildAttestors(),
@@ -151,7 +159,7 @@ function deps(): Deps {
     minter: new DeepgramTokenMinter({
       apiKey: requireEnv("DEEPGRAM_API_KEY"),
     }),
-    config: buildConfig(),
+    config,
     now: () => new Date(),
     newBlockId: () => crypto.randomUUID(),
     log,
