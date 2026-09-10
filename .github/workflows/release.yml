@@ -13,6 +13,13 @@ on:
 permissions:
   contents: write
 
+env:
+  # One pin for every job. docs/RELEASE-BACKGROUND.md explains why it must
+  # equal the version you build with locally: targetSdk resolves from
+  # flutter.targetSdkVersion, so a runner on an older Flutter silently targets
+  # a lower API level than the artifact you verified.
+  FLUTTER_VERSION: '3.44.8'
+
 jobs:
   create-release:
     runs-on: ubuntu-latest
@@ -47,9 +54,26 @@ jobs:
 
             See the [CHANGELOG](https://github.com/${{ github.repository }}/blob/main/CHANGELOG.md) for detailed changes.
 
+  # Android APK (direct download / GitHub release) and, when the signing
+  # secrets exist, the Play-ready AAB.
+  #
+  # One job: the AAB needs the same checkout, JDK, Flutter and `pub get` as the
+  # APK, and a second cold runner to repeat them costs a build's worth of time
+  # to produce one extra file. Only the signing-specific steps are guarded.
+  #
+  # Neither artifact is uploaded to Google Play. Nothing in this repository
+  # holds store credentials, and promoting a track from a mistyped tag is not a
+  # failure mode worth inviting.
   build-android:
     needs: create-release
     runs-on: ubuntu-latest
+    env:
+      # Read by the Makefile as make variables, which is how both build targets
+      # get their --dart-defines. DEEPGRAM_API_KEY is deliberately absent: a
+      # --dart-define is embedded in the artifact even where the Dart-side read
+      # is compile-time dead. See RELEASE_DART_DEFINES in the Makefile.
+      SUPABASE_URL: ${{ secrets.SUPABASE_URL }}
+      SUPABASE_PUBLISHABLE_KEY: ${{ secrets.SUPABASE_PUBLISHABLE_KEY }}
     steps:
       - uses: actions/checkout@v4
 
@@ -62,17 +86,15 @@ jobs:
       - name: Setup Flutter
         uses: subosito/flutter-action@v2
         with:
-          flutter-version: '3.44.8'
+          flutter-version: ${{ env.FLUTTER_VERSION }}
           channel: 'stable'
+          cache: true
 
       - name: Install dependencies
         run: flutter pub get
 
       - name: Build APK
-        run: flutter build apk --release
-
-      - name: Rename APK
-        run: mv build/app/outputs/flutter-apk/app-release.apk build/app/outputs/flutter-apk/counta-${{ needs.create-release.outputs.version }}-android.apk
+        run: make build-android
 
       - name: Upload APK to Release
         uses: actions/upload-release-asset@v1
@@ -80,27 +102,12 @@ jobs:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         with:
           upload_url: ${{ needs.create-release.outputs.upload_url }}
-          asset_path: build/app/outputs/flutter-apk/counta-${{ needs.create-release.outputs.version }}-android.apk
+          asset_path: build/app/outputs/flutter-apk/app-release.apk
           asset_name: counta-${{ needs.create-release.outputs.version }}-android.apk
           asset_content_type: application/vnd.android.package-archive
 
-  # Play-ready Android App Bundle.
-  #
-  # Runs only when the signing secrets exist, so forks and pull requests still
-  # build the rest of the workflow. GitHub does not expose secrets to workflows
-  # triggered from a forked pull request, which makes the skip automatic there.
-  #
-  # This job builds and attaches the AAB. It does NOT upload to Google Play:
-  # nothing in this repository holds store credentials, and promoting a track
-  # from a mistyped tag is not a failure mode worth inviting.
-  build-android-aab:
-    needs: create-release
-    runs-on: ubuntu-latest
-    steps:
-      - uses: actions/checkout@v4
-
-      # The `secrets` context is not available in a job-level `if`, so the
-      # presence check has to be a step that publishes an output.
+      # The `secrets` context is not available in an `if`, so the presence
+      # check has to be a step that publishes an output.
       - name: Check for signing secrets
         id: signing
         env:
@@ -115,26 +122,8 @@ jobs:
           else
             echo "available=false" >> "$GITHUB_OUTPUT"
             echo "::notice::Android signing secrets not set - skipping the AAB build." \
-                 "See docs/RELEASING.md section 8."
+                 "See docs/RELEASE-BACKGROUND.md, 'CI signing secrets'."
           fi
-
-      - name: Setup Java
-        if: steps.signing.outputs.available == 'true'
-        uses: actions/setup-java@v4
-        with:
-          distribution: 'zulu'
-          java-version: '17'
-
-      - name: Setup Flutter
-        if: steps.signing.outputs.available == 'true'
-        uses: subosito/flutter-action@v2
-        with:
-          flutter-version: '3.44.8'
-          channel: 'stable'
-
-      - name: Install dependencies
-        if: steps.signing.outputs.available == 'true'
-        run: flutter pub get
 
       # Written to the runner's workspace and removed by the cleanup step
       # below, which runs even when the build fails.
@@ -154,31 +143,17 @@ jobs:
           keyPassword=$KEY_PASSWORD
           EOF
 
+      # make build-appbundle sets ORG_GRADLE_PROJECT_requireReleaseSigning, so
+      # a missing or half-written key.properties fails at configuration rather
+      # than attaching a debug-signed AAB that looks identical until Play
+      # rejects it.
       - name: Build AAB
         if: steps.signing.outputs.available == 'true'
-        env:
-          # Refuse a debug-signed fallback: an unsigned artifact reaching the
-          # release page looks identical to a signed one until Play rejects it.
-          ORG_GRADLE_PROJECT_requireReleaseSigning: 'true'
-          SUPABASE_URL: ${{ secrets.SUPABASE_URL }}
-          SUPABASE_PUBLISHABLE_KEY: ${{ secrets.SUPABASE_PUBLISHABLE_KEY }}
-        run: |
-          DEFINES=""
-          [ -n "$SUPABASE_URL" ] && DEFINES="$DEFINES --dart-define=SUPABASE_URL=$SUPABASE_URL"
-          [ -n "$SUPABASE_PUBLISHABLE_KEY" ] && DEFINES="$DEFINES --dart-define=SUPABASE_PUBLISHABLE_KEY=$SUPABASE_PUBLISHABLE_KEY"
-          # DEEPGRAM_API_KEY is deliberately absent: a --dart-define is embedded
-          # in the artifact even where the Dart-side read is compile-time dead.
-          flutter build appbundle --release $DEFINES
+        run: make build-appbundle
 
       - name: Remove signing material
         if: always()
         run: rm -f android/upload-keystore.jks android/key.properties
-
-      - name: Rename AAB
-        if: steps.signing.outputs.available == 'true'
-        run: |
-          mv build/app/outputs/bundle/release/app-release.aab \
-             counta-${{ needs.create-release.outputs.version }}-android.aab
 
       - name: Upload AAB to Release
         if: steps.signing.outputs.available == 'true'
@@ -187,7 +162,7 @@ jobs:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         with:
           upload_url: ${{ needs.create-release.outputs.upload_url }}
-          asset_path: counta-${{ needs.create-release.outputs.version }}-android.aab
+          asset_path: build/app/outputs/bundle/release/app-release.aab
           asset_name: counta-${{ needs.create-release.outputs.version }}-android.aab
           asset_content_type: application/octet-stream
 
@@ -200,8 +175,9 @@ jobs:
       - name: Setup Flutter
         uses: subosito/flutter-action@v2
         with:
-          flutter-version: '3.44.8'
+          flutter-version: ${{ env.FLUTTER_VERSION }}
           channel: 'stable'
+          cache: true
 
       - name: Install dependencies
         run: flutter pub get
@@ -243,8 +219,9 @@ jobs:
       - name: Setup Flutter
         uses: subosito/flutter-action@v2
         with:
-          flutter-version: '3.44.8'
+          flutter-version: ${{ env.FLUTTER_VERSION }}
           channel: 'stable'
+          cache: true
 
       - name: Install dependencies
         run: flutter pub get
