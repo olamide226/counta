@@ -155,6 +155,7 @@ class FakeBlockService implements BlockService {
     this.blockSeconds = 300,
     this.balance = 100,
     this.failures = const [],
+    this.refreshFailures = const [],
   });
 
   final int blockSeconds;
@@ -163,6 +164,13 @@ class FakeBlockService implements BlockService {
   /// Answers by acquire attempt: index 0 is the session's first block. A null
   /// entry (or running off the end) means an ordinary grant.
   final List<BlockFailure?> failures;
+
+  /// Answers by token-refresh attempt, the same way [failures] answers
+  /// acquires.
+  final List<BlockFailure?> refreshFailures;
+
+  /// Every block a reconnect asked for a fresh credential on, in order.
+  final List<String> refreshedBlockIds = [];
 
   final List<String> acquiredSessionIds = [];
   final List<ReleaseCall> releases = [];
@@ -196,6 +204,22 @@ class FakeBlockService implements BlockService {
     granted.add(block);
     if (!_balance.isClosed) _balance.add(block.balanceAfter);
     return block;
+  }
+
+  @override
+  Future<String> refreshToken(String blockId) async {
+    final attempt = refreshedBlockIds.length;
+    refreshedBlockIds.add(blockId);
+
+    final failure = attempt < refreshFailures.length
+        ? refreshFailures[attempt]
+        : null;
+    if (failure != null) throw failure;
+
+    // Deliberately unlike the grant tokens: replaying the block's own token
+    // is the bug the refresh endpoint exists to fix, so a test can see the
+    // difference.
+    return 'refresh-${refreshedBlockIds.length}';
   }
 
   @override

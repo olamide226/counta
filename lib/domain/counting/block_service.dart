@@ -125,8 +125,18 @@ class BlockProviderUnavailable extends BlockFailure {
   ]);
 }
 
-/// A request the server refused as malformed or unknown — 400, 404, or any
-/// other status with no defined meaning. A client bug, not a user problem.
+/// 404. The block is not live any more: unknown, not this caller's, already
+/// reconciled, or expired.
+///
+/// Distinct from [BlockRequestRejected] because the answer is different:
+/// there is nothing here to retry, so a session holding this block has to
+/// end rather than keep asking.
+class BlockNotFound extends BlockFailure {
+  const BlockNotFound([super.message = 'This voice block is no longer live.']);
+}
+
+/// A request the server refused as malformed or unknown — 400, or any other
+/// status with no defined meaning. A client bug, not a user problem.
 class BlockRequestRejected extends BlockFailure {
   const BlockRequestRejected({required this.status, required this.reason})
     : super('The voice service refused the request.');
@@ -164,6 +174,19 @@ abstract class BlockService {
   ///
   /// Throws a [BlockFailure] and nothing else.
   Future<VoiceBlock> acquire(String sessionId);
+
+  /// Mints a fresh Deepgram credential for a block that is still live.
+  ///
+  /// A [VoiceBlock.deepgramToken] authorises *establishing* a connection and
+  /// lives about 30 seconds, while the block it came with lives 300. A socket
+  /// that drops after the first tenth of a block therefore has no credential
+  /// to come back on, and asking for a *grant* instead would be worse: the
+  /// server reads a matching session id as a renewal and would debit a block
+  /// per dropped socket. This never debits.
+  ///
+  /// Throws a [BlockFailure] and nothing else. [BlockNotFound] means the
+  /// block is gone and the session holding it is over.
+  Future<String> refreshToken(String blockId);
 
   /// Reports what a block was used for, and asks for a refund when the client
   /// believes the block delivered nothing.

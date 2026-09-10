@@ -681,9 +681,36 @@ void main() {
           reason: 'a reconnect reuses the block it is already inside',
         );
         expect(sockets.single.connectCount, 2);
-        expect(sockets.single.tokensSeen, ['token-1', 'token-1']);
+        // Not the block's own token: that one authorises *establishing* a
+        // connection and lives 30 s against a 300 s block, so replaying it
+        // could only ever have recovered a drop in the block's first tenth.
+        expect(sockets.single.tokensSeen, ['token-1', 'refresh-1']);
+        expect(blocks.refreshedBlockIds, ['block-1']);
         expect(engine.currentStatus, EngineStatus.live);
         expect(engine.blocksUsed, 1);
+      });
+
+      test('a block the server no longer knows ends the session', () async {
+        final blocks = FakeBlockService(
+          blockSeconds: 300,
+          refreshFailures: const [BlockNotFound()],
+        );
+        final engine = engineWith(blocks);
+        addTearDown(engine.dispose);
+
+        await engine.start(testPhrase);
+        await pumpEventQueue();
+
+        sockets.single.emitDrop(reason: 'server hung up');
+        await Future<void>.delayed(const Duration(milliseconds: 300));
+
+        // 404 means the block is gone — expired, reconciled, or never ours.
+        // Nothing can be minted against it, so retrying for the whole
+        // five-minute window would only hold the microphone open for nothing.
+        expect(engine.currentStatus, EngineStatus.degraded);
+        expect(blocks.refreshedBlockIds, hasLength(1));
+        expect(audio.stopCount, greaterThanOrEqualTo(1));
+        expect(blocks.releases.single.blockId, 'block-1');
       });
 
       test('counting continues after a reconnect', () async {

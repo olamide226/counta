@@ -63,11 +63,24 @@ class BlockClient implements BlockService {
         throw BlockInsufficientCredit(balance: balance, required: required);
       case 409:
         throw BlockInFlight(expiresAt: _asDate(body.json['expires_at']));
-      case 429:
-        throw BlockRateLimited(retryAfter: body.retryAfter);
       default:
         throw _commonFailure(body);
     }
+  }
+
+  @override
+  Future<String> refreshToken(String blockId) async {
+    final body = await _post(_tokenUrl, {'block_id': blockId});
+    if (body.status != 200) throw _commonFailure(body);
+
+    final token = body.json['token'];
+    if (token is! String || token.isEmpty) {
+      // A 200 that carries no token is not something to retry or explain away.
+      throw BlockUnreachable(
+        FormatException('voice-block returned an unusable token: ${body.json}'),
+      );
+    }
+    return token;
   }
 
   @override
@@ -100,6 +113,8 @@ class BlockClient implements BlockService {
   Uri get _releaseUrl =>
       _functionUrl.replace(path: '${_functionUrl.path}/release');
 
+  Uri get _tokenUrl => _functionUrl.replace(path: '${_functionUrl.path}/token');
+
   VoiceBlock _blockFrom(Map<String, dynamic> json, int status) {
     final id = json['block_id'];
     final token = json['token'];
@@ -123,12 +138,16 @@ class BlockClient implements BlockService {
     );
   }
 
-  /// The statuses that mean the same thing on both endpoints.
+  /// The statuses that mean the same thing on every endpoint.
   BlockFailure _commonFailure(_Body body) {
     final reason = body.json['error'];
     switch (body.status) {
       case 401:
         return const BlockUnauthenticated();
+      case 404:
+        return const BlockNotFound();
+      case 429:
+        return BlockRateLimited(retryAfter: body.retryAfter);
       case 503:
         return const BlockProviderUnavailable();
       default:

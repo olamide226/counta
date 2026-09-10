@@ -251,6 +251,82 @@ void main() {
     });
   });
 
+  group('BlockClient.refreshToken', () {
+    test('200 mints a credential against the same block', () async {
+      final client = clientAnswering(200, {'token': 'dg-2', 'expires_in': 30});
+      addTearDown(client.dispose);
+      final balances = <int>[];
+      final sub = client.balanceUpdates.listen(balances.add);
+
+      expect(await client.refreshToken(blockId), 'dg-2');
+
+      expect(
+        sent.single.request.url,
+        Uri.parse('https://project.supabase.co/functions/v1/voice-block/token'),
+      );
+      expect(sent.single.body, {'block_id': blockId});
+      // The endpoint never debits, so there is no balance movement to report.
+      await pumpEventQueue();
+      expect(balances, isEmpty);
+      await sub.cancel();
+    });
+
+    test('404 says the block is gone, not that the request was bad', () async {
+      // The caller's answer differs: a rejected request is a client bug to
+      // retry past, a dead block ends the session holding it.
+      final client = clientAnswering(404, {'error': 'block_not_found'});
+      addTearDown(client.dispose);
+
+      await expectLater(
+        client.refreshToken(blockId),
+        throwsA(isA<BlockNotFound>()),
+      );
+    });
+
+    test('429 is rate limited and reads Retry-After', () async {
+      final client = clientAnswering(
+        429,
+        {'error': 'rate_limited'},
+        headers: {'retry-after': '4'},
+      );
+      addTearDown(client.dispose);
+
+      await expectLater(
+        client.refreshToken(blockId),
+        throwsA(
+          isA<BlockRateLimited>().having(
+            (e) => e.retryAfter,
+            'retryAfter',
+            const Duration(seconds: 4),
+          ),
+        ),
+      );
+    });
+
+    for (final entry in <int, Matcher>{
+      400: isA<BlockRequestRejected>(),
+      401: isA<BlockUnauthenticated>(),
+      503: isA<BlockProviderUnavailable>(),
+    }.entries) {
+      test('${entry.key} maps to its own failure type', () async {
+        final client = clientAnswering(entry.key, {'error': 'nope'});
+        addTearDown(client.dispose);
+
+        await expectLater(client.refreshToken(blockId), throwsA(entry.value));
+      });
+    }
+
+    test('a 200 with no token is not silently accepted', () async {
+      final client = clientAnswering(200, {'expires_in': 30});
+      addTearDown(client.dispose);
+
+      await expectLater(
+        client.refreshToken(blockId),
+        throwsA(isA<BlockUnreachable>()),
+      );
+    });
+  });
+
   group('BlockClient.release', () {
     test('reports usage to /release and returns the refund verdict', () async {
       final client = clientAnswering(200, {'refunded': true, 'balance': 39});

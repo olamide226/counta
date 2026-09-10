@@ -1041,6 +1041,16 @@ class CloudCountingEngine implements CountingEngine {
         if (restartAudio || _audioSubscription == null) {
           _attachAudio();
         }
+      } on BlockNotFound {
+        // The block is gone server-side: expired, reconciled, or never this
+        // caller's. No credential can be minted against it, so retrying for
+        // the rest of the window would only burn the session down slowly.
+        await _endStreaming(
+          EngineStatus.degraded,
+          'Voice counting stopped: its streaming time is no longer valid. '
+          'Your count is safe and tapping still works.',
+        );
+        return;
       } catch (e) {
         _report('Reconnection failed: $e');
         _reconnectInFlight = false;
@@ -1055,12 +1065,22 @@ class CloudCountingEngine implements CountingEngine {
   /// The credential a reconnect uses.
   ///
   /// Requirement 5.4 and the design's error table: a reconnect inside the
-  /// current block resumes on that block and acquires nothing. Asking again
-  /// would not even be refused — the server reads a matching session id as a
-  /// renewal — so every dropped socket would buy another block.
+  /// current block resumes on that block and acquires nothing. Asking for a
+  /// grant would not even be refused — the server reads a matching session id
+  /// as a renewal — so every dropped socket would buy another block.
+  ///
+  /// Replaying the block's own token does not work either: it authorises
+  /// *establishing* a connection and lives 30 s, while the block lives 300, so
+  /// only a drop in the block's first tenth could ever have recovered. The
+  /// token endpoint mints a new one against the same block and debits nothing.
   Future<String> _reconnectCredential() async {
     final block = _block;
-    if (block != null) return block.deepgramToken;
+    final service = blockService;
+    if (block != null) {
+      return service == null
+          ? block.deepgramToken
+          : service.refreshToken(block.id);
+    }
     final provider = tokenProvider;
     if (provider == null) {
       throw const VoiceUnavailable(
