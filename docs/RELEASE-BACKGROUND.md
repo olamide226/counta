@@ -219,10 +219,6 @@ A proper fix is a dedicated foreground service with the right type and
 permission, not a config flag. iOS is unaffected — it uses
 `UIBackgroundModes: audio`, which is declared and working.
 
-> **`CLAUDE.md` currently records the wrong reason** for this ("needs a
-> foreground service, which `record_android` does not provide"). Correcting it
-> is a one-line edit to that file, deliberately left to the repository owner.
-
 ### Debug builds share the release `applicationId` on Android
 
 On iOS, `ios/Flutter/AppIdentity.xcconfig` gives Debug and Profile builds

@@ -15,6 +15,8 @@ make test-coverage      # run tests with coverage
 make lint               # dart analyze
 make format             # dart format
 make build-runner       # regenerate Hive adapters (.g.dart files)
+make release-preflight  # everything that must be green before a release tag
+make build-appbundle    # Play-ready Android App Bundle (needs android/key.properties)
 make run                # flutter run (default device)
 make run-ios            # flutter run on iOS
 make run-android        # flutter run on Android
@@ -66,7 +68,7 @@ The interface carries `counts`, `status`, `diagnostics`, `incrementManual()` and
 
 **`AudioSource` is the single owner of the microphone permission.** It asks (the `record` plugin prompts as part of `hasPermission()`) and reports a refusal as a typed `AudioSourcePermissionDenied` on the same error channel as `AudioSourceStalled`. Nothing else may ask — a second question races the first. Capture therefore starts *before* the socket, and has to deliver a real frame before anything is connected, so no streaming time is ever spent on a session that cannot capture audio; frames captured during that window are buffered and flushed on connect. `openMicrophoneSettings()` (`core/services/microphone_settings.dart`) is the only permission UI: it sends the user to system settings, which on iOS is the only way to change a refusal.
 
-**Platform requirements:** iOS declares `UIBackgroundModes: audio` so sessions survive backgrounding, and `AudioSource` sets `allowHapticsAndSystemSoundsDuringRecording` — without it the app's own tap sounds raise an audio-session interruption that permanently pauses recording. Android background recording is **not** supported yet: it needs a foreground service, which `record_android` does not provide.
+**Platform requirements:** iOS declares `UIBackgroundModes: audio` so sessions survive backgrounding, and `AudioSource` sets `allowHapticsAndSystemSoundsDuringRecording` — without it the app's own tap sounds raise an audio-session interruption that permanently pauses recording. Android background recording is **not** supported yet, but not for the reason this file used to give. `record_android` does ship a foreground service (`AudioRecordingService`), reachable through `AndroidRecordConfig.service`. What is missing is the wiring: `AudioSource` passes `iosConfig` only, and the manifest declares no `<service>` and no `FOREGROUND_SERVICE*` permissions. Two things stop it being a config flag — the upstream option is `@Deprecated`, and the plugin calls `startForeground` with no `foregroundServiceType`, which Android 14+ rejects for a microphone service while the app targets 36. So it needs a real service, not a flag.
 
 **Credentials:** `CloudCountingEngine` takes a required `tokenProvider` and never reads `DEEPGRAM_API_KEY` itself. The only reader of that define is `core/config/dev_secrets.dart`, which throws unless `BuildConfig.showDebugTools` is on. Production tokens come from the `voice-block` Supabase Edge Function under `supabase/` (see `supabase/README.md`; `make supabase-test` runs its Deno tests).
 
