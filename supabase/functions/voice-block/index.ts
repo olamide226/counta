@@ -102,7 +102,7 @@ function deps(): Deps {
     ),
     trials: new SupabaseTrialStore(admin),
     vouchers: new SupabaseVoucherStore(admin),
-    attestors: buildAttestors(env, log),
+    attestors: buildAttestors(env),
     // Only the real adapters are reachable from here. The fakes — including
     // the attestor that says every device is eligible — live in testing/ and
     // are never imported by this module, so no environment variable can turn

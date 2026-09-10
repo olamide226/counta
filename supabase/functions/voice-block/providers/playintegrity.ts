@@ -31,13 +31,34 @@ export class PlayIntegrityAttestor implements DeviceAttestor {
 
   private readonly fetchFn: typeof fetch;
   private readonly now: () => number;
-  private readonly signingKey: () => Promise<CryptoKey>;
   private accessToken?: { value: string; expiresAt: number };
+  private parsed?: ServiceAccount;
+  private key?: () => Promise<CryptoKey>;
 
   constructor(private readonly opts: PlayIntegrityOptions) {
     this.fetchFn = opts.fetch ?? fetch;
     this.now = opts.now ?? (() => Date.now());
-    this.signingKey = lazyKey("playintegrity", opts.privateKey, "RS256");
+  }
+
+  /**
+   * The service account, parsed on first use and not before.
+   *
+   * The whole key file is one secret, so it arrives as one environment
+   * variable; the cost of that is a parse, and a parse can fail. It fails
+   * *here*, on the trial request that needed it, exactly as a well-formed JSON
+   * carrying an unusable private key already failed at the import below —
+   * which is the point. Validating the JSON shape eagerly at wiring time gave
+   * one class of misconfiguration two behaviours and could never be complete,
+   * because the key itself is only readable by Web Crypto.
+   */
+  private account(): ServiceAccount {
+    return this.parsed ??= serviceAccount(this.opts.serviceAccountJson);
+  }
+
+  private signingKey(): Promise<CryptoKey> {
+    // Imported at most once and never cached as a failure; see lazyKey.
+    this.key ??= lazyKey("playintegrity", this.account().privateKey, "RS256");
+    return this.key();
   }
 
   async check(attestation: string): Promise<DeviceAttestation> {
@@ -168,9 +189,9 @@ export class PlayIntegrityAttestor implements DeviceAttestor {
     const assertion = await signJwt(
       await this.signingKey(),
       "RS256",
-      { typ: "JWT", ...(this.opts.keyId ? { kid: this.opts.keyId } : {}) },
+      { typ: "JWT", ...(this.account().keyId ? { kid: this.account().keyId } : {}) },
       {
-        iss: this.opts.clientEmail,
+        iss: this.account().clientEmail,
         scope: SCOPE,
         aud: GOOGLE_TOKEN_URL,
         iat: issuedAt,
@@ -209,15 +230,65 @@ export class PlayIntegrityAttestor implements DeviceAttestor {
 export interface PlayIntegrityOptions {
   /** The Android application id the verdict must name. */
   packageName: string;
-  /** Service account `client_email`. */
-  clientEmail: string;
-  /** Service account `private_key` (PKCS#8 PEM), straight from Deno.env. */
-  privateKey: string;
-  /** Service account `private_key_id`; optional, per Google's JWT spec. */
-  keyId?: string;
+  /**
+   * The service-account key file, straight from Deno.env: one secret, one
+   * variable, parsed by this adapter rather than by its caller.
+   */
+  serviceAccountJson: string;
   fetch?: typeof fetch;
   /** Injected so tests control token freshness and the access-token cache. */
   now?: () => number;
+}
+
+/** The three fields of a service-account key file this adapter signs with. */
+interface ServiceAccount {
+  clientEmail: string;
+  privateKey: string;
+  /** `private_key_id`; optional, per Google's JWT spec. */
+  keyId?: string;
+}
+
+/**
+ * Reads the key file, or refuses as an unavailable provider.
+ *
+ * A ProviderError rather than an AttestationError, and the same one a rejected
+ * private key raises: nothing about the device has been decided, and it is our
+ * own credential that is wrong. The trial is refused with a 503 and every other
+ * endpoint carries on — /voice-block and /release pay for the whole feature and
+ * must not be taken down by a badly pasted secret.
+ */
+function serviceAccount(raw: string): ServiceAccount {
+  let parsed: unknown;
+  try {
+    parsed = JSON.parse(raw);
+  } catch {
+    throw unusableKey();
+  }
+  const account = parsed as {
+    client_email?: unknown;
+    private_key?: unknown;
+    private_key_id?: unknown;
+  } | null;
+  if (
+    typeof account?.client_email !== "string" || account.client_email === "" ||
+    typeof account.private_key !== "string" || account.private_key === ""
+  ) {
+    throw unusableKey();
+  }
+  return {
+    clientEmail: account.client_email,
+    privateKey: account.private_key,
+    keyId: typeof account.private_key_id === "string"
+      ? account.private_key_id
+      : undefined,
+  };
+}
+
+function unusableKey(): ProviderError {
+  return new ProviderError(
+    "unavailable",
+    "playintegrity: PLAY_INTEGRITY_SERVICE_ACCOUNT_JSON is not a service account key",
+  );
 }
 
 /** The subset of `tokenPayloadExternal` the gate reads. */

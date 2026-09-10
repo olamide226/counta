@@ -221,9 +221,13 @@ async function playIntegrity(responses: Response[]) {
   ]);
   const attestor = new PlayIntegrityAttestor({
     packageName: PACKAGE,
-    clientEmail: "counta@example.iam.gserviceaccount.com",
-    privateKey: await privateKeyPem("RS256"),
-    keyId: "kid-1",
+    // One secret, one variable, the way it arrives from Deno.env.
+    serviceAccountJson: JSON.stringify({
+      type: "service_account",
+      client_email: "counta@example.iam.gserviceaccount.com",
+      private_key: await privateKeyPem("RS256"),
+      private_key_id: "kid-1",
+    }),
     fetch: fetchFn,
     now: () => NOW,
   });
