@@ -237,6 +237,14 @@ While overall coverage is moderate, **all critical business logic is thoroughly 
 
 The core application logic that determines app behavior is well-tested and reliable. UI components are manually tested during development.
 
+## 🚢 Releasing
+
+Signing, versioning, build commands, cadence, run books for Play and the App
+Store, rollback, and the current known limitations: **[docs/RELEASING.md](docs/RELEASING.md)**.
+
+If you have forked this repo, that document is written to work for your own
+copy — you supply your own upload key and store accounts.
+
 ## 📄 License
 
 This project is licensed under the MIT License - see the LICENSE file for details.

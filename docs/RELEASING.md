@@ -634,6 +634,39 @@ Because the value follows the toolchain, **the CI Flutter version and your
 local one must match** or the artifact CI produces may not target what you
 verified. Re-run the `aapt2` check at preflight after any Flutter upgrade.
 
+### Firebase Cloud Messaging is in the Android build without being asked for
+
+`live_activities` 2.5.1 — used only for the **iOS** Live Activity — declares
+`implementation 'com.google.firebase:firebase-messaging:24.0.0'`
+unconditionally in its `android/build.gradle`. So the Android artifact carries
+the FCM SDK, a `FirebaseInstanceIdReceiver`, and
+`com.google.android.c2dm.permission.RECEIVE` in the merged manifest:
+
+```
+$ grep uses-permission build/app/intermediates/merged_manifests/release/*/AndroidManifest.xml
+  POST_NOTIFICATIONS  RECORD_AUDIO  INTERNET  VIBRATE
+  ACCESS_NETWORK_STATE  WAKE_LOCK  com.google.android.c2dm.permission.RECEIVE
+```
+
+There is no `google-services.json` in the repository, so FCM has no project
+configuration and never registers a token — it collects nothing at runtime. But
+it is visible to anyone who inspects the APK, and a store reviewer is entitled
+to ask why a counting app receives push messages. Either be ready to explain
+it, or exclude the dependency:
+
+```kotlin
+// android/app/build.gradle.kts
+configurations.all {
+    exclude(group = "com.google.firebase", module = "firebase-messaging")
+}
+```
+
+Test an Android build afterwards if you do. Not done here because it changes
+runtime behaviour and this change set is build configuration only.
+
+`ACCESS_ADVERTISING_ID` is **not** present in the merged manifest — worth
+knowing when a store questionnaire asks.
+
 ### No in-app purchases
 
 Nothing in `pubspec.yaml` provides IAP. The block/credit model in
