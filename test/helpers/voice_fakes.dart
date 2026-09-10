@@ -96,6 +96,11 @@ class FakeAudioSource implements AudioSource {
   /// What the OS answers when capture asks for the microphone.
   bool permissionGranted = true;
 
+  /// The capture format the engine reads its audio clock from. 16 kHz mono
+  /// PCM16 unless a test says otherwise.
+  @override
+  int bytesPerSecond = 16000 * 2;
+
   /// Holds the stream silent: no first frame, no error. Models a microphone
   /// that has been granted but never delivers, so a stop can race startup.
   bool silent = false;

@@ -233,12 +233,6 @@ class CloudCountingEngine implements CountingEngine {
   /// than this has bigger problems than a gap in the audio.
   static const int _maxPreConnectFrames = 500;
 
-  /// 16 kHz mono PCM16, as [AudioSource.recordConfig] captures it. Byte count
-  /// is the session's audio clock: it is what the provider timestamps against,
-  /// so it maps a connection's timeline onto the session's exactly, with no
-  /// wall clock involved.
-  static const int _bytesPerSecond = 16000 * 2;
-
   /// Total audio captured this session, in bytes.
   int _capturedBytes = 0;
 
@@ -914,8 +908,12 @@ class CloudCountingEngine implements CountingEngine {
       connection.firstFrameByte = frameStartByte;
       _matcher?.openStream(
         connection.streamId,
+        // Where this connection's timeline sits on the session's, in the
+        // format capture is actually running at. `AudioSource` owns that:
+        // a rate read from a constant here would skew every offset silently.
         startOffset: Duration(
-          microseconds: (frameStartByte * 1000000 / _bytesPerSecond).round(),
+          microseconds: (frameStartByte * 1000000 / _audioSource.bytesPerSecond)
+              .round(),
         ),
       );
     }

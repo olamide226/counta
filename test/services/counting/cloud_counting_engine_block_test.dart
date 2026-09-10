@@ -386,6 +386,57 @@ void main() {
         });
       });
 
+      test('the seam offset follows the capture format', () {
+        fakeAsync((async) {
+          // The audio clock is bytes, and how many bytes a second means
+          // belongs to `AudioSource`. At 8 kHz the same nine seconds is half
+          // the bytes: read from a 16 kHz constant in the engine, the
+          // incoming connection would be placed four and a half seconds
+          // early and stop counting anything it alone heard.
+          audio.bytesPerSecond = 8000 * 2;
+          final blocks = FakeBlockService(blockSeconds: 10);
+          final engine = engineWith(
+            blocks,
+            renewalOverlap: const Duration(seconds: 2),
+          );
+
+          engine.start(testPhrase);
+          async.flushMicrotasks();
+
+          audio.emitFrame(9 * audio.bytesPerSecond - 320);
+          async.flushMicrotasks();
+
+          async.elapse(const Duration(seconds: 9));
+          async.flushMicrotasks();
+          expect(sockets, hasLength(2));
+
+          audio.emitFrame();
+          async.flushMicrotasks();
+
+          sockets[0].emitSegment(
+            finalSegment("I'm rich in wisdom", start: 9.2, duration: 1.0),
+          );
+          sockets[1].emitSegment(
+            finalSegment("I'm rich in wisdom", start: 0.2, duration: 1.0),
+          );
+          async.flushMicrotasks();
+          expect(engine.voiceCount, 1);
+
+          sockets[1].emitSegment(
+            finalSegment("I'm rich in wisdom", start: 2.0, duration: 1.0),
+          );
+          async.flushMicrotasks();
+          expect(
+            engine.voiceCount,
+            2,
+            reason: 'audio only the incoming connection heard still counts',
+          );
+
+          engine.dispose();
+          async.flushTimers();
+        });
+      });
+
       test('a renewal that cannot connect keeps the block it paid for', () {
         fakeAsync((async) {
           final blocks = FakeBlockService(blockSeconds: 300);

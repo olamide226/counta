@@ -55,13 +55,32 @@ class AudioSource {
   AudioSource({AudioRecorder? recorder})
     : _recorder = recorder ?? AudioRecorder();
 
+  static const int _defaultSampleRate = 16000;
+
+  /// PCM16 mono: two bytes a sample, one channel.
+  static const int _bytesPerSample = 2;
+
+  int _sampleRate = _defaultSampleRate;
+
+  /// Bytes of PCM per second of capture, at the rate capture actually started
+  /// with.
+  ///
+  /// Byte count is the session's audio clock — it is what the transcription
+  /// provider timestamps against, so it maps a connection's timeline onto the
+  /// session's with no wall clock involved. It belongs to whoever chooses the
+  /// format, which is this class: read from a constant somewhere else, a
+  /// changed rate would skew every stream offset silently and turn a renewal
+  /// seam into double counts.
+  int get bytesPerSecond => _sampleRate * _bytesPerSample;
+
   /// Check microphone permission.
   Future<bool> hasPermission() async {
     return await _recorder.hasPermission();
   }
 
   /// Start recording audio stream.
-  Stream<Uint8List> start({int sampleRate = 16000}) {
+  Stream<Uint8List> start({int sampleRate = _defaultSampleRate}) {
+    _sampleRate = sampleRate;
     _stopping = null;
     _controller = StreamController<Uint8List>.broadcast(onCancel: () => stop());
 
