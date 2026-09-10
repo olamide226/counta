@@ -272,7 +272,7 @@ export function harness(
   const logs: Harness["logs"] = [];
   const clock = { now: new Date("2026-09-07T12:00:00.000Z") };
   const pending: Array<Promise<unknown>> = [];
-  const vouchers = new MemoryVoucherStore(campaigns, clock);
+  const vouchers = new MemoryVoucherStore(campaigns);
   const ios = new FakeAttestor("devicecheck");
   const android = androidAttestor();
   let seq = 0;
@@ -524,23 +524,28 @@ export interface MemoryVoucher {
   id: string;
   code: string;
   credits: number;
-  max_redemptions: number;
   redeemed_count: number;
-  expires_at: string | null;
-  enabled: boolean;
 }
 
 /**
- * In-memory stand-in for counta.redeem_voucher.
+ * The redemption state the *endpoint* reads and writes, and nothing else.
  *
- * It reproduces the *decisions* the SQL function makes and the order it makes
- * them in, not the transaction — a single-threaded fake cannot tear a
- * transaction apart, so the ordering assertions here are about which answer
- * comes out and what is left behind, and the atomicity itself is the
- * database's job (design: Edge Function contract).
+ * This used to re-implement counta.redeem_voucher — the guess budget, the case
+ * folding, disabled-versus-unknown, the expiry, the cap and the retry-after
+ * arithmetic, ninety lines of it — and eight tests in redeem_test.ts asserted
+ * that copy rather than the function, so any change to the SQL would have left
+ * them green. Those decisions are tested against a real database now
+ * (supabase/tests/redeem_voucher_decisions.sql), and what is left here is the
+ * state redeem.ts actually depends on: a redemption row, its slot, and whether
+ * its payout has been confirmed.
+ *
+ * A test that wants a refusal returns one directly (redeem_test.ts's stub)
+ * rather than persuading a fake to derive it.
  */
 export class MemoryVoucherStore implements VoucherStore {
-  readonly attempts: Array<{ user_id: string; at: Date }> = [];
+  /** What the endpoint asked the transaction for, in order. */
+  readonly calls: Array<{ code: string; user_id: string; budget: AttemptBudget }> =
+    [];
   readonly redemptions: Array<
     {
       id: string;
@@ -552,40 +557,17 @@ export class MemoryVoucherStore implements VoucherStore {
   > = [];
   private seq = 0;
 
-  constructor(
-    readonly vouchers: MemoryVoucher[] = [],
-    private readonly clock: { now: Date } = { now: new Date() },
-  ) {}
+  constructor(readonly vouchers: MemoryVoucher[] = []) {}
 
   redeem(
     code: string,
     userId: string,
     budget: AttemptBudget,
   ): Promise<RedeemOutcome> {
-    // 12.8 first, as the transaction does: the attempt counter is the only
-    // thing that actually bounds guessing.
-    const windowMs = budget.windowMinutes * 60_000;
-    const since = this.clock.now.getTime() - windowMs;
-    const inWindow = this.attempts
-      .filter((a) => a.user_id === userId && a.at.getTime() >= since)
-      .sort((a, b) => a.at.getTime() - b.at.getTime());
-    if (inWindow.length >= budget.maxAttempts) {
-      const clearsAt = (inWindow[0]?.at.getTime() ?? this.clock.now.getTime()) +
-        windowMs;
-      return Promise.resolve({
-        outcome: "too_many_attempts",
-        attempts: inWindow.length,
-        retry_after_seconds: Math.max(
-          1,
-          Math.ceil((clearsAt - this.clock.now.getTime()) / 1000),
-        ),
-      });
-    }
+    this.calls.push({ code, user_id: userId, budget });
 
-    const voucher = this.vouchers.find(
-      (v) => v.code.toUpperCase() === code.toUpperCase(),
-    );
-    if (!voucher) return this.refuse(userId, { outcome: "not_found" });
+    const voucher = this.vouchers.find((v) => v.code === code.toUpperCase());
+    if (!voucher) return Promise.resolve({ outcome: "not_found" });
 
     const existing = this.redemptions.find(
       (r) => r.voucher_id === voucher.id && r.user_id === userId,
@@ -598,21 +580,6 @@ export class MemoryVoucherStore implements VoucherStore {
         credits: existing.credits,
         credited: existing.credited,
       });
-    }
-
-    // Disabled is indistinguishable from unknown (req 12.6), and is checked
-    // after the existing redemption for the same reason the SQL does.
-    if (!voucher.enabled) return this.refuse(userId, { outcome: "not_found" });
-
-    if (
-      voucher.expires_at !== null &&
-      new Date(voucher.expires_at).getTime() <= this.clock.now.getTime()
-    ) {
-      return this.refuse(userId, { outcome: "expired" });
-    }
-
-    if (voucher.redeemed_count >= voucher.max_redemptions) {
-      return this.refuse(userId, { outcome: "exhausted" });
     }
 
     // Slot first, then the row: the order the function takes, and the one that
@@ -635,12 +602,6 @@ export class MemoryVoucherStore implements VoucherStore {
     });
   }
 
-  /** Records the guess and hands the refusal back, as counta.voucher_attempt does. */
-  private refuse(userId: string, outcome: RedeemOutcome): Promise<RedeemOutcome> {
-    this.attempts.push({ user_id: userId, at: this.clock.now });
-    return Promise.resolve(outcome);
-  }
-
   /** While positive, the next markCredited rejects and this decrements. */
   failCredited = 0;
 
@@ -659,16 +620,13 @@ export class MemoryVoucherStore implements VoucherStore {
 
 export const VOUCHER_ID = "88888888-8888-4888-8888-888888888888";
 
-/** A live campaign: 50 credits, 2 redemptions, no expiry. */
+/** A live campaign paying 50 credits. */
 export function voucher(overrides: Partial<MemoryVoucher> = {}): MemoryVoucher {
   return {
     id: VOUCHER_ID,
     code: "SPRING24",
     credits: 50,
-    max_redemptions: 2,
     redeemed_count: 0,
-    expires_at: null,
-    enabled: true,
     ...overrides,
   };
 }

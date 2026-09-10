@@ -11,14 +11,46 @@ import {
   voucher,
   VOUCHER_ID,
 } from "./testing/fakes.ts";
+import type {
+  AttemptBudget,
+  RedeemOutcome,
+  VoucherStore,
+} from "./types.ts";
 
-// POST /voice-block/redeem — requirement 12. The two rules that bound the
-// payout (one redemption per user, the campaign cap) are database constraints
-// and are exercised against a real Postgres by the migration; what is tested
-// here is the endpoint built on top of them.
+// POST /voice-block/redeem — the endpoint, and only the endpoint.
+//
+// What a code is worth, whether it exists, whether it has expired, whether the
+// campaign is full and whether the caller has guessed too often are all decided
+// by counta.redeem_voucher in one transaction, and they are tested against a
+// real database in supabase/tests/redeem_voucher_decisions.sql. Asserting them
+// here meant asserting an in-memory re-implementation of the function, which
+// stays green when the function changes.
+//
+// What is left is what this file decides: the HTTP shape of each answer, the
+// wording of the refusals, and whether a redemption pays.
 
-const THIRD_USER = "99999999-9999-4999-8999-999999999999";
-const NOW = new Date("2026-09-07T12:00:00.000Z");
+/** Answers with whatever the test says the transaction returned. */
+class StubVoucherStore implements VoucherStore {
+  readonly calls: Array<{ code: string; user_id: string; budget: AttemptBudget }> =
+    [];
+  readonly credited: string[] = [];
+
+  constructor(private readonly outcome: RedeemOutcome) {}
+
+  redeem(
+    code: string,
+    userId: string,
+    budget: AttemptBudget,
+  ): Promise<RedeemOutcome> {
+    this.calls.push({ code, user_id: userId, budget });
+    return Promise.resolve(this.outcome);
+  }
+
+  markCredited(redemptionId: string): Promise<void> {
+    this.credited.push(redemptionId);
+    return Promise.resolve();
+  }
+}
 
 Deno.test("redeem: a live code grants credits and records the redemption", async () => {
   const h = harness({ campaigns: [voucher()] });
@@ -29,21 +61,91 @@ Deno.test("redeem: a live code grants credits and records the redemption", async
   assertEquals(body, { redeemed: true, credits: 50, balance: 70 });
   assertEquals(h.vouchers.redemptions.length, 1);
   assertEquals(h.vouchers.vouchers[0].redeemed_count, 1);
-  assertEquals(h.vouchers.attempts.length, 0);
 
   // 12.11, in the shape a block grant logs.
   const logged = h.logs.find((l) => l.event === "voucher_redeemed");
   assertEquals(logged?.fields.user_id, USER);
   assertEquals(logged?.fields.voucher_id, VOUCHER_ID);
   assertEquals(logged?.fields.credits, 50);
-  assertEquals(logged?.fields.redeemed_at, "2026-09-07T12:00:00.000Z");
+  assertEquals(logged?.fields.first_redemption, true);
+  assertEquals(logged?.fields.granted, true);
 });
 
-Deno.test("redeem: codes are matched without regard to case", async () => {
-  const h = harness({ campaigns: [voucher()] });
-  const { status, body } = await call(h.deps, redeemReq({ code: "  spring24 " }));
-  assertEquals(status, 200);
-  assertEquals(body.redeemed, true);
+Deno.test("redeem: the code and the configured budget are what the transaction is asked for", async () => {
+  // Trimming is the endpoint's job; folding the case is the function's, through
+  // the unique index on upper(code). And the guess budget is configuration, so
+  // it travels with the call rather than being hard-coded in the SQL.
+  const vouchers = new StubVoucherStore({ outcome: "not_found" });
+  const h = harness({ vouchers });
+
+  await call(h.deps, redeemReq({ code: "  spring24 " }));
+
+  assertEquals(vouchers.calls, [{
+    code: "spring24",
+    user_id: USER,
+    budget: {
+      windowMinutes: CONFIG.voucherAttemptWindowMinutes,
+      maxAttempts: CONFIG.voucherAttemptMax,
+    },
+  }]);
+});
+
+Deno.test("redeem: every refusal the transaction returns has its own answer", async () => {
+  // 12.6: unknown and disabled are already one outcome by the time they reach
+  // here, so there is nothing left to leak. 12.7: expiry and exhaustion do get
+  // their own wording — they reach a user holding a real code, and telling that
+  // user their code is fake is worse than the little the distinction gives away.
+  const cases: Array<
+    { outcome: RedeemOutcome; status: number; body: Record<string, unknown> }
+  > = [
+    {
+      outcome: { outcome: "not_found" },
+      status: 404,
+      body: { error: "voucher_invalid" },
+    },
+    {
+      outcome: { outcome: "expired" },
+      status: 409,
+      body: { error: "voucher_expired" },
+    },
+    {
+      outcome: { outcome: "exhausted" },
+      status: 409,
+      body: { error: "voucher_exhausted" },
+    },
+  ];
+
+  for (const { outcome, status, body } of cases) {
+    const h = harness({ vouchers: new StubVoucherStore(outcome) });
+    const res = await call(h.deps, redeemReq());
+    assertEquals(res.status, status, outcome.outcome);
+    assertEquals(res.body, body, outcome.outcome);
+    // Nothing was paid for a refusal, whichever one it was.
+    assertEquals(h.balance.calls.length, 0, outcome.outcome);
+    const refused = h.logs.find((l) => l.event === "voucher_refused");
+    assertEquals(refused?.fields.outcome, outcome.outcome);
+  }
+});
+
+Deno.test("redeem: too many guesses is the same 429 the other budgets answer", async () => {
+  const h = harness({
+    vouchers: new StubVoucherStore({
+      outcome: "too_many_attempts",
+      attempts: 7,
+      retry_after_seconds: 900,
+    }),
+  });
+
+  const { status, body, headers } = await call(h.deps, redeemReq());
+
+  assertEquals(status, 429);
+  // One vocabulary for all three budgets, and the hint in both places the
+  // client might look (respond.ts).
+  assertEquals(body, { error: "rate_limited", retry_after_seconds: 900 });
+  assertEquals(headers.get("Retry-After"), "900");
+  assertEquals(h.balance.calls.length, 0);
+  const logged = h.logs.find((l) => l.event === "voucher_rate_limited");
+  assertEquals(logged?.fields.attempts, 7);
 });
 
 Deno.test("redeem: the same user redeeming again is told so and paid once", async () => {
@@ -63,9 +165,7 @@ Deno.test("redeem: the same user redeeming again is told so and paid once", asyn
   assertEquals(h.balance.balances.get(USER), 70);
   assertEquals(h.balance.calls.filter((c) => c.op === "grant").length, 1);
   assertEquals(h.vouchers.redemptions.length, 1);
-  // A repeat is not a failed attempt, so it does not eat the guess budget.
   assertEquals(h.vouchers.vouchers[0].redeemed_count, 1);
-  assertEquals(h.vouchers.attempts.length, 0);
 });
 
 Deno.test("redeem: a repeat pays nothing once the ledger has forgotten the key", async () => {
@@ -93,116 +193,6 @@ Deno.test("redeem: a repeat pays nothing once the ledger has forgotten the key",
   assertEquals(h.balance.calls.filter((c) => c.op === "grant").length, 1);
   assertEquals(h.vouchers.redemptions.length, 1);
   assertEquals(h.vouchers.vouchers[0].redeemed_count, 1);
-});
-
-Deno.test("redeem: many users share a campaign up to its cap", async () => {
-  const h = harness({ campaigns: [voucher()] }); // max_redemptions: 2
-
-  assertEquals((await call(h.deps, redeemReq())).status, 200);
-  assertEquals(
-    (await call(h.deps, redeemReq(undefined, tokenFor(OTHER_USER)))).status,
-    200,
-  );
-
-  const full = await call(h.deps, redeemReq(undefined, tokenFor(THIRD_USER)));
-
-  // 12.7: a user holding a real code is told the campaign is full, not that
-  // their code is fake.
-  assertEquals(full.status, 409);
-  assertEquals(full.body, { error: "voucher_exhausted" });
-  assertEquals(h.vouchers.redemptions.length, 2);
-  assertEquals(h.vouchers.vouchers[0].redeemed_count, 2);
-  // Nothing moved for the caller who arrived too late.
-  assertEquals(h.balance.balances.get(THIRD_USER), undefined);
-  // The refusal is a failed attempt and is counted as one (12.8).
-  assertEquals(h.vouchers.attempts.map((a) => a.user_id), [THIRD_USER]);
-});
-
-Deno.test("redeem: an expired code is refused and says which of the two applied", async () => {
-  const h = harness({
-    campaigns: [voucher({ expires_at: "2026-09-07T11:59:59.000Z" })],
-  });
-
-  const { status, body } = await call(h.deps, redeemReq());
-
-  assertEquals(status, 409);
-  assertEquals(body, { error: "voucher_expired" });
-  assertEquals(h.vouchers.redemptions.length, 0);
-  assertEquals(h.balance.calls.length, 0);
-  assertEquals(h.vouchers.attempts.length, 1);
-});
-
-Deno.test("redeem: a null expiry never expires", async () => {
-  const h = harness({ campaigns: [voucher({ expires_at: null })] });
-  h.clock.now = new Date("2099-01-01T00:00:00.000Z");
-  assertEquals((await call(h.deps, redeemReq())).status, 200);
-});
-
-Deno.test("redeem: an unknown and a disabled code are the same answer", async () => {
-  const h = harness({ campaigns: [voucher({ code: "RETIRED", enabled: false })] });
-
-  const unknown = await call(h.deps, redeemReq({ code: "NOSUCHCODE" }));
-  const disabled = await call(h.deps, redeemReq({ code: "RETIRED" }));
-
-  // 12.6: distinguishing them would turn the endpoint into an oracle for
-  // discovering which campaigns are live.
-  assertEquals(unknown.status, disabled.status);
-  assertEquals(unknown.body, disabled.body);
-  assertEquals(unknown.status, 404);
-  assertEquals(unknown.body, { error: "voucher_invalid" });
-  assertEquals(h.vouchers.redemptions.length, 0);
-  assertEquals(h.balance.calls.length, 0);
-  // Both cost a guess.
-  assertEquals(h.vouchers.attempts.length, 2);
-  // And neither log distinguishes them either.
-  const refusals = h.logs.filter((l) => l.event === "voucher_refused");
-  assertEquals(refusals[0].fields.outcome, refusals[1].fields.outcome);
-});
-
-Deno.test("redeem: failed attempts are rate limited, and the block can lift", async () => {
-  const h = harness({ campaigns: [voucher()] });
-
-  for (let i = 0; i < CONFIG.voucherAttemptMax; i++) {
-    const res = await call(h.deps, redeemReq({ code: `GUESS${i}` }));
-    assertEquals(res.status, 404, `guess ${i}`);
-  }
-
-  const limited = await call(h.deps, redeemReq({ code: "GUESS-AGAIN" }));
-  assertEquals(limited.status, 429);
-  const retryAfter = CONFIG.voucherAttemptWindowMinutes * 60;
-  assertEquals(limited.body, {
-    error: "rate_limited",
-    retry_after_seconds: retryAfter,
-  });
-  assertEquals(limited.headers.get("Retry-After"), String(retryAfter));
-  // A refused refusal records nothing: counting it would let the window renew
-  // itself for as long as the caller kept knocking, so it could never lift.
-  assertEquals(h.vouchers.attempts.length, CONFIG.voucherAttemptMax);
-  // And a real code is not redeemable while the block stands.
-  assertEquals((await call(h.deps, redeemReq())).status, 429);
-  assertEquals(h.vouchers.redemptions.length, 0);
-
-  h.clock.now = new Date(
-    h.clock.now.getTime() + CONFIG.voucherAttemptWindowMinutes * 60_000 + 1000,
-  );
-  assertEquals((await call(h.deps, redeemReq())).status, 200);
-});
-
-Deno.test("redeem: the retry-after counts from the oldest attempt in the window", async () => {
-  const h = harness();
-  for (let i = 0; i < CONFIG.voucherAttemptMax; i++) {
-    await call(h.deps, redeemReq({ code: `GUESS${i}` }));
-    h.clock.now = new Date(h.clock.now.getTime() + 60_000);
-  }
-
-  const limited = await call(h.deps, redeemReq({ code: "GUESS-AGAIN" }));
-  assertEquals(limited.status, 429);
-  // Three minutes have passed since the first of three attempts, so the
-  // window clears three minutes early.
-  assertEquals(
-    limited.body.retry_after_seconds,
-    CONFIG.voucherAttemptWindowMinutes * 60 - CONFIG.voucherAttemptMax * 60,
-  );
 });
 
 Deno.test("redeem: a ledger failure completes on retry without paying twice", async () => {
@@ -246,7 +236,7 @@ Deno.test("redeem: a payout that lands but is not recorded is re-issued, not dou
   // stays unconfirmed, so the retry re-issues the *same* keyed grant — which
   // the ledger applies once — rather than the endpoint assuming a payout it
   // cannot see.
-  const vouchers = new MemoryVoucherStore([voucher()], { now: NOW });
+  const vouchers = new MemoryVoucherStore([voucher()]);
   vouchers.failCredited = 1;
   const h = harness({ vouchers });
 
@@ -265,36 +255,7 @@ Deno.test("redeem: a payout that lands but is not recorded is re-issued, not dou
   assertEquals(h.balance.balances.get(USER), 70);
 });
 
-Deno.test("redeem: the claimed slots and the redemption rows never disagree", async () => {
-  // The invariant counta.redeem_voucher exists to hold. A leaked slot
-  // under-grants a campaign; a redemption with no slot behind it lets the cap
-  // be exceeded. Every outcome — success, repeat, exhaustion, refusal, a
-  // ledger failure part way through — must leave the two equal.
-  const h = harness({ campaigns: [voucher({ max_redemptions: 2 })] });
-  const campaign = h.vouchers.vouchers[0];
-  const agree = () =>
-    assertEquals(campaign.redeemed_count, h.vouchers.redemptions.length);
-
-  agree();
-  await call(h.deps, redeemReq());
-  agree();
-  await call(h.deps, redeemReq()); // repeat by the same user
-  agree();
-  h.balance.failGrants = 1;
-  await call(h.deps, redeemReq(undefined, tokenFor(OTHER_USER))); // 503
-  agree();
-  await call(h.deps, redeemReq(undefined, tokenFor(OTHER_USER))); // completes
-  agree();
-  await call(h.deps, redeemReq(undefined, tokenFor(THIRD_USER))); // exhausted
-  agree();
-  await call(h.deps, redeemReq({ code: "NOSUCHCODE" }, tokenFor(THIRD_USER)));
-  agree();
-
-  assertEquals(campaign.redeemed_count, 2);
-  assertEquals(campaign.redeemed_count <= campaign.max_redemptions, true);
-});
-
-Deno.test("redeem: a malformed code is 400 and costs no guess", async () => {
+Deno.test("redeem: a malformed code is 400 and never reaches the transaction", async () => {
   const h = harness({ campaigns: [voucher()] });
 
   for (const body of [{}, { code: "" }, { code: "   " }, { code: 42 }, { code: "x".repeat(65) }]) {
@@ -302,7 +263,9 @@ Deno.test("redeem: a malformed code is 400 and costs no guess", async () => {
     assertEquals(res.status, 400, JSON.stringify(body));
     assertEquals(res.body, { error: "invalid_request" });
   }
-  assertEquals(h.vouchers.attempts.length, 0);
+  // Refused before the round trip, so it costs no guess either: the attempt is
+  // recorded by the transaction, and the transaction never ran.
+  assertEquals(h.vouchers.calls.length, 0);
   assertEquals(h.balance.calls.length, 0);
 });
 
@@ -311,7 +274,7 @@ Deno.test("redeem: unauthenticated is 401 and touches nothing", async () => {
   const anon = await call(h.deps, redeemReq(undefined, null));
   assertEquals(anon.status, 401);
   assertEquals(anon.body, { error: "unauthenticated" });
-  assertEquals(h.vouchers.attempts.length, 0);
+  assertEquals(h.vouchers.calls.length, 0);
   assertEquals(h.vouchers.redemptions.length, 0);
 });
 
