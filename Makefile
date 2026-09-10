@@ -1,4 +1,4 @@
-.PHONY: help setup format lint analyze test test-corpus test-coverage build-runner clean build-ios build-ios-ipa build-android build-appbundle appbundle release-preflight build-macos build-web run run-ios run-android run-web doctor icons pull-fixtures supabase-start supabase-stop supabase-test supabase-serve
+.PHONY: help setup format lint analyze test test-corpus test-coverage build-runner clean build-ios build-ios-ipa build-android build-appbundle release-preflight build-macos build-web run run-ios run-android run-web doctor icons pull-fixtures supabase-start supabase-stop supabase-test supabase-serve
 
 # Environment Configuration
 # Automatically loads variables from .env file if present, or CLI overrides.
@@ -185,22 +185,18 @@ build-appbundle:
 	@echo "✅ AAB ready at build/app/outputs/bundle/release/app-release.aab"
 	@echo "   Upload it to Play Console › Testing › Internal testing › Create new release."
 
-# Alias, because "appbundle" is what `flutter build` calls it.
-appbundle: build-appbundle
-
 # Everything that must be green before a tag. See docs/RELEASING.md.
-release-preflight:
+#
+# `test` runs the whole suite, which already collects
+# test/fixtures/corpus_test.dart — the transcript recall gates are covered
+# here. `test-corpus` stays a separate target for iterating on those gates
+# alone; running it again from this chain would only cost time.
+release-preflight: lint test
 	@echo "🚦 Release preflight"
 	@echo "--- version ---"
 	@grep '^version:' pubspec.yaml
 	@echo "--- flutter ---"
 	@flutter --version | head -1
-	@echo "--- analyze ---"
-	@dart analyze
-	@echo "--- tests ---"
-	@flutter test
-	@echo "--- transcript corpus gates ---"
-	@flutter test test/fixtures/corpus_test.dart
 	@echo "--- signing ---"
 	@test -f android/key.properties \
 		&& echo "android/key.properties present (upload key configured)" \
