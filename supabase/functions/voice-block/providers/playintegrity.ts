@@ -58,10 +58,19 @@ export class PlayIntegrityAttestor implements DeviceAttestor {
    */
   private assertGenuine(payload: TokenPayload): void {
     const request = payload.requestDetails;
-    if (request?.requestPackageName !== this.opts.packageName) {
+    // A payload with no request details at all is not a verdict — Google gave
+    // us something we cannot read, which is not the same as reading it and
+    // finding a different app.
+    if (request?.requestPackageName === undefined) {
+      throw new AttestationError(
+        "indeterminate",
+        "playintegrity: no request details",
+      );
+    }
+    if (request.requestPackageName !== this.opts.packageName) {
       throw new AttestationError(
         "rejected",
-        `playintegrity: verdict is for ${request?.requestPackageName}`,
+        `playintegrity: verdict is for ${request.requestPackageName}`,
       );
     }
 

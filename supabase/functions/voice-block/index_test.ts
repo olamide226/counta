@@ -522,3 +522,90 @@ Deno.test("routing: non-POST is 405, unknown path is 404", async () => {
   );
   assertEquals(other.status, 404);
 });
+
+Deno.test("RevenueCat provider: follows the balance cursor rather than reading a zero", async () => {
+  // The list is paginated. A currency that fell onto page two would read as a
+  // zero balance, which 402s every grant and no amount of buying credit fixes.
+  const pages = [
+    JSON.stringify({
+      object: "list",
+      items: [{ currency_code: "GEMS", balance: 99 }],
+      next_page:
+        `/v2/projects/proj/customers/${USER}/virtual_currencies?starting_after=abc`,
+    }),
+    JSON.stringify({
+      object: "list",
+      items: [{ currency_code: "VOICE", balance: 12 }],
+      next_page: null,
+    }),
+  ];
+  const seen: string[] = [];
+  const provider = new RevenueCatBalanceProvider({
+    secretKey: "test",
+    projectId: "proj",
+    currencyCode: "VOICE",
+    fetch: (input) => {
+      seen.push(String(input));
+      return Promise.resolve(
+        new Response(pages[seen.length - 1], {
+          status: 200,
+          headers: { "Content-Type": "application/json" },
+        }),
+      );
+    },
+  });
+
+  assertEquals(await provider.getBalance(USER), 12);
+  assertEquals(seen.length, 2);
+  assertStringIncludes(seen[0], "include_empty_balances=true&limit=100");
+  // next_page already carries the /v2 the base URL supplies; it must not be
+  // doubled.
+  assertEquals(
+    seen[1],
+    `https://api.revenuecat.com/v2/projects/proj/customers/${USER}/virtual_currencies?starting_after=abc`,
+  );
+});
+
+Deno.test("RevenueCat provider: a currency on no page is a zero balance", async () => {
+  const provider = new RevenueCatBalanceProvider({
+    secretKey: "test",
+    projectId: "proj",
+    currencyCode: "VOICE",
+    fetch: () =>
+      Promise.resolve(
+        new Response(JSON.stringify({ object: "list", items: [] }), {
+          status: 200,
+          headers: { "Content-Type": "application/json" },
+        }),
+      ),
+  });
+  assertEquals(await provider.getBalance(USER), 0);
+});
+
+Deno.test("RevenueCat provider: a grant is a positive adjustment keyed on its reference", async () => {
+  const seen: Array<{ url: string; init?: RequestInit }> = [];
+  const provider = new RevenueCatBalanceProvider({
+    secretKey: "test",
+    projectId: "proj",
+    currencyCode: "VOICE",
+    fetch: (input, init) => {
+      seen.push({ url: String(input), init });
+      return Promise.resolve(
+        new Response(
+          JSON.stringify({ items: [{ currency_code: "VOICE", balance: 70 }] }),
+          { status: 200, headers: { "Content-Type": "application/json" } },
+        ),
+      );
+    },
+  });
+
+  assertEquals(await provider.grant(USER, `voucher:${BLOCK}`, 50), 70);
+  assertStringIncludes(seen[0].url, "/virtual_currencies/transactions");
+  const sent = JSON.parse(String(seen[0].init?.body));
+  assertEquals(sent.adjustments, { VOICE: 50 });
+  assertEquals(sent.reference, `voucher:${BLOCK}`);
+  const headers = seen[0].init?.headers as Record<string, string>;
+  // The reference is the idempotency key, which is what makes a retried
+  // trial or redemption pay out once (reqs 11.8, 12.5).
+  assertEquals(headers["Idempotency-Key"], `voucher:${BLOCK}`);
+});

@@ -2,8 +2,9 @@
 //
 // Deliberately NOT imported by index.ts: a fake balance provider reachable from
 // the deployed bundle is one env typo away from giving every caller free
-// streaming, so the deployed function can only ever construct the real
-// adapters. Nothing outside index_test.ts should import this file.
+// streaming, and a fake attestor there would hand the trial to every device
+// that asked. The deployed function can only ever construct the real adapters.
+// Nothing outside index_test.ts should import this file.
 
 import { BlockConflictError, ProviderError } from "../types.ts";
 import type {
@@ -11,14 +12,24 @@ import type {
   BalanceProvider,
   BlockStore,
   Deps,
+  DeviceAttestation,
+  DeviceAttestor,
   HandlerConfig,
+  RedeemOutcome,
   TokenMinter,
+  TrialGate,
+  TrialGrantRow,
+  TrialStore,
   VoiceBlockRow,
+  VoucherStore,
 } from "../types.ts";
 
 export const USER = "11111111-1111-4111-8111-111111111111";
 export const SESSION = "22222222-2222-4222-8222-222222222222";
 export const GOOD_TOKEN = "good-jwt";
+
+/** A bearer token for any other caller; see FakeAuth. */
+export const tokenFor = (userId: string) => `user:${userId}`;
 
 /** Hands out obviously-fake tokens. Never talks to Deepgram. */
 export class FakeTokenMinter implements TokenMinter {
@@ -34,7 +45,10 @@ export class FakeTokenMinter implements TokenMinter {
 
 export class FakeAuth implements Authenticator {
   userIdForToken(token: string): Promise<string | null> {
-    return Promise.resolve(token === GOOD_TOKEN ? USER : null);
+    if (token === GOOD_TOKEN) return Promise.resolve(USER);
+    // A campaign cap needs more callers than one; tokenFor() mints them.
+    const match = /^user:(.+)$/.exec(token);
+    return Promise.resolve(match ? match[1] : null);
   }
 }
 
@@ -75,6 +89,18 @@ export class FakeBalanceProvider implements BalanceProvider {
       return Promise.reject(new ProviderError("unavailable", "refund failed"));
     }
     return this.apply(userId, `refund:${blockId}`, credits);
+  }
+
+  /** While positive, the next grant rejects and this decrements. */
+  failGrants = 0;
+
+  grant(userId: string, reference: string, credits: number): Promise<number> {
+    this.calls.push({ op: "grant", userId, blockId: reference, credits });
+    if (this.failGrants > 0) {
+      this.failGrants--;
+      return Promise.reject(new ProviderError("unavailable", "grant failed"));
+    }
+    return this.apply(userId, `grant:${reference}`, credits);
   }
 
   private apply(userId: string, key: string, delta: number): Promise<number> {
@@ -176,6 +202,9 @@ export const CONFIG: HandlerConfig = {
   refundWindowSeconds: 30,
   rateLimitMax: 6,
   rateLimitWindowMinutes: 10,
+  trialCredits: 20,
+  voucherAttemptMax: 3,
+  voucherAttemptWindowMinutes: 60,
 };
 
 export interface Harness {
@@ -183,37 +212,51 @@ export interface Harness {
   balance: FakeBalanceProvider;
   minter: FakeTokenMinter;
   blocks: MemoryBlockStore;
+  trials: MemoryTrialStore;
+  vouchers: MemoryVoucherStore;
+  ios: FakeAttestor;
+  android: FakeAttestor;
   logs: Array<{ event: string; fields: Record<string, unknown> }>;
   clock: { now: Date };
 }
 
 /**
  * A handler wired entirely to fakes. `initialBalance` seeds the default
- * balance provider; every other key overrides the corresponding dep, so an
- * explicit `balance` and an `initialBalance` cannot silently disagree.
+ * balance provider and `campaigns` the default voucher store; every other key
+ * overrides the corresponding dep, so an explicit `balance` and an
+ * `initialBalance` cannot silently disagree.
  */
 export function harness(
-  options: Partial<Deps> & { initialBalance?: number } = {},
+  options:
+    & Partial<Deps>
+    & { initialBalance?: number; campaigns?: MemoryVoucher[] } = {},
 ): Harness {
-  const { initialBalance = 20, ...overrides } = options;
+  const { initialBalance = 20, campaigns = [], ...overrides } = options;
   const balance = new FakeBalanceProvider(initialBalance);
   const minter = new FakeTokenMinter();
   const blocks = new MemoryBlockStore();
+  const trials = new MemoryTrialStore();
   const logs: Harness["logs"] = [];
   const clock = { now: new Date("2026-09-07T12:00:00.000Z") };
+  const vouchers = new MemoryVoucherStore(campaigns, clock);
+  const ios = new FakeAttestor("devicecheck");
+  const android = androidAttestor();
   let seq = 0;
   const deps: Deps = {
     auth: new FakeAuth(),
     balance,
     minter,
     blocks,
+    trials,
+    vouchers,
+    attestors: { ios, android },
     config: CONFIG,
     now: () => clock.now,
     newBlockId: () => `33333333-3333-4333-8333-${String(++seq).padStart(12, "0")}`,
     log: (event, fields) => logs.push({ event, fields }),
     ...overrides,
   };
-  return { deps, balance, minter, blocks, logs, clock };
+  return { deps, balance, minter, blocks, trials, vouchers, ios, android, logs, clock };
 }
 
 const BASE = "http://localhost:54321/functions/v1";
@@ -243,3 +286,210 @@ export const releaseReq = (
   body: unknown,
   token: string | null = GOOD_TOKEN,
 ) => req("/voice-block/release", body, token);
+
+// ---------------------------------------------------------------------------
+// Trial (req 11) and vouchers (req 12)
+
+export const OTHER_USER = "66666666-6666-4666-8666-666666666666";
+export const DEVICE_TOKEN = "fake-device-token";
+export const INTEGRITY_TOKEN = "fake-integrity-token";
+
+/**
+ * A gate that answers from memory.
+ *
+ * `claimed` stands in for whatever the platform durably holds — Apple's bit
+ * for a device, nothing at all on Android — so a test can assert that a claim
+ * actually reached it. `failWith` is how the refusal paths are exercised:
+ * an AttestationError for a verdict, a ProviderError for an unreachable one.
+ */
+export class FakeAttestor implements DeviceAttestor {
+  readonly checks: string[] = [];
+  readonly claims: string[] = [];
+  /** Devices that have already taken the trial (iOS: the bit is set). */
+  readonly claimed = new Set<string>();
+
+  constructor(
+    readonly gate: TrialGate = "devicecheck",
+    private readonly options: {
+      failWith?: Error;
+      /** While positive, the next claim() rejects and this decrements. */
+      failClaims?: number;
+      /** Android has nowhere to write a claim, so claim() records nothing. */
+      records?: boolean;
+    } = {},
+  ) {}
+
+  check(attestation: string): Promise<DeviceAttestation> {
+    this.checks.push(attestation);
+    if (this.options.failWith) return Promise.reject(this.options.failWith);
+    return Promise.resolve({
+      eligible: !this.claimed.has(attestation),
+      claim: () => {
+        this.claims.push(attestation);
+        if ((this.options.failClaims ?? 0) > 0) {
+          this.options.failClaims!--;
+          return Promise.reject(new Error("bit write failed"));
+        }
+        if (this.options.records !== false) this.claimed.add(attestation);
+        return Promise.resolve();
+      },
+    });
+  }
+}
+
+/** Play Integrity's shape: a verdict, and nowhere to record a claim. */
+export function androidAttestor(options: { failWith?: Error } = {}) {
+  return new FakeAttestor("play_integrity", { ...options, records: false });
+}
+
+export class MemoryTrialStore implements TrialStore {
+  rows: TrialGrantRow[] = [];
+
+  constructor(private readonly failInsertWith?: Error) {}
+
+  find(userId: string): Promise<TrialGrantRow | null> {
+    return Promise.resolve(this.rows.find((r) => r.user_id === userId) ?? null);
+  }
+
+  insert(row: Omit<TrialGrantRow, "granted_at">): Promise<TrialGrantRow | null> {
+    if (this.failInsertWith) return Promise.reject(this.failInsertWith);
+    // Mirrors the primary key on user_id, which is what makes a retried grant
+    // idempotent (req 11.8).
+    if (this.rows.some((r) => r.user_id === row.user_id)) {
+      return Promise.resolve(null);
+    }
+    const full: TrialGrantRow = {
+      ...row,
+      granted_at: "2026-09-07T12:00:00.000Z",
+    };
+    this.rows.push(full);
+    return Promise.resolve(full);
+  }
+}
+
+export interface MemoryVoucher {
+  id: string;
+  code: string;
+  credits: number;
+  max_redemptions: number;
+  redeemed_count: number;
+  expires_at: string | null;
+  enabled: boolean;
+}
+
+/**
+ * In-memory stand-in for counta.redeem_voucher.
+ *
+ * It reproduces the *decisions* the SQL function makes and the order it makes
+ * them in, not the transaction — a single-threaded fake cannot tear a
+ * transaction apart, so the ordering assertions here are about which answer
+ * comes out and what is left behind, and the atomicity itself is the
+ * database's job (design: Edge Function contract).
+ */
+export class MemoryVoucherStore implements VoucherStore {
+  readonly attempts: Array<{ user_id: string; at: Date }> = [];
+  readonly redemptions: Array<
+    { id: string; voucher_id: string; user_id: string; credits: number }
+  > = [];
+  private seq = 0;
+
+  constructor(
+    readonly vouchers: MemoryVoucher[] = [],
+    private readonly clock: { now: Date } = { now: new Date() },
+  ) {}
+
+  attemptsSince(
+    userId: string,
+    since: Date,
+  ): Promise<{ count: number; oldest: Date | null }> {
+    const inWindow = this.attempts
+      .filter((a) => a.user_id === userId && a.at.getTime() >= since.getTime())
+      .sort((a, b) => a.at.getTime() - b.at.getTime());
+    return Promise.resolve({
+      count: inWindow.length,
+      oldest: inWindow[0]?.at ?? null,
+    });
+  }
+
+  recordAttempt(userId: string): Promise<void> {
+    this.attempts.push({ user_id: userId, at: this.clock.now });
+    return Promise.resolve();
+  }
+
+  redeem(code: string, userId: string): Promise<RedeemOutcome> {
+    const voucher = this.vouchers.find(
+      (v) => v.code.toUpperCase() === code.toUpperCase(),
+    );
+    if (!voucher) return Promise.resolve({ outcome: "not_found" });
+
+    const existing = this.redemptions.find(
+      (r) => r.voucher_id === voucher.id && r.user_id === userId,
+    );
+    if (existing) {
+      return Promise.resolve({
+        outcome: "already_redeemed",
+        voucher_id: voucher.id,
+        redemption_id: existing.id,
+        credits: existing.credits,
+      });
+    }
+
+    // Disabled is indistinguishable from unknown (req 12.6), and is checked
+    // after the existing redemption for the same reason the SQL does.
+    if (!voucher.enabled) return Promise.resolve({ outcome: "not_found" });
+
+    if (
+      voucher.expires_at !== null &&
+      new Date(voucher.expires_at).getTime() <= this.clock.now.getTime()
+    ) {
+      return Promise.resolve({ outcome: "expired" });
+    }
+
+    if (voucher.redeemed_count >= voucher.max_redemptions) {
+      return Promise.resolve({ outcome: "exhausted" });
+    }
+
+    // Slot first, then the row: the order the function takes, and the one that
+    // errs towards under-granting if they ever come apart.
+    voucher.redeemed_count++;
+    const redemption = {
+      id: `77777777-7777-4777-8777-${String(++this.seq).padStart(12, "0")}`,
+      voucher_id: voucher.id,
+      user_id: userId,
+      credits: voucher.credits,
+    };
+    this.redemptions.push(redemption);
+    return Promise.resolve({
+      outcome: "redeemed",
+      voucher_id: voucher.id,
+      redemption_id: redemption.id,
+      credits: redemption.credits,
+    });
+  }
+}
+
+export const VOUCHER_ID = "88888888-8888-4888-8888-888888888888";
+
+/** A live campaign: 50 credits, 2 redemptions, no expiry. */
+export function voucher(overrides: Partial<MemoryVoucher> = {}): MemoryVoucher {
+  return {
+    id: VOUCHER_ID,
+    code: "SPRING24",
+    credits: 50,
+    max_redemptions: 2,
+    redeemed_count: 0,
+    expires_at: null,
+    enabled: true,
+    ...overrides,
+  };
+}
+
+export const trialReq = (
+  body: unknown = { platform: "ios", device_token: DEVICE_TOKEN },
+  token: string | null = GOOD_TOKEN,
+) => req("/voice-block/trial", body, token);
+
+export const redeemReq = (
+  body: unknown = { code: "SPRING24" },
+  token: string | null = GOOD_TOKEN,
+) => req("/voice-block/redeem", body, token);
