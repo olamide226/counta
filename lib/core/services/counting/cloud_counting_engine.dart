@@ -46,9 +46,9 @@ class _Connection {
   StreamSubscription<void>? activity;
 
   void detach() {
-    cancelQuietly(segments);
-    cancelQuietly(state);
-    cancelQuietly(activity);
+    _cancelQuietly(segments);
+    _cancelQuietly(state);
+    _cancelQuietly(activity);
     segments = null;
     state = null;
     activity = null;
@@ -62,8 +62,10 @@ class _Connection {
 /// nothing at all. Awaiting it makes teardown depend on a source that may
 /// never answer — and under `fake_async` it never completes at all, which
 /// would leave the engine's own timing untestable.
-void cancelQuietly(StreamSubscription<Object?>? subscription) {
-  subscription?.cancel().catchError((Object _) {});
+///
+/// Private: unprefixed and public, every importer of this file picked it up.
+void _cancelQuietly(StreamSubscription<Object?>? subscription) {
+  subscription?.cancel();
 }
 
 /// The block currently paying for streaming, and everything that has to move
@@ -861,7 +863,7 @@ class CloudCountingEngine implements CountingEngine {
   /// before the session was live. Capture runs before the socket exists, so
   /// every failure from that point on has to hand it back explicitly.
   Future<void> _abandonCapture() async {
-    cancelQuietly(_audioSubscription);
+    _cancelQuietly(_audioSubscription);
     _audioSubscription = null;
     await _audioSource.stop();
   }
@@ -922,7 +924,7 @@ class CloudCountingEngine implements CountingEngine {
 
   void _attachAudio() {
     final pcmStream = _audioSource.start();
-    cancelQuietly(_audioSubscription);
+    _cancelQuietly(_audioSubscription);
     _audioSubscription = pcmStream.listen(
       (data) {
         _lastAudioFrameAt = DateTime.now();
