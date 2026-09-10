@@ -306,13 +306,25 @@ export interface TrialStore {
  *
  * `not_found` deliberately covers both an unknown and a disabled code, so the
  * endpoint cannot be used to discover which codes exist (req 12.6).
+ *
+ * The guess budget (req 12.8) is decided in there too. It was the last part of
+ * requirement 12 outside the transaction and the only part that was racy: the
+ * handler counted, then decided, then recorded, so two concurrent requests
+ * could both read a count under the limit and both spend a guess neither was
+ * charged for.
  */
 export type RedeemOutcome =
   | ({ outcome: "redeemed" } & Redemption)
   | ({ outcome: "already_redeemed" } & Redemption)
   | { outcome: "not_found" }
   | { outcome: "expired" }
-  | { outcome: "exhausted" };
+  | { outcome: "exhausted" }
+  | {
+    outcome: "too_many_attempts";
+    attempts: number;
+    /** When the oldest attempt in the window falls out of it, at the earliest. */
+    retry_after_seconds: number;
+  };
 
 /** The redemption behind a `redeemed` or `already_redeemed` outcome. */
 export interface Redemption {
@@ -334,18 +346,23 @@ export interface Redemption {
   credited: boolean;
 }
 
+/** The guess budget, passed to the transaction that enforces it. */
+export interface AttemptBudget {
+  windowMinutes: number;
+  maxAttempts: number;
+}
+
 export interface VoucherStore {
   /**
-   * Failed attempts by this user since `since`, with the oldest of them so a
-   * 429 can say when the window clears (req 12.8).
+   * Checks the guess budget, claims a slot, writes the redemption and records
+   * a failed attempt — whichever of those the outcome calls for — in one
+   * transaction, and so in one round trip on every path.
    */
-  attemptsSince(
+  redeem(
+    code: string,
     userId: string,
-    since: Date,
-  ): Promise<{ count: number; oldest: Date | null }>;
-  recordAttempt(userId: string): Promise<void>;
-  /** Claims a slot and writes the redemption in one transaction. */
-  redeem(code: string, userId: string): Promise<RedeemOutcome>;
+    budget: AttemptBudget,
+  ): Promise<RedeemOutcome>;
   /**
    * Records that this redemption's grant reached the ledger. Called after the
    * grant, never before: a row marked credited by a payout that then failed

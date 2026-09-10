@@ -4,10 +4,11 @@ import { Deps, RedeemOutcome } from "./types.ts";
 // POST /voice-block/redeem — campaign voucher codes (req 12).
 //
 // The interesting decisions are not here: one redemption per user and the
-// campaign cap are database constraints, and the whole lookup-claim-insert is
-// one Postgres function so the slot and the redemption row cannot come apart
-// (design: Edge Function contract). What is left in this file is the order of
-// the calls, the rate limit, and the wording of the refusals.
+// campaign cap are database constraints, and the guess budget, the lookup, the
+// cap claim, the redemption row and the failed-attempt record are all one
+// Postgres function, so none of them can come apart and none of them costs a
+// second round trip (design: Edge Function contract). What is left in this
+// file is the payout, the wording of the refusals, and whether to pay at all.
 
 /** The ledger reference and idempotency key for a redemption's payout. */
 export function redemptionReference(redemptionId: string): string {
@@ -29,32 +30,32 @@ export async function redeem(
     return json(400, { error: "invalid_request" });
   }
 
-  // 12.8, before the lookup: the attempt counter is the only thing that
-  // actually bounds guessing, however carefully the refusals are worded.
-  const windowMs = config.voucherAttemptWindowMinutes * 60_000;
-  const attempts = await vouchers.attemptsSince(
-    userId,
-    new Date(now.getTime() - windowMs),
-  );
-  if (attempts.count >= config.voucherAttemptMax) {
+  // One call, whatever the answer. The guess budget used to be checked here,
+  // which made it both an extra round trip and the one part of requirement 12
+  // that two concurrent requests could walk through together — each reading a
+  // count under the limit, each spending a guess neither was charged for.
+  const result = await vouchers.redeem(code, userId, {
+    windowMinutes: config.voucherAttemptWindowMinutes,
+    maxAttempts: config.voucherAttemptMax,
+  });
+
+  if (result.outcome === "too_many_attempts") {
+    // 12.8. A rate-limited request records nothing: counting refusals of
+    // refusals would let the window renew itself for as long as the caller
+    // kept knocking, so the block could never lift.
     deps.log("voucher_rate_limited", {
       user_id: userId,
-      attempts: attempts.count,
+      attempts: result.attempts,
     });
-    // A rate-limited request records nothing: counting refusals of refusals
-    // would let the window renew itself for as long as the caller kept
-    // knocking, so the block could never lift.
     return json(429, {
       error: "too_many_attempts",
-      retry_after_seconds: retryAfterSeconds(attempts.oldest, windowMs, now),
+      retry_after_seconds: result.retry_after_seconds,
     });
   }
 
-  const result = await vouchers.redeem(code, userId);
-
   if (result.outcome !== "redeemed" && result.outcome !== "already_redeemed") {
-    // Nothing was written — a failed attempt is never a redemption (12.8).
-    await vouchers.recordAttempt(userId);
+    // The attempt was recorded by the same transaction that refused — a failed
+    // attempt is never a redemption (12.8).
     deps.log("voucher_refused", { user_id: userId, outcome: result.outcome });
     return refusal(result.outcome);
   }
@@ -128,16 +129,6 @@ function refusal(outcome: RedeemOutcome["outcome"]): Response {
     default:
       return json(404, { error: "voucher_invalid" });
   }
-}
-
-/** When the oldest attempt in the window falls out of it, at the earliest. */
-function retryAfterSeconds(
-  oldest: Date | null,
-  windowMs: number,
-  now: Date,
-): number {
-  const clearsAt = (oldest?.getTime() ?? now.getTime()) + windowMs;
-  return Math.max(1, Math.ceil((clearsAt - now.getTime()) / 1000));
 }
 
 /** Longer than any code a human types off a card; a probe, not a redemption. */

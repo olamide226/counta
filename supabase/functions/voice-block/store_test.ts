@@ -88,8 +88,6 @@ Deno.test("store: the trial and voucher stores are scoped there too", async () =
   const { schemas, tables, rpcs, client } = recordingClient();
   const trials = new SupabaseTrialStore(client);
   const vouchers = new SupabaseVoucherStore(client);
-  const now = new Date("2026-01-01T00:00:00Z");
-
   await trials.find("user-1");
   await trials.insert({
     user_id: "user-1",
@@ -97,21 +95,29 @@ Deno.test("store: the trial and voucher stores are scoped there too", async () =
     gate: "devicecheck",
     credits: 20,
   });
-  await vouchers.attemptsSince("user-1", now);
-  await vouchers.recordAttempt("user-1");
   await vouchers.markCredited("redemption-1");
-  await vouchers.redeem("SPRING24", "user-1");
+  await vouchers.redeem("SPRING24", "user-1", {
+    windowMinutes: 60,
+    maxAttempts: 10,
+  });
 
-  assertEquals(schemas.length, 6);
+  assertEquals(schemas.length, 4);
   assertEquals(new Set(schemas), new Set([COUNTA_SCHEMA]));
   assertEquals(
     new Set(tables),
-    new Set(["trial_grants", "voucher_attempts", "voucher_redemptions"]),
+    new Set(["trial_grants", "voucher_redemptions"]),
   );
-  // The redemption is one RPC and not a hand-assembled sequence of writes:
-  // the slot claim and the redemption row belong in one transaction.
+  // The whole redemption is one RPC and not a hand-assembled sequence: the
+  // guess budget, the slot claim, the redemption row and the failed-attempt
+  // record all belong in one transaction, and the store no longer touches
+  // counta.voucher_attempts at all.
   assertEquals(rpcs, [{
     name: "redeem_voucher",
-    args: { p_code: "SPRING24", p_user_id: "user-1" },
+    args: {
+      p_code: "SPRING24",
+      p_user_id: "user-1",
+      p_window_minutes: 60,
+      p_max_attempts: 10,
+    },
   }]);
 });

@@ -356,9 +356,13 @@ select id, voucher_id, user_id, credits, redeemed_at
   only record and the gate is weaker. The migration comment and the design's
   "Trial eligibility and vouchers" section say why, and why a device
   fingerprint is not the answer.
-- `counta.redeem_voucher(code, user_id)` does the lookup, the cap claim and the
-  redemption row in one transaction and returns
-  `{outcome, voucher_id, redemption_id, credits, credited}`. `credited`
+- `counta.redeem_voucher(code, user_id, window_minutes, max_attempts)` does the
+  guess budget, the lookup, the cap claim, the redemption row and the
+  failed-attempt record in one transaction and returns
+  `{outcome, voucher_id, redemption_id, credits, credited}` or
+  `{outcome, attempts, retry_after_seconds}`. The budget is in there because it
+  was the only part of req 12 two concurrent requests could walk through
+  together; it also makes the endpoint one round trip on every path. `credited`
   reports `counta.voucher_redemptions.credited_at`, so the endpoint can tell a
   redemption whose payout landed from one whose ledger call died mid-flight
   without asking RevenueCat. The two writes must not

@@ -10,6 +10,7 @@ import { handleVoiceBlock } from "../handler.ts";
 import { MemoryRateLimiter } from "../ratelimit.ts";
 import { BlockConflictError, ProviderError } from "../types.ts";
 import type {
+  AttemptBudget,
   Authenticator,
   BalanceProvider,
   BlockStore,
@@ -545,29 +546,35 @@ export class MemoryVoucherStore implements VoucherStore {
     private readonly clock: { now: Date } = { now: new Date() },
   ) {}
 
-  attemptsSince(
+  redeem(
+    code: string,
     userId: string,
-    since: Date,
-  ): Promise<{ count: number; oldest: Date | null }> {
+    budget: AttemptBudget,
+  ): Promise<RedeemOutcome> {
+    // 12.8 first, as the transaction does: the attempt counter is the only
+    // thing that actually bounds guessing.
+    const windowMs = budget.windowMinutes * 60_000;
+    const since = this.clock.now.getTime() - windowMs;
     const inWindow = this.attempts
-      .filter((a) => a.user_id === userId && a.at.getTime() >= since.getTime())
+      .filter((a) => a.user_id === userId && a.at.getTime() >= since)
       .sort((a, b) => a.at.getTime() - b.at.getTime());
-    return Promise.resolve({
-      count: inWindow.length,
-      oldest: inWindow[0]?.at ?? null,
-    });
-  }
+    if (inWindow.length >= budget.maxAttempts) {
+      const clearsAt = (inWindow[0]?.at.getTime() ?? this.clock.now.getTime()) +
+        windowMs;
+      return Promise.resolve({
+        outcome: "too_many_attempts",
+        attempts: inWindow.length,
+        retry_after_seconds: Math.max(
+          1,
+          Math.ceil((clearsAt - this.clock.now.getTime()) / 1000),
+        ),
+      });
+    }
 
-  recordAttempt(userId: string): Promise<void> {
-    this.attempts.push({ user_id: userId, at: this.clock.now });
-    return Promise.resolve();
-  }
-
-  redeem(code: string, userId: string): Promise<RedeemOutcome> {
     const voucher = this.vouchers.find(
       (v) => v.code.toUpperCase() === code.toUpperCase(),
     );
-    if (!voucher) return Promise.resolve({ outcome: "not_found" });
+    if (!voucher) return this.refuse(userId, { outcome: "not_found" });
 
     const existing = this.redemptions.find(
       (r) => r.voucher_id === voucher.id && r.user_id === userId,
@@ -584,17 +591,17 @@ export class MemoryVoucherStore implements VoucherStore {
 
     // Disabled is indistinguishable from unknown (req 12.6), and is checked
     // after the existing redemption for the same reason the SQL does.
-    if (!voucher.enabled) return Promise.resolve({ outcome: "not_found" });
+    if (!voucher.enabled) return this.refuse(userId, { outcome: "not_found" });
 
     if (
       voucher.expires_at !== null &&
       new Date(voucher.expires_at).getTime() <= this.clock.now.getTime()
     ) {
-      return Promise.resolve({ outcome: "expired" });
+      return this.refuse(userId, { outcome: "expired" });
     }
 
     if (voucher.redeemed_count >= voucher.max_redemptions) {
-      return Promise.resolve({ outcome: "exhausted" });
+      return this.refuse(userId, { outcome: "exhausted" });
     }
 
     // Slot first, then the row: the order the function takes, and the one that
@@ -615,6 +622,12 @@ export class MemoryVoucherStore implements VoucherStore {
       credits: redemption.credits,
       credited: false,
     });
+  }
+
+  /** Records the guess and hands the refusal back, as counta.voucher_attempt does. */
+  private refuse(userId: string, outcome: RedeemOutcome): Promise<RedeemOutcome> {
+    this.attempts.push({ user_id: userId, at: this.clock.now });
+    return Promise.resolve(outcome);
   }
 
   /** While positive, the next markCredited rejects and this decrements. */

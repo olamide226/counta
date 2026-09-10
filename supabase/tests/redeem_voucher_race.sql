@@ -45,7 +45,9 @@ begin
     perform dblink_exec('winner', 'begin');
     select result into winner from dblink(
       'winner',
-      format('select counta.redeem_voucher(%L, %L)', 'RACE1', v_user)
+      -- A budget far above what this test spends: the guess limit lives in
+      -- the same function now, and it is not what is under test here.
+      format('select counta.redeem_voucher(%L, %L, 60, 100)', 'RACE1', v_user)
     ) as t(result jsonb);
     if winner->>'outcome' <> 'redeemed' then
       raise exception 'setup: the winner expected redeemed, got %', winner;
@@ -56,7 +58,9 @@ begin
     -- no redemption and falls through to the slot claim, where it blocks.
     perform dblink_send_query(
       'loser',
-      format('select counta.redeem_voucher(%L, %L)', 'RACE1', v_user)
+      -- A budget far above what this test spends: the guess limit lives in
+      -- the same function now, and it is not what is under test here.
+      format('select counta.redeem_voucher(%L, %L, 60, 100)', 'RACE1', v_user)
     );
     perform pg_sleep(0.5);
     if dblink_is_busy('loser') <> 1 then
@@ -101,7 +105,7 @@ begin
     -- A genuinely full campaign still says so to somebody who has not
     -- redeemed it. The re-read must not turn every exhaustion into a
     -- redemption the caller never had.
-    select counta.redeem_voucher('RACE1', v_other) into stranger;
+    select counta.redeem_voucher('RACE1', v_other, 60, 100) into stranger;
     if stranger->>'outcome' <> 'exhausted' then
       raise exception
         'a full campaign answered % for a new user, expected exhausted',
@@ -120,6 +124,7 @@ begin
   perform dblink_disconnect('loser');
 
   delete from counta.voucher_redemptions where voucher_id = v_voucher;
+  delete from counta.voucher_attempts where user_id in (v_user, v_other);
   delete from counta.vouchers where id = v_voucher;
   delete from auth.users where id in (v_user, v_other);
 end;

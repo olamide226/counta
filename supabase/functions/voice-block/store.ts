@@ -1,5 +1,6 @@
 import type { SupabaseClient } from "@supabase/supabase-js";
 import {
+  AttemptBudget,
   BlockConflictError,
   BlockStore,
   RedeemOutcome,
@@ -172,46 +173,14 @@ export class SupabaseTrialStore implements TrialStore {
 /**
  * The voucher tables, likewise service-role only: the codes are the secret.
  *
- * The redemption itself is not assembled here. `counta.redeem_voucher` does
- * the lookup, the cap claim and the redemption row in one transaction, so
- * there is no ordering for this class to get wrong and no window in which a
- * slot and a row can disagree (design: Edge Function contract).
+ * Almost nothing is assembled here. `counta.redeem_voucher` does the guess
+ * budget, the lookup, the cap claim, the redemption row and the failed-attempt
+ * record in one transaction, so there is no ordering for this class to get
+ * wrong, no window in which a slot and a row can disagree, and one round trip
+ * on every path (design: Edge Function contract).
  */
 export class SupabaseVoucherStore implements VoucherStore {
   constructor(private readonly admin: SupabaseClient) {}
-
-  private attempts() {
-    return counta(this.admin).from("voucher_attempts");
-  }
-
-  async attemptsSince(
-    userId: string,
-    since: Date,
-  ): Promise<{ count: number; oldest: Date | null }> {
-    // One query for both: PostgREST counts the whole filtered set even when
-    // the page is one row, so the oldest attempt — which is what says when the
-    // window clears — comes back for free.
-    const { data, count, error } = await this.attempts()
-      .select("attempted_at", { count: "exact" })
-      .eq("user_id", userId)
-      .gte("attempted_at", since.toISOString())
-      .order("attempted_at", { ascending: true })
-      .limit(1);
-    if (error) throw new Error(`counta.voucher_attempts count: ${error.message}`);
-    const oldest = (data as Array<{ attempted_at: string }> | null)?.[0];
-    return {
-      count: count ?? 0,
-      oldest: oldest ? new Date(oldest.attempted_at) : null,
-    };
-  }
-
-  async recordAttempt(userId: string): Promise<void> {
-    // The submitted code is deliberately not stored, not even hashed: a table
-    // of hashed guesses is an offline dictionary target and buys nothing the
-    // timestamp does not.
-    const { error } = await this.attempts().insert({ user_id: userId });
-    if (error) throw new Error(`counta.voucher_attempts insert: ${error.message}`);
-  }
 
   async markCredited(redemptionId: string): Promise<void> {
     // `is null` guards it, so two concurrent completions of the same
@@ -226,9 +195,17 @@ export class SupabaseVoucherStore implements VoucherStore {
     }
   }
 
-  async redeem(code: string, userId: string): Promise<RedeemOutcome> {
-    const { data, error } = await counta(this.admin)
-      .rpc("redeem_voucher", { p_code: code, p_user_id: userId });
+  async redeem(
+    code: string,
+    userId: string,
+    budget: AttemptBudget,
+  ): Promise<RedeemOutcome> {
+    const { data, error } = await counta(this.admin).rpc("redeem_voucher", {
+      p_code: code,
+      p_user_id: userId,
+      p_window_minutes: budget.windowMinutes,
+      p_max_attempts: budget.maxAttempts,
+    });
     if (error) throw new Error(`counta.redeem_voucher: ${error.message}`);
 
     const result = data as Partial<RedeemOutcome> | null;
@@ -262,6 +239,19 @@ export class SupabaseVoucherStore implements VoucherStore {
       case "expired":
       case "exhausted":
         return { outcome: result.outcome };
+      case "too_many_attempts": {
+        const { attempts, retry_after_seconds } = result as {
+          attempts?: unknown;
+          retry_after_seconds?: unknown;
+        };
+        if (
+          typeof attempts !== "number" ||
+          typeof retry_after_seconds !== "number"
+        ) {
+          throw new Error("counta.redeem_voucher: incomplete rate limit");
+        }
+        return { outcome: "too_many_attempts", attempts, retry_after_seconds };
+      }
       default:
         // Never silently a refusal: an unrecognised answer would otherwise
         // read as "no such code" and quietly deny every real one.

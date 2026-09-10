@@ -9,10 +9,45 @@
 -- make the pair atomic, which is what this function is for. It also collapses
 -- the whole decision into a single round trip from the Edge Function.
 --
+-- The guess budget of requirement 12.8 is in here too. It was the last part of
+-- requirement 12 left outside the transaction, and the only part that was racy
+-- across concurrent requests: the Edge Function counted attempts, then decided,
+-- then inserted an attempt, so two requests could both read a count under the
+-- limit and both spend a guess that neither was charged for. Counting,
+-- deciding and recording in one statement makes the budget atomic — and takes
+-- the endpoint from two or three PostgREST round trips to one on every path.
+--
 -- Additive and confined to `counta`, like 20260907120000_voice_blocks.sql,
 -- which is merged and must not be edited. Nothing outside `counta` is named.
 
-create or replace function counta.redeem_voucher(p_code text, p_user_id uuid)
+-- The two-argument form never reached a project; dropped so a local database
+-- that applied the earlier version of this migration does not keep it as an
+-- overload.
+drop function if exists counta.redeem_voucher(text, uuid);
+
+-- Records a failed guess and hands the refusal back unchanged, so each refusal
+-- above stays one line and none of them can forget to charge for the attempt.
+-- The submitted code is deliberately not stored, not even hashed: a table of
+-- hashed guesses is an offline dictionary target and buys nothing the timestamp
+-- does not.
+create or replace function counta.voucher_attempt(p_user_id uuid, p_outcome jsonb)
+returns jsonb
+language plpgsql
+volatile
+set search_path = pg_catalog, pg_temp
+as $$
+begin
+  insert into counta.voucher_attempts (user_id) values (p_user_id);
+  return p_outcome;
+end;
+$$;
+
+create or replace function counta.redeem_voucher(
+  p_code            text,
+  p_user_id         uuid,
+  p_window_minutes  int,
+  p_max_attempts    int
+)
 returns jsonb
 language plpgsql
 -- SECURITY INVOKER (the default): the only caller is the Edge Function's
@@ -29,7 +64,33 @@ declare
   v_voucher    counta.vouchers%rowtype;
   v_redemption counta.voucher_redemptions%rowtype;
   v_new_id     uuid;
+  v_window     interval := make_interval(mins => p_window_minutes);
+  v_attempts   int;
+  v_oldest     timestamptz;
 begin
+  -- 12.8, before the lookup: the attempt counter is the only thing that
+  -- actually bounds guessing, however carefully the refusals are worded.
+  -- Count and oldest in one pass — the oldest is what says when the window
+  -- clears, and it comes back for free.
+  select count(*), min(a.attempted_at) into v_attempts, v_oldest
+    from counta.voucher_attempts a
+   where a.user_id = p_user_id
+     and a.attempted_at >= now() - v_window;
+
+  if v_attempts >= p_max_attempts then
+    -- A rate-limited request records nothing: counting refusals of refusals
+    -- would let the window renew itself for as long as the caller kept
+    -- knocking, so the block could never lift.
+    return jsonb_build_object(
+      'outcome', 'too_many_attempts',
+      'attempts', v_attempts,
+      'retry_after_seconds',
+      greatest(
+        1,
+        ceil(extract(epoch from (coalesce(v_oldest, now()) + v_window - now())))
+      )::int);
+  end if;
+
   -- Case-insensitive, through the unique index on upper(code): the codes are
   -- typed by hand off a card or an email.
   select * into v_voucher
@@ -37,7 +98,7 @@ begin
    where upper(v.code) = upper(p_code);
 
   if not found then
-    return jsonb_build_object('outcome', 'not_found');
+    return counta.voucher_attempt(p_user_id, jsonb_build_object('outcome', 'not_found'));
   end if;
 
   -- Before anything else, and deliberately before the `enabled` check: a user
@@ -67,12 +128,12 @@ begin
   -- tell them apart (req 12.6). Distinguishing them would turn the endpoint
   -- into an oracle for discovering which campaigns are live.
   if not v_voucher.enabled then
-    return jsonb_build_object('outcome', 'not_found');
+    return counta.voucher_attempt(p_user_id, jsonb_build_object('outcome', 'not_found'));
   end if;
 
   -- Server time, never the client's (req 12.9). A null expiry never expires.
   if v_voucher.expires_at is not null and v_voucher.expires_at <= now() then
-    return jsonb_build_object('outcome', 'expired');
+    return counta.voucher_attempt(p_user_id, jsonb_build_object('outcome', 'expired'));
   end if;
 
   -- Claim the slot first. The predicate takes the row lock and refuses
@@ -113,7 +174,7 @@ begin
         'credited', v_redemption.credited_at is not null);
     end if;
 
-    return jsonb_build_object('outcome', 'exhausted');
+    return counta.voucher_attempt(p_user_id, jsonb_build_object('outcome', 'exhausted'));
   end if;
 
   insert into counta.voucher_redemptions (voucher_id, user_id, credits)
@@ -152,16 +213,20 @@ begin
 end;
 $$;
 
-comment on function counta.redeem_voucher(text, uuid) is
-  'Redeems a voucher code for a user in one transaction: lookup by upper(code), '
-  'cap claim and redemption row. Returns {outcome, voucher_id, redemption_id, '
-  'credits, credited}; outcome is redeemed | already_redeemed | not_found | '
-  'expired | exhausted, and not_found covers both an unknown and a disabled '
-  'code. `credited` says whether the payout is already confirmed, so only an '
-  'unconfirmed redemption is re-issued.';
+comment on function counta.redeem_voucher(text, uuid, int, int) is
+  'Redeems a voucher code for a user in one transaction: guess budget, lookup '
+  'by upper(code), cap claim and redemption row. Returns {outcome, voucher_id, '
+  'redemption_id, credits, credited} or {outcome, attempts, '
+  'retry_after_seconds}; outcome is redeemed | already_redeemed | not_found | '
+  'expired | exhausted | too_many_attempts, and not_found covers both an '
+  'unknown and a disabled code. `credited` says whether the payout is already '
+  'confirmed, so only an unconfirmed redemption is re-issued. Every refused '
+  'outcome except too_many_attempts records an attempt.';
 
--- Only the Edge Function's service role may call it. `authenticated` could not
--- get past RLS anyway, but a function that grants credit should not be on the
--- Data API surface for any client role at all (req 12.10).
-revoke all on function counta.redeem_voucher(text, uuid) from public;
-grant execute on function counta.redeem_voucher(text, uuid) to service_role;
+-- Only the Edge Function's service role may call either. `authenticated` could
+-- not get past RLS anyway, but a function that grants credit should not be on
+-- the Data API surface for any client role at all (req 12.10).
+revoke all on function counta.redeem_voucher(text, uuid, int, int) from public;
+grant execute on function counta.redeem_voucher(text, uuid, int, int) to service_role;
+revoke all on function counta.voucher_attempt(uuid, jsonb) from public;
+grant execute on function counta.voucher_attempt(uuid, jsonb) to service_role;

@@ -594,16 +594,17 @@ Ordering inside a redemption matters as much as it does inside a block grant:
 
 ```
 verify JWT
-rate-limit check on counta.voucher_attempts         -> 429
+                        --- counta.redeem_voucher, one transaction ---
+guess budget on counta.voucher_attempts             -> 429, recording nothing
 look up voucher by upper(code)                      -> 404 / 409 expired,
-                                                       record an attempt
+                                                       recording an attempt
 claim a slot: redeemed_count + 1 under the cap      -> re-read the redemption;
                                                        409 voucher_exhausted
                                                        only if there is none
 insert counta.voucher_redemptions                   -> unique violation means
                                                        already redeemed: release
-                                                       the slot, re-issue the
-                                                       keyed grant, report 200
+                                                       the slot, report the row
+                        --- back in the Edge Function ---
 redemption already credited?                        -> 200 redeemed:false,
                                                        no credit moves
 BalanceProvider grant(user, redemption_id, credits) -> 503 on failure
@@ -614,7 +615,7 @@ mark counta.voucher_redemptions.credited_at         -> 500 on failure; the
 
 A full campaign is not the same question as a full campaign *for this caller*. Two requests from one user racing the last slot — a double tap, or a client retry — both find no redemption, because the loser's lookup ran on a snapshot taken before the winner committed; the loser's slot claim then waits on the winner's row lock and, once it is released, re-evaluates and finds the cap reached. Answering `voucher_exhausted` there tells a user their code is used up for a code they have just redeemed, spends one of their guesses on it, and leaves the re-issue path unreachable so a winner whose ledger call failed can never heal. The claim therefore re-reads the redemption before concluding exhaustion: that is a new statement, so it takes a new snapshot, and it followed a statement that waited on the winner's lock. `supabase/tests/redeem_voucher_race.sql` drives the race deterministically with dblink.
 
-The slot claim and the redemption row are two writes that must not come apart, so they belong in one transaction — the simplest form is a `counta.redeem_voucher(...)` SQL function called over RPC, added alongside the endpoint in task 10, which also keeps the whole decision one round trip. If they are ever issued as separate statements, claim the slot **first**: a leaked slot means a campaign gives out one fewer redemption than it advertised, while a redemption row with no slot behind it means the cap can be exceeded. When the two failure directions are under-granting and over-granting credit, take the first.
+The slot claim and the redemption row are two writes that must not come apart, so they belong in one transaction — a `counta.redeem_voucher(code, user_id, window_minutes, max_attempts)` SQL function called over RPC, which also keeps the whole decision one round trip. The guess budget is in there with them: it was the last part of Requirement 12 left outside the transaction, and the only part that was racy across concurrent requests, because the handler counted, then decided, then recorded, so two requests could both read a count under the limit and both spend a guess neither was charged for. Counting, deciding and recording in one statement makes the budget atomic and takes the endpoint to one round trip on every path — the confirmation write after a first payout being the only exception. If they are ever issued as separate statements, claim the slot **first**: a leaked slot means a campaign gives out one fewer redemption than it advertised, while a redemption row with no slot behind it means the cap can be exceeded. When the two failure directions are under-granting and over-granting credit, take the first.
 
 The redemption row is written before any credit moves, and the ledger call is keyed on the redemption id exactly as a block debit is keyed on the block id, so a retry re-issues the *same* grant rather than a second one and a redemption whose ledger call died mid-flight completes on the next attempt.
 
