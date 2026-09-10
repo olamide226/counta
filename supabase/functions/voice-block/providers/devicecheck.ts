@@ -1,12 +1,6 @@
-import {
-  AttestationError,
-  DeviceAttestation,
-  DeviceAttestor,
-  ProviderError,
-  TrialGate,
-} from "../types.ts";
-import { providerFetch } from "./http.ts";
-import { importPrivateKey, signJwt } from "./jwt.ts";
+import { DeviceAttestation, DeviceAttestor, TrialGate } from "../types.ts";
+import { attestationFetch } from "./http.ts";
+import { lazyKey, signJwt } from "./jwt.ts";
 
 /**
  * Apple DeviceCheck: two bits per device, per developer team, held on Apple's
@@ -31,12 +25,13 @@ export class AppleDeviceCheckAttestor implements DeviceAttestor {
 
   private readonly fetchFn: typeof fetch;
   private readonly now: () => number;
-  private key?: Promise<CryptoKey>;
+  private readonly signingKey: () => Promise<CryptoKey>;
   private assertion?: { jwt: string; mintedAt: number };
 
   constructor(private readonly opts: DeviceCheckOptions) {
     this.fetchFn = opts.fetch ?? fetch;
     this.now = opts.now ?? (() => Date.now());
+    this.signingKey = lazyKey("devicecheck", opts.privateKey, "ES256");
   }
 
   async check(attestation: string): Promise<DeviceAttestation> {
@@ -68,10 +63,7 @@ export class AppleDeviceCheckAttestor implements DeviceAttestor {
    * device take the trial.
    */
   private async queryTwoBits(deviceToken: string): Promise<TwoBits> {
-    const response = await this.post("query_two_bits", { device_token: deviceToken });
-    const text = await response.text();
-
-    if (response.status !== 200) throw this.failureFor(response.status, text);
+    const text = await this.post("query_two_bits", { device_token: deviceToken });
 
     let parsed: unknown;
     try {
@@ -90,20 +82,22 @@ export class AppleDeviceCheckAttestor implements DeviceAttestor {
     deviceToken: string,
     bits: TwoBits,
   ): Promise<void> {
-    const response = await this.post("update_two_bits", {
-      device_token: deviceToken,
-      ...bits,
-    });
-    const text = await response.text();
-    if (response.status !== 200) throw this.failureFor(response.status, text);
+    await this.post("update_two_bits", { device_token: deviceToken, ...bits });
   }
 
+  /**
+   * Resolves to the response body. attestationFetch owns the refusals: a 400
+   * is Bad Device Token / Bad Bits / Bad Timestamp / Bad Payload and is the
+   * client's problem, while a 401 or 403 is our own assertion — the key, the
+   * team id, or the key's DeviceCheck capability — and decides nothing about
+   * this device (req 11.9).
+   */
   private post(
     path: "query_two_bits" | "update_two_bits",
     body: Record<string, unknown>,
-  ): Promise<Response> {
+  ): Promise<string> {
     return this.assertionHeader().then((authorization) =>
-      providerFetch(
+      attestationFetch(
         "devicecheck",
         this.fetchFn,
         `https://${this.opts.host}/v1/${path}`,
@@ -120,34 +114,8 @@ export class AppleDeviceCheckAttestor implements DeviceAttestor {
             timestamp: this.now(),
           }),
         },
-        // 400 is Apple rejecting the client's token; 401 and 403 are Apple
-        // rejecting *ours*. Both are decided below rather than by the shared
-        // classifier, which would call every one of them "unavailable".
-        PASS_THROUGH,
       )
     );
-  }
-
-  /**
-   * Maps a non-200 to the failure the handler can act on.
-   *
-   * Apple's documented "descriptive string" column is not a wire contract —
-   * the strings observed in production differ from it — so the status code
-   * decides and the body only reaches the logs.
-   */
-  private failureFor(status: number, body: string): Error {
-    const detail = `devicecheck ${status}: ${body.slice(0, 200)}`;
-    if (status === 400) {
-      // Bad Device Token / Bad Bits / Bad Timestamp / Bad Payload. The same
-      // token will never pass, so the client must not retry it (req 11.9's
-      // "rejects the payload" arm, design: Error Handling -> 400).
-      return new AttestationError("rejected", detail);
-    }
-    // 401 and 403 mean our own assertion is wrong: the key, the team id or
-    // the key's DeviceCheck capability. Nothing about *this device* has been
-    // decided, so the trial stays unclaimed and the client may retry once the
-    // operator has fixed the secret (req 11.9).
-    return new AttestationError("indeterminate", detail);
   }
 
   /**
@@ -161,20 +129,9 @@ export class AppleDeviceCheckAttestor implements DeviceAttestor {
     if (cached && this.now() - cached.mintedAt < ASSERTION_REUSE_MS) {
       return `Bearer ${cached.jwt}`;
     }
-    this.key ??= importPrivateKey(this.opts.privateKey, "ES256").catch(
-      (error) => {
-        // A malformed .p8 must not poison the worker: clear the cache so the
-        // next request retries the import once the secret is fixed.
-        this.key = undefined;
-        throw new ProviderError(
-          "unavailable",
-          `devicecheck: private key rejected: ${String(error)}`,
-        );
-      },
-    );
     const mintedAt = this.now();
     const jwt = await signJwt(
-      await this.key,
+      await this.signingKey(),
       "ES256",
       { kid: this.opts.keyId },
       { iss: this.opts.teamId, iat: Math.floor(mintedAt / 1000) },
@@ -208,8 +165,6 @@ interface TwoBits {
   bit0: boolean;
   bit1: boolean;
 }
-
-const PASS_THROUGH = [400, 401, 403] as const;
 
 /** Well inside Apple's one-hour ceiling, and no more often than they ask. */
 const ASSERTION_REUSE_MS = 30 * 60_000;

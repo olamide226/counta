@@ -6,6 +6,7 @@
 // with this: it holds public keys fetched from a JWKS and must never gain a
 // signing path, and no function here is importable from there.
 
+import { ProviderError } from "../types.ts";
 import {
   base64UrlToBytes,
   bytesToBase64Url,
@@ -39,6 +40,39 @@ export function importPrivateKey(
     false,
     ["sign"],
   );
+}
+
+/**
+ * A private key imported at most once, and never cached as a failure.
+ *
+ * Both attestors sign with a key that arrives as PEM text in an environment
+ * variable, and both want it imported lazily — a worker that never sees a
+ * trial request should not pay for the import, and an operator with no key
+ * configured should not have a broken one either. What matters is the guard:
+ * caching the *rejected* promise would poison the worker, so a bad key fails
+ * this request and leaves the next one able to retry the import once the
+ * secret is fixed. Written twice, identically, before it lived here.
+ *
+ * The failure is a ProviderError rather than an AttestationError: nothing
+ * about the device has been decided, and it is our own credential that is
+ * wrong.
+ */
+export function lazyKey(
+  provider: string,
+  pem: string,
+  algorithm: JwtAlgorithm,
+): () => Promise<CryptoKey> {
+  let key: Promise<CryptoKey> | undefined;
+  return () => {
+    key ??= importPrivateKey(pem, algorithm).catch((error) => {
+      key = undefined;
+      throw new ProviderError(
+        "unavailable",
+        `${provider}: private key rejected: ${String(error)}`,
+      );
+    });
+    return key;
+  };
 }
 
 /**

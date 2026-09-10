@@ -5,8 +5,8 @@ import {
   ProviderError,
   TrialGate,
 } from "../types.ts";
-import { providerFetch } from "./http.ts";
-import { importPrivateKey, signJwt } from "./jwt.ts";
+import { attestationFetch, providerFetch } from "./http.ts";
+import { lazyKey, signJwt } from "./jwt.ts";
 
 /**
  * Google Play Integrity, decoded server-side.
@@ -30,12 +30,13 @@ export class PlayIntegrityAttestor implements DeviceAttestor {
 
   private readonly fetchFn: typeof fetch;
   private readonly now: () => number;
-  private key?: Promise<CryptoKey>;
+  private readonly signingKey: () => Promise<CryptoKey>;
   private accessToken?: { value: string; expiresAt: number };
 
   constructor(private readonly opts: PlayIntegrityOptions) {
     this.fetchFn = opts.fetch ?? fetch;
     this.now = opts.now ?? (() => Date.now());
+    this.signingKey = lazyKey("playintegrity", opts.privateKey, "RS256");
   }
 
   async check(attestation: string): Promise<DeviceAttestation> {
@@ -121,8 +122,13 @@ export class PlayIntegrityAttestor implements DeviceAttestor {
     }
   }
 
+  /**
+   * attestationFetch owns the refusals: a 400 is Google declining to decode
+   * the client's token, while a 401 or 403 is our own credentials or an API
+   * not enabled on the project, which decides nothing about this device.
+   */
   private async decode(integrityToken: string): Promise<TokenPayload> {
-    const response = await providerFetch(
+    const text = await attestationFetch(
       "playintegrity",
       this.fetchFn,
       `${PLAY_INTEGRITY_URL}/${
@@ -137,21 +143,8 @@ export class PlayIntegrityAttestor implements DeviceAttestor {
         },
         body: JSON.stringify({ integrity_token: integrityToken }),
       },
-      // 400 is Google refusing to decode the client's token; 401 and 403 are
-      // our own credentials or an API that is not enabled on the project.
-      PASS_THROUGH,
     );
 
-    const text = await response.text();
-    if (response.status === 400) {
-      throw new AttestationError("rejected", `playintegrity 400: ${text.slice(0, 200)}`);
-    }
-    if (!response.ok) {
-      throw new AttestationError(
-        "indeterminate",
-        `playintegrity ${response.status}: ${text.slice(0, 200)}`,
-      );
-    }
     try {
       return (JSON.parse(text) as DecodeResponse).tokenPayloadExternal ?? {};
     } catch {
@@ -170,19 +163,9 @@ export class PlayIntegrityAttestor implements DeviceAttestor {
       return cached.value;
     }
 
-    this.key ??= importPrivateKey(this.opts.privateKey, "RS256").catch(
-      (error) => {
-        this.key = undefined;
-        throw new ProviderError(
-          "unavailable",
-          `playintegrity: service account key rejected: ${String(error)}`,
-        );
-      },
-    );
-
     const issuedAt = Math.floor(this.now() / 1000);
     const assertion = await signJwt(
-      await this.key,
+      await this.signingKey(),
       "RS256",
       { typ: "JWT", ...(this.opts.keyId ? { kid: this.opts.keyId } : {}) },
       {
@@ -254,7 +237,6 @@ interface DecodeResponse {
 const PLAY_INTEGRITY_URL = "https://playintegrity.googleapis.com/v1";
 const GOOGLE_TOKEN_URL = "https://oauth2.googleapis.com/token";
 const SCOPE = "https://www.googleapis.com/auth/playintegrity";
-const PASS_THROUGH = [400, 401, 403] as const;
 
 /** Google's ceiling for a service-account assertion is one hour. */
 const ASSERTION_TTL_SECONDS = 3600;
