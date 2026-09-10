@@ -42,6 +42,49 @@ begin
 end;
 $$;
 
+-- The `already_redeemed` answer, or null when this user has no redemption of
+-- this code. Three paths below reach that answer — the caller has redeemed it
+-- before, a concurrent request for the same user won the slot, or one won the
+-- insert — and each built the same five keys by hand, two of them behind an
+-- identical lookup. They had already drifted: only one of the three explained
+-- what `credited` is for. The lookup is in here with them, so a caller is one
+-- line and cannot forget half of it.
+--
+-- Not `stable` by accident: each call is its own statement in the caller, so
+-- it takes a fresh snapshot, which is exactly what the second path needs — it
+-- runs after a slot claim that blocked on the winner's row lock, and has to
+-- see what the winner committed (redeem_voucher, below).
+create or replace function counta.redemption_answer(p_voucher uuid, p_user uuid)
+returns jsonb
+language plpgsql
+stable
+set search_path = pg_catalog, pg_temp
+as $$
+declare
+  v_redemption counta.voucher_redemptions%rowtype;
+begin
+  select * into v_redemption
+    from counta.voucher_redemptions r
+   where r.voucher_id = p_voucher
+     and r.user_id = p_user;
+
+  if not found then
+    return null;
+  end if;
+
+  return jsonb_build_object(
+    'outcome', 'already_redeemed',
+    'voucher_id', p_voucher,
+    'redemption_id', v_redemption.id,
+    'credits', v_redemption.credits,
+    -- Whether the payout is already confirmed. False re-issues the same keyed
+    -- grant, so a redemption whose ledger call died mid-flight heals; true
+    -- pays nothing, which is what stops a resubmitted code crediting again
+    -- once the ledger has forgotten its idempotency key.
+    'credited', v_redemption.credited_at is not null);
+end;
+$$;
+
 create or replace function counta.redeem_voucher(
   p_code            text,
   p_user_id         uuid,
@@ -62,7 +105,7 @@ set search_path = pg_catalog, pg_temp
 as $$
 declare
   v_voucher    counta.vouchers%rowtype;
-  v_redemption counta.voucher_redemptions%rowtype;
+  v_answer     jsonb;
   v_new_id     uuid;
   v_window     interval := make_interval(mins => p_window_minutes);
   v_attempts   int;
@@ -106,22 +149,9 @@ begin
   -- operator has retired the campaign, so a payout whose ledger call died
   -- mid-flight can still be completed by a retry (req 12.5). It leaks nothing
   -- — you only learn the code exists if you have already redeemed it.
-  select * into v_redemption
-    from counta.voucher_redemptions r
-   where r.voucher_id = v_voucher.id
-     and r.user_id = p_user_id;
-
-  if found then
-    return jsonb_build_object(
-      'outcome', 'already_redeemed',
-      'voucher_id', v_voucher.id,
-      'redemption_id', v_redemption.id,
-      'credits', v_redemption.credits,
-      -- Whether the payout is already confirmed. False re-issues the same
-      -- keyed grant, so a redemption whose ledger call died mid-flight heals;
-      -- true pays nothing, which is what stops a resubmitted code crediting
-      -- again once the ledger has forgotten its idempotency key.
-      'credited', v_redemption.credited_at is not null);
+  v_answer := counta.redemption_answer(v_voucher.id, p_user_id);
+  if v_answer is not null then
+    return v_answer;
   end if;
 
   -- A disabled code answers exactly as an unknown one does, with no way to
@@ -160,18 +190,9 @@ begin
     -- Re-read instead. This is a new statement, so it takes a new snapshot,
     -- and the update it followed waited on the winner's lock: whatever the
     -- winner wrote is visible now.
-    select * into v_redemption
-      from counta.voucher_redemptions r
-     where r.voucher_id = v_voucher.id
-       and r.user_id = p_user_id;
-
-    if found then
-      return jsonb_build_object(
-        'outcome', 'already_redeemed',
-        'voucher_id', v_voucher.id,
-        'redemption_id', v_redemption.id,
-        'credits', v_redemption.credits,
-        'credited', v_redemption.credited_at is not null);
+    v_answer := counta.redemption_answer(v_voucher.id, p_user_id);
+    if v_answer is not null then
+      return v_answer;
     end if;
 
     return counta.voucher_attempt(p_user_id, jsonb_build_object('outcome', 'exhausted'));
@@ -190,17 +211,7 @@ begin
        set redeemed_count = v.redeemed_count - 1
      where v.id = v_voucher.id;
 
-    select * into v_redemption
-      from counta.voucher_redemptions r
-     where r.voucher_id = v_voucher.id
-       and r.user_id = p_user_id;
-
-    return jsonb_build_object(
-      'outcome', 'already_redeemed',
-      'voucher_id', v_voucher.id,
-      'redemption_id', v_redemption.id,
-      'credits', v_redemption.credits,
-      'credited', v_redemption.credited_at is not null);
+    return counta.redemption_answer(v_voucher.id, p_user_id);
   end if;
 
   return jsonb_build_object(
@@ -230,3 +241,5 @@ revoke all on function counta.redeem_voucher(text, uuid, int, int) from public;
 grant execute on function counta.redeem_voucher(text, uuid, int, int) to service_role;
 revoke all on function counta.voucher_attempt(uuid, jsonb) from public;
 grant execute on function counta.voucher_attempt(uuid, jsonb) to service_role;
+revoke all on function counta.redemption_answer(uuid, uuid) from public;
+grant execute on function counta.redemption_answer(uuid, uuid) to service_role;
