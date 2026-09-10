@@ -96,6 +96,33 @@ void main() {
         expect(engine.currentStatus, EngineStatus.idle);
       });
 
+      test('a restart while capture is still unconfirmed does not hang', () {
+        // The same class of hang the stop path was fixed for, reached the
+        // other way. The replaced run is still waiting for its first frame,
+        // and the restart installs a completer of its own over it: unless
+        // ending the previous run settles it, that `start()` waits for ever
+        // on a completer nothing can reach any more.
+        fakeAudio.silent = true;
+        final replaced = engine.start();
+
+        return Future<void>.delayed(Duration.zero).then((_) async {
+          expect(fakeSocket.connectCount, 0);
+
+          fakeAudio.silent = false;
+          final restarted = engine.start();
+
+          await replaced.timeout(
+            const Duration(seconds: 2),
+            onTimeout: () => fail('the replaced start() never completed'),
+          );
+          await restarted.timeout(
+            const Duration(seconds: 2),
+            onTimeout: () => fail('the restarted start() never completed'),
+          );
+          expect(engine.currentStatus, EngineStatus.live);
+        });
+      });
+
       test(
         'stop after a denied start is clean and returns an empty summary',
         () async {

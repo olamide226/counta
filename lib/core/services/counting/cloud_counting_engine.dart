@@ -210,6 +210,11 @@ class CloudCountingEngine implements CountingEngine {
   /// ended by exhaustion — so late socket and audio callbacks do not schedule
   /// a reconnect for a session that is finished.
   bool _stopped = false;
+
+  /// True between a [start] and the teardown that ends it. Distinguishes a
+  /// restart, which has a previous run to end, from the first start of a fresh
+  /// engine, which has nothing.
+  bool _running = false;
   int _reconnectAttempts = 0;
   Timer? _reconnectTimer;
   Timer? _transcriptionWatchdog;
@@ -330,10 +335,15 @@ class CloudCountingEngine implements CountingEngine {
           normalisedTokens: ['i', 'am', 'rich', 'in', 'wisdom'],
         );
 
-    // `startSession` can restart a live engine, and every timer below belongs
-    // to the run being replaced — the renewal one above all, which would go
-    // on buying blocks for a session that no longer exists.
-    _cancelTimers();
+    // `startSession` can restart a live engine, and everything below belongs
+    // to the run being replaced. Ending it is the same job as ending it any
+    // other way, and goes through the same teardown: cancelling its timers by
+    // hand left its socket open, its microphone running, its block unreleased
+    // — and, when the replaced run was still waiting for its first audio
+    // frame, its `start()` future pending for ever on a completer nothing
+    // could reach any more.
+    if (_running) await _teardown(EngineStatus.connecting);
+    _running = true;
 
     _seq = 0;
     _voiceCount = 0;
@@ -752,13 +762,51 @@ class CloudCountingEngine implements CountingEngine {
 
   /// Ends streaming without ending the session: the count stands, the tap
   /// counter stays live, and the user decides what happens next.
+  ///
+  /// The guard is the only thing this adds to [_teardown]: a session that has
+  /// already ended must not be released or reported on twice. [stop] has no
+  /// guard because ending an already-ended session still has to answer with
+  /// `idle` and a summary.
   Future<void> _endStreaming(EngineStatus status, String reason) async {
     if (_stopped) return;
+    await _teardown(status, reason);
+  }
+
+  /// The one description of ending a run, whatever ended it.
+  ///
+  /// There were three, and they had already drifted: `stop()` completed a
+  /// pending capture confirmation and cleared the pre-connect buffer where
+  /// this did neither, so a terminal failure during startup left `start()`
+  /// waiting for ever on a completer nothing could reach and up to 500
+  /// buffered frames alive; and a restart cancelled only the timers, leaving
+  /// the socket, the microphone and the block behind.
+  Future<void> _teardown(EngineStatus status, [String? reason]) async {
+    // Set before any await: teardown makes the socket emit `disconnected`, and
+    // without this flag that callback would schedule a reconnect for the very
+    // run we are ending.
     _stopped = true;
-    _report(reason);
+    _running = false;
+    if (reason != null) _report(reason);
     _cancelTimers();
-    await _abandonCapture();
-    await _closeConnections();
+    _preConnectFrames.clear();
+
+    // Ending during startup — before capture has delivered its first frame —
+    // cancels the very subscription that would confirm or refuse it. Without
+    // settling the confirmation here, the pending `start()` never returns.
+    final confirmation = _captureConfirmed;
+    if (confirmation != null && !confirmation.isCompleted) {
+      confirmation.complete(false);
+    }
+
+    try {
+      await _abandonCapture();
+      await _closeConnections();
+    } catch (e) {
+      // Teardown is best-effort. Whatever fails, the run is over and the UI
+      // must be told so — otherwise the stop button appears not to work.
+      _report('Voice session did not shut down cleanly: $e');
+    }
+
     // Status before the release: the UI must leave voice mode the moment
     // streaming stops, not a network round trip later.
     _setStatus(status);
@@ -869,7 +917,10 @@ class CloudCountingEngine implements CountingEngine {
     _attachAudio();
 
     final started = await confirmation.future;
-    _captureConfirmed = null;
+    // Only if it is still ours: a restart settles this one and installs its
+    // own, and clearing the field blindly would leave the *new* run with
+    // nothing to confirm it — the same hang, one run along.
+    if (identical(_captureConfirmed, confirmation)) _captureConfirmed = null;
     if (started) return true;
 
     // Nothing was connected, so there is nothing to unwind but capture.
@@ -1191,35 +1242,11 @@ class CloudCountingEngine implements CountingEngine {
 
   @override
   Future<SessionSummary> stop() async {
-    // Set before any await: teardown makes the socket emit `disconnected`, and
-    // without this flag that callback would schedule a reconnect for the very
-    // session we are ending.
-    _stopped = true;
-    _cancelTimers();
-    _preConnectFrames.clear();
-
-    // A stop during startup — before capture has delivered its first frame —
-    // cancels the very subscription that would confirm or refuse it. Without
-    // this the pending `start()` waits on a completer nothing can ever finish.
-    final pendingConfirmation = _captureConfirmed;
-    if (pendingConfirmation != null && !pendingConfirmation.isCompleted) {
-      pendingConfirmation.complete(false);
-    }
-
-    try {
-      await _abandonCapture();
-      await _closeConnections();
-    } catch (e) {
-      // Teardown is best-effort. Whatever fails, the session is over and the
-      // UI must be told so — otherwise the stop button appears not to work.
-      _report('Voice session did not shut down cleanly: $e');
-    }
-
-    _setStatus(EngineStatus.idle);
-
-    // 3.5: the block is reported on after streaming has actually stopped, so
-    // the streamed seconds and detection count are final.
-    await _releaseBlock();
+    // Unguarded, unlike `_endStreaming`: a stop after a session has already
+    // ended still has to answer with `idle` and a summary. 3.5 comes out of
+    // the shared teardown — the block is reported on after streaming has
+    // actually stopped, so the streamed seconds and detections are final.
+    await _teardown(EngineStatus.idle);
 
     final now = DateTime.now();
     final duration = _startTime != null

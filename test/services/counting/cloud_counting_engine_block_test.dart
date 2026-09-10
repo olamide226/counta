@@ -225,6 +225,33 @@ void main() {
         });
       });
 
+      test('restarting a live engine hands the old block back', () {
+        fakeAsync((async) {
+          // Cancelling the replaced run's timers was not enough. Its block was
+          // dropped on the floor — `_active` reset to null with nothing
+          // released — so it stayed live server-side for its full duration and
+          // would refuse the very session that replaced it with a 409. Its
+          // socket was left open too, because `_connect` reuses `_primary`.
+          final blocks = FakeBlockService(blockSeconds: 300);
+          final engine = engineWith(blocks);
+
+          engine.start(testPhrase);
+          async.flushMicrotasks();
+          async.elapse(const Duration(seconds: 5));
+
+          engine.start(testPhrase);
+          async.flushMicrotasks();
+
+          expect(blocks.acquiredSessionIds, hasLength(2));
+          expect(blocks.releases.single.blockId, 'block-1');
+          expect(sockets.first.closeCount, greaterThanOrEqualTo(1));
+          expect(sockets, hasLength(2));
+
+          engine.dispose();
+          async.flushTimers();
+        });
+      });
+
       test('giving up on a reconnect releases the block and the mic', () async {
         final blocks = FakeBlockService(blockSeconds: 300);
         final socket = _RefusableSocket('s1');
