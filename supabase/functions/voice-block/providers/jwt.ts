@@ -2,26 +2,16 @@
 // self-signed assertion rather than an API key: Apple DeviceCheck (ES256, the
 // team's .p8) and Google's token endpoint (RS256, the service account key).
 //
-// auth.ts is the verifying counterpart and shares nothing with this on
-// purpose: it holds public keys fetched from a JWKS and must never gain a
-// signing path.
+// auth.ts is the verifying counterpart and shares only webcrypto.ts's table
+// with this: it holds public keys fetched from a JWKS and must never gain a
+// signing path, and no function here is importable from there.
 
-/** The two algorithms the upstreams here require. */
-export type JwtAlgorithm = "ES256" | "RS256";
-
-const PARAMS: Record<
-  JwtAlgorithm,
-  { import: EcKeyImportParams | RsaHashedImportParams; sign: AlgorithmIdentifier | EcdsaParams }
-> = {
-  ES256: {
-    import: { name: "ECDSA", namedCurve: "P-256" },
-    sign: { name: "ECDSA", hash: "SHA-256" },
-  },
-  RS256: {
-    import: { name: "RSASSA-PKCS1-v1_5", hash: "SHA-256" },
-    sign: { name: "RSASSA-PKCS1-v1_5" },
-  },
-};
+import {
+  base64UrlToBytes,
+  bytesToBase64Url,
+  JWT_ALGORITHMS,
+} from "../webcrypto.ts";
+import type { JwtAlgorithm } from "../webcrypto.ts";
 
 /**
  * Imports a PKCS#8 private key from its PEM text.
@@ -44,8 +34,8 @@ export function importPrivateKey(
     .replace(/\s+/g, "");
   return crypto.subtle.importKey(
     "pkcs8",
-    decodeBase64(body),
-    PARAMS[algorithm].import,
+    base64UrlToBytes(body),
+    JWT_ALGORITHMS[algorithm].import,
     false,
     ["sign"],
   );
@@ -69,26 +59,13 @@ export async function signJwt(
     encodeSegment(claims)
   }`;
   const signature = await crypto.subtle.sign(
-    PARAMS[algorithm].sign,
+    JWT_ALGORITHMS[algorithm].operation,
     key,
     new TextEncoder().encode(signingInput),
   );
-  return `${signingInput}.${base64Url(new Uint8Array(signature))}`;
+  return `${signingInput}.${bytesToBase64Url(new Uint8Array(signature))}`;
 }
 
 function encodeSegment(value: Record<string, unknown>): string {
-  return base64Url(new TextEncoder().encode(JSON.stringify(value)));
-}
-
-function base64Url(bytes: Uint8Array): string {
-  let binary = "";
-  for (const byte of bytes) binary += String.fromCharCode(byte);
-  return btoa(binary).replace(/\+/g, "-").replace(/\//g, "_").replace(/=+$/, "");
-}
-
-function decodeBase64(value: string): Uint8Array<ArrayBuffer> {
-  const binary = atob(value);
-  const bytes = new Uint8Array(new ArrayBuffer(binary.length));
-  for (let i = 0; i < binary.length; i++) bytes[i] = binary.charCodeAt(i);
-  return bytes;
+  return bytesToBase64Url(new TextEncoder().encode(JSON.stringify(value)));
 }

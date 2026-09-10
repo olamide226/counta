@@ -1,5 +1,6 @@
 import type { SupabaseClient } from "@supabase/supabase-js";
 import type { Authenticator } from "./types.ts";
+import { base64UrlToBytes, jwtAlgorithm } from "./webcrypto.ts";
 
 /**
  * Verifies Supabase user JWTs.
@@ -48,7 +49,7 @@ export class SupabaseAuthenticator implements Authenticator {
     const payload = decodeJson(rawPayload);
     if (!header || !payload) return null;
 
-    const algorithm = ALGORITHMS[String(header.alg)];
+    const algorithm = jwtAlgorithm(String(header.alg));
     // HS256 is the legacy shared-secret scheme, which no JWKS can verify.
     if (!algorithm || typeof header.kid !== "string") return UNVERIFIABLE;
 
@@ -70,7 +71,7 @@ export class SupabaseAuthenticator implements Authenticator {
 
     const signed = new TextEncoder().encode(`${rawHeader}.${rawPayload}`);
     const valid = await crypto.subtle.verify(
-      algorithm.verify,
+      algorithm.operation,
       key,
       base64UrlToBytes(rawSignature),
       signed,
@@ -135,20 +136,6 @@ const UNVERIFIABLE: unique symbol = Symbol("unverifiable");
 
 const JWKS_REFRESH_MS = 60_000;
 
-const ALGORITHMS: Record<
-  string,
-  { import: AlgorithmIdentifier | EcKeyImportParams | RsaHashedImportParams; verify: AlgorithmIdentifier | EcdsaParams }
-> = {
-  ES256: {
-    import: { name: "ECDSA", namedCurve: "P-256" },
-    verify: { name: "ECDSA", hash: "SHA-256" },
-  },
-  RS256: {
-    import: { name: "RSASSA-PKCS1-v1_5", hash: "SHA-256" },
-    verify: { name: "RSASSA-PKCS1-v1_5" },
-  },
-};
-
 function decodeJson(segment: string): Record<string, unknown> | null {
   try {
     const text = new TextDecoder().decode(base64UrlToBytes(segment));
@@ -157,13 +144,4 @@ function decodeJson(segment: string): Record<string, unknown> | null {
   } catch {
     return null;
   }
-}
-
-function base64UrlToBytes(segment: string): Uint8Array<ArrayBuffer> {
-  const base64 = segment.replace(/-/g, "+").replace(/_/g, "/");
-  const padded = base64 + "=".repeat((4 - (base64.length % 4)) % 4);
-  const binary = atob(padded);
-  const bytes = new Uint8Array(new ArrayBuffer(binary.length));
-  for (let i = 0; i < binary.length; i++) bytes[i] = binary.charCodeAt(i);
-  return bytes;
 }

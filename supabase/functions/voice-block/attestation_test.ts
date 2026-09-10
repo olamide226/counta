@@ -2,6 +2,7 @@ import { assertEquals, assertRejects, assertStringIncludes } from "@std/assert";
 import { AppleDeviceCheckAttestor } from "./providers/devicecheck.ts";
 import { PlayIntegrityAttestor } from "./providers/playintegrity.ts";
 import { AttestationError, ProviderError } from "./types.ts";
+import { base64UrlToBytes } from "./webcrypto.ts";
 
 // The wire shape of the two attestation providers, against a stubbed fetch.
 // Nothing here reaches Apple or Google; what is pinned is the request each one
@@ -93,8 +94,7 @@ async function deviceCheck(
 }
 
 function decodeSegment(segment: string): Record<string, unknown> {
-  const padded = segment.replace(/-/g, "+").replace(/_/g, "/");
-  return JSON.parse(atob(padded + "=".repeat((4 - padded.length % 4) % 4)));
+  return JSON.parse(new TextDecoder().decode(base64UrlToBytes(segment)));
 }
 
 // ---------------------------------------------------------------------------

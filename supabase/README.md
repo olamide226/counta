@@ -42,6 +42,8 @@ supabase/
     types.ts                        ports: BalanceProvider, TokenMinter, BlockStore,
                                     DeviceAttestor, TrialStore, VoucherStore
     auth.ts                         JWT verification (local JWKS, getUser fallback)
+    webcrypto.ts                    the ES256/RS256 table and base64url, shared by
+                                    the verifying and the signing halves
     store.ts                        Supabase-backed stores (counta schema)
     providers/http.ts               shared fetch + failure classification
     providers/balance.ts            RevenueCatBalanceProvider
