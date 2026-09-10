@@ -419,19 +419,39 @@ void main() {
         // Fed in raw, every later repetition looked like it happened long
         // before the last accepted match and was suppressed for the rest of
         // the session — voice counting stopped dead after the first drop.
-        matcher.openStream('live');
-        expect(matcher.ingest(saidAt(100.0), streamId: 'live'), hasLength(1));
+        // The engine closes the old id and mints a new one, which is the one
+        // mechanism stream identity has.
+        matcher.openStream('stream-0');
+        expect(
+          matcher.ingest(saidAt(100.0), streamId: 'stream-0'),
+          hasLength(1),
+        );
 
-        matcher.openStream('live', startOffset: const Duration(seconds: 120));
-        expect(matcher.ingest(saidAt(0.5), streamId: 'live'), hasLength(1));
+        matcher.closeStream('stream-0');
+        matcher.openStream(
+          'stream-1',
+          startOffset: const Duration(seconds: 120),
+        );
+        expect(matcher.ingest(saidAt(0.5), streamId: 'stream-1'), hasLength(1));
       });
 
       test('without the rebase the same reconnect counts nothing', () {
-        matcher.openStream('live');
-        expect(matcher.ingest(saidAt(100.0), streamId: 'live'), hasLength(1));
+        matcher.openStream('stream-0');
+        expect(
+          matcher.ingest(saidAt(100.0), streamId: 'stream-0'),
+          hasLength(1),
+        );
 
-        matcher.openStream('live');
-        expect(matcher.ingest(saidAt(0.5), streamId: 'live'), isEmpty);
+        matcher.closeStream('stream-0');
+        matcher.openStream('stream-1');
+        expect(matcher.ingest(saidAt(0.5), streamId: 'stream-1'), isEmpty);
+      });
+
+      test('a stream nobody opened is not counted', () {
+        // Offset and window used to live in two maps, so an id with no
+        // registered offset still got a window — and was timed against the
+        // session's start rather than against wherever its audio began.
+        expect(matcher.ingest(saidAt(1.0), streamId: 'stream-7'), isEmpty);
       });
 
       test('an unnamed stream behaves exactly as it did before', () {

@@ -85,24 +85,34 @@ class MatcherStats {
   });
 }
 
+/// One transcript stream: its token window, and where its zero sits on the
+/// session timeline.
+///
+/// A stream is one Deepgram *connection*, not one session: every connect
+/// starts a fresh audio timeline at zero, and a block renewal deliberately
+/// runs two connections at once. Interleaving two connections' tokens into a
+/// single ordered window produces slices that span both and matches that
+/// exist in neither, so each stream gets its own window and they are only
+/// ever compared through the shared acceptance gate.
+class _StreamWindow {
+  _StreamWindow(this.offsetMs);
+
+  /// Offset of this stream's zero on the session timeline, in ms. The engine
+  /// knows this exactly — it is the audio it had already streamed when the
+  /// connection received its first frame.
+  final double offsetMs;
+
+  final List<TokenWithOffset> tokens = [];
+}
+
 class PhraseMatcher {
   final PhraseSpec target;
   final MatcherConfig config;
 
-  /// One token window per transcript stream.
-  ///
-  /// A stream is one Deepgram *connection*, not one session: every connect
-  /// starts a fresh audio timeline at zero, and a block renewal deliberately
-  /// runs two connections at once. Interleaving two connections' tokens into a
-  /// single ordered window produces slices that span both and matches that
-  /// exist in neither, so each stream gets its own window and they are only
-  /// ever compared through the shared acceptance gate below.
-  final Map<String, List<TokenWithOffset>> _windows = {};
-
-  /// Where each stream's timeline sits on the session timeline, in ms. The
-  /// engine knows this exactly — it is the audio it had already streamed when
-  /// that connection received its first frame.
-  final Map<String, double> _streamOffsetsMs = {};
+  /// The open streams. Offset and tokens travel together: as two maps keyed
+  /// by stream id they could disagree, and an id nobody had opened silently
+  /// picked up a window at offset zero.
+  final Map<String, _StreamWindow> _streams = {};
 
   final List<double> _observedUtteranceDurationsMs = [];
 
@@ -119,19 +129,16 @@ class PhraseMatcher {
   /// Registers a transcript stream and where its zero sits on the session
   /// timeline.
   ///
-  /// Calling this again for the same id restarts the stream: a reconnect
-  /// reuses the socket but not its timeline, so its window must not carry
-  /// tokens timestamped against the old one.
+  /// The only way a stream comes into existence: [ingest] ignores an id
+  /// nobody opened. A reconnect reuses the socket but not its timeline, so
+  /// the engine closes that connection's id and opens a fresh one rather than
+  /// reopening the same one — one mechanism for stream identity, not two.
   void openStream(String streamId, {Duration startOffset = Duration.zero}) {
-    _streamOffsetsMs[streamId] = startOffset.inMicroseconds / 1000.0;
-    _windows[streamId] = [];
+    _streams[streamId] = _StreamWindow(startOffset.inMicroseconds / 1000.0);
   }
 
   /// Forgets a stream once its connection is closed and drained.
-  void closeStream(String streamId) {
-    _streamOffsetsMs.remove(streamId);
-    _windows.remove(streamId);
-  }
+  void closeStream(String streamId) => _streams.remove(streamId);
 
   MatcherStats get stats => MatcherStats(
     detectionsCount: _detectionsCount,
@@ -316,8 +323,16 @@ class PhraseMatcher {
 
     if (normalisedTarget.isEmpty) return [];
 
-    final offsetSec = (_streamOffsetsMs[streamId] ?? 0.0) / 1000.0;
-    final window = _windows.putIfAbsent(streamId, () => []);
+    // The default id opens on demand, for a single-connection session and
+    // every fixture replay. Any other id the engine has not opened has no
+    // place on the session timeline, so nothing said on it can be positioned.
+    final stream = streamId == defaultStreamId
+        ? _streams.putIfAbsent(defaultStreamId, () => _StreamWindow(0.0))
+        : _streams[streamId];
+    if (stream == null) return [];
+
+    final offsetSec = stream.offsetMs / 1000.0;
+    final window = stream.tokens;
 
     // Parse words/tokens from segment
     List<TokenWithOffset> newTokens = [];
@@ -472,8 +487,7 @@ class PhraseMatcher {
   }
 
   void reset() {
-    _windows.clear();
-    _streamOffsetsMs.clear();
+    _streams.clear();
     _observedUtteranceDurationsMs.clear();
     _cachedMedianMs = null;
     _windowsEvaluated = 0;
