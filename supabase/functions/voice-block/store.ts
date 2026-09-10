@@ -1,5 +1,13 @@
 import type { SupabaseClient } from "@supabase/supabase-js";
-import { BlockConflictError, BlockStore, VoiceBlockRow } from "./types.ts";
+import {
+  BlockConflictError,
+  BlockStore,
+  RedeemOutcome,
+  TrialGrantRow,
+  TrialStore,
+  VoiceBlockRow,
+  VoucherStore,
+} from "./types.ts";
 
 /**
  * The app owns one Postgres schema. The deploy target is shared staging where
@@ -110,5 +118,125 @@ export class SupabaseBlockStore implements BlockStore {
       .select("id");
     if (error) throw new Error(`counta.voice_blocks update: ${error.message}`);
     return (data?.length ?? 0) > 0;
+  }
+}
+
+/**
+ * `counta.trial_grants` through the same service-role client. The table has no
+ * client grant and no policy at all, so this is its only reader and writer: a
+ * client that could read it would learn whether reinstalling is worth it, and
+ * one that could write it would grant itself the trial (req 4.8).
+ */
+export class SupabaseTrialStore implements TrialStore {
+  private static readonly COLUMNS = "user_id,platform,gate,credits,granted_at";
+
+  constructor(private readonly admin: SupabaseClient) {}
+
+  private table() {
+    return this.admin.schema(COUNTA_SCHEMA).from("trial_grants");
+  }
+
+  async find(userId: string): Promise<TrialGrantRow | null> {
+    const { data, error } = await this.table()
+      .select(SupabaseTrialStore.COLUMNS)
+      .eq("user_id", userId)
+      .maybeSingle();
+    if (error) throw new Error(`counta.trial_grants select: ${error.message}`);
+    return (data as TrialGrantRow | null) ?? null;
+  }
+
+  async insert(
+    row: Omit<TrialGrantRow, "granted_at">,
+  ): Promise<TrialGrantRow | null> {
+    const { data, error } = await this.table()
+      .insert(row)
+      .select(SupabaseTrialStore.COLUMNS)
+      .single();
+    if (error) {
+      // 23505: the primary key on user_id. Someone else already granted this
+      // user's trial, which is the outcome, not a failure (req 11.8).
+      if (error.code === "23505") return null;
+      throw new Error(`counta.trial_grants insert: ${error.message}`);
+    }
+    return data as TrialGrantRow;
+  }
+}
+
+/**
+ * The voucher tables, likewise service-role only: the codes are the secret.
+ *
+ * The redemption itself is not assembled here. `counta.redeem_voucher` does
+ * the lookup, the cap claim and the redemption row in one transaction, so
+ * there is no ordering for this class to get wrong and no window in which a
+ * slot and a row can disagree (design: Edge Function contract).
+ */
+export class SupabaseVoucherStore implements VoucherStore {
+  constructor(private readonly admin: SupabaseClient) {}
+
+  private attempts() {
+    return this.admin.schema(COUNTA_SCHEMA).from("voucher_attempts");
+  }
+
+  async attemptsSince(
+    userId: string,
+    since: Date,
+  ): Promise<{ count: number; oldest: Date | null }> {
+    // One query for both: PostgREST counts the whole filtered set even when
+    // the page is one row, so the oldest attempt — which is what says when the
+    // window clears — comes back for free.
+    const { data, count, error } = await this.attempts()
+      .select("attempted_at", { count: "exact" })
+      .eq("user_id", userId)
+      .gte("attempted_at", since.toISOString())
+      .order("attempted_at", { ascending: true })
+      .limit(1);
+    if (error) throw new Error(`counta.voucher_attempts count: ${error.message}`);
+    const oldest = (data as Array<{ attempted_at: string }> | null)?.[0];
+    return {
+      count: count ?? 0,
+      oldest: oldest ? new Date(oldest.attempted_at) : null,
+    };
+  }
+
+  async recordAttempt(userId: string): Promise<void> {
+    // The submitted code is deliberately not stored, not even hashed: a table
+    // of hashed guesses is an offline dictionary target and buys nothing the
+    // timestamp does not.
+    const { error } = await this.attempts().insert({ user_id: userId });
+    if (error) throw new Error(`counta.voucher_attempts insert: ${error.message}`);
+  }
+
+  async redeem(code: string, userId: string): Promise<RedeemOutcome> {
+    const { data, error } = await this.admin
+      .schema(COUNTA_SCHEMA)
+      .rpc("redeem_voucher", { p_code: code, p_user_id: userId });
+    if (error) throw new Error(`counta.redeem_voucher: ${error.message}`);
+
+    const result = data as Partial<RedeemOutcome> | null;
+    switch (result?.outcome) {
+      case "redeemed":
+      case "already_redeemed": {
+        const { voucher_id, redemption_id, credits } = result as {
+          voucher_id?: unknown;
+          redemption_id?: unknown;
+          credits?: unknown;
+        };
+        if (
+          typeof voucher_id !== "string" || typeof redemption_id !== "string" ||
+          typeof credits !== "number"
+        ) {
+          throw new Error("counta.redeem_voucher: incomplete redemption");
+        }
+        return { outcome: result.outcome, voucher_id, redemption_id, credits };
+      }
+      case "not_found":
+      case "expired":
+      case "exhausted":
+        return { outcome: result.outcome };
+      default:
+        // Never silently a refusal: an unrecognised answer would otherwise
+        // read as "no such code" and quietly deny every real one.
+        throw new Error(`counta.redeem_voucher: unknown outcome ${result?.outcome}`);
+    }
   }
 }

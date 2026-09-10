@@ -1,32 +1,34 @@
+import { redeem } from "./redeem.ts";
+import { json, readJson } from "./respond.ts";
+import { trial } from "./trial.ts";
 import { BlockConflictError, Deps, ProviderError } from "./types.ts";
 
-// Pure request handler for POST /voice-block and POST /voice-block/release.
-// No Deno.env, no network: everything arrives through `deps`, which is what
-// makes index_test.ts possible without a running stack.
+// Pure request handler for the four POST routes under /voice-block. No
+// Deno.env, no network: everything arrives through `deps`, which is what makes
+// index_test.ts possible without a running stack.
+//
+// Every route verifies the same JWT and every credit movement goes through the
+// same BalanceProvider, so there is one code path that moves money and one
+// place to audit it (design: Edge Function contract).
 
 const UUID_RE =
   /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 
-export function json(status: number, body: Record<string, unknown>): Response {
-  return new Response(JSON.stringify(body), {
-    status,
-    headers: { "Content-Type": "application/json" },
-  });
-}
+/** Suffix -> route. The bare function name is the block grant. */
+const ROUTES: Record<
+  string,
+  (req: Request, deps: Deps, userId: string) => Promise<Response>
+> = {
+  "/voice-block": grant,
+  "/release": release,
+  "/trial": trial,
+  "/redeem": redeem,
+};
 
 function bearerToken(req: Request): string | null {
   const header = req.headers.get("Authorization") ?? "";
   const match = /^Bearer\s+(.+)$/i.exec(header.trim());
   return match ? match[1].trim() : null;
-}
-
-async function readJson(req: Request): Promise<Record<string, unknown> | null> {
-  try {
-    const body = await req.json();
-    return body && typeof body === "object" ? body : null;
-  } catch {
-    return null;
-  }
 }
 
 export async function handleVoiceBlock(
@@ -38,8 +40,8 @@ export async function handleVoiceBlock(
   }
 
   const path = new URL(req.url).pathname.replace(/\/+$/, "");
-  const isRelease = path.endsWith("/release");
-  if (!isRelease && !path.endsWith("/voice-block")) {
+  const suffix = Object.keys(ROUTES).find((s) => path.endsWith(s));
+  if (!suffix) {
     return json(404, { error: "not_found" });
   }
 
@@ -50,9 +52,7 @@ export async function handleVoiceBlock(
   }
 
   try {
-    return isRelease
-      ? await release(req, deps, userId)
-      : await grant(req, deps, userId);
+    return await ROUTES[suffix](req, deps, userId);
   } catch (error) {
     if (error instanceof ProviderError) {
       deps.log("provider_unavailable", {

@@ -8,12 +8,21 @@ import { ProviderError } from "../types.ts";
  * RevenueCat, instead of collapsing into a generic "unavailable" that hides
  * the one condition worth retrying. Retrying is the caller's decision — this
  * only classifies and never sleeps.
+ *
+ * `passThrough` names the statuses the caller decides for itself and gets the
+ * response back for. The attestation providers need it: Apple answers a
+ * malformed device token with a 400 and Google a malformed integrity token
+ * likewise, and both mean "this client's payload is junk, never retry it"
+ * rather than "the provider is down". Classifying those as `unavailable`
+ * would turn a permanent 400 into a 503 the client retries for ever. Network
+ * failures, 429 and 5xx stay here, so nobody re-implements the retryable case.
  */
 export async function providerFetch(
   provider: string,
   fetchFn: typeof fetch,
   url: string,
   init: RequestInit,
+  passThrough: readonly number[] = [],
 ): Promise<Response> {
   const what = `${provider}: ${init.method ?? "GET"} ${url}`;
 
@@ -24,7 +33,7 @@ export async function providerFetch(
     throw new ProviderError("unavailable", `${what} -> ${String(error)}`);
   }
 
-  if (response.ok) return response;
+  if (response.ok || passThrough.includes(response.status)) return response;
 
   // Nothing downstream reads the body of a failed call; releasing it keeps the
   // worker from holding the connection open.
