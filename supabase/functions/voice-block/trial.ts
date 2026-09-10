@@ -58,8 +58,8 @@ export async function trial(
   // 11.8, and the cheap answer first: a user who already holds a grant is told
   // so without spending an attestation call on it.
   //
-  // Sequential where handler.ts:85 would run the pair in parallel, and
-  // deliberately. Parallelising trades a Postgres lookup on the first-time
+  // Sequential where the block grant runs the same shape through Promise.all
+  // (handler.ts), and deliberately. Parallelising trades a Postgres lookup on the first-time
   // path — which today pays for it and finds nothing — for an Apple or Google
   // round trip on every repeat caller, and every reinstall is a repeat caller.
   // The two round trips are not comparable: one is metered by a third party
