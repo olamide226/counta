@@ -13,16 +13,21 @@ import 'package:counta/domain/counting/transcript_segment.dart';
 /// `start` is where the connection heard it, not where the session did: every
 /// Deepgram connection numbers its own audio from zero, and rebasing that
 /// onto the session timeline is the matcher's job.
+///
+/// [isFinal] exists for the one test that needs an interim segment — the
+/// matcher counts only finalised ones, and saying so needs a segment that is
+/// not final.
 TranscriptSegment finalSegment(
   String text, {
   double start = 1.0,
   double duration = 2.0,
   double confidence = 0.98,
+  bool isFinal = true,
 }) => TranscriptSegment(
   text: text,
   start: start,
   duration: duration,
-  isFinal: true,
+  isFinal: isFinal,
   confidence: confidence,
 );
 

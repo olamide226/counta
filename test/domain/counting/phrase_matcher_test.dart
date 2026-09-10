@@ -51,49 +51,23 @@ void main() {
     });
 
     test('ingest detects exact phrase match', () {
-      final segment = TranscriptSegment(
-        text: "I'm rich in wisdom",
-        start: 1.0,
-        duration: 2.0,
-        isFinal: true,
-        confidence: 0.98,
-      );
-
-      final detections = matcher.ingest(segment);
+      final detections = matcher.ingest(finalSegment(testPhrase.raw));
       expect(detections.length, 1);
       expect(detections.first.score, 1.0);
     });
 
     test('ingest ignores non-final segments', () {
-      final segment = TranscriptSegment(
-        text: "I'm rich in wisdom",
-        start: 1.0,
-        duration: 2.0,
-        isFinal: false,
-        confidence: 0.98,
+      final detections = matcher.ingest(
+        finalSegment(testPhrase.raw, isFinal: false),
       );
-
-      final detections = matcher.ingest(segment);
       expect(detections, isEmpty);
     });
 
     test('refractory period suppresses immediate duplicate detection', () {
-      final seg1 = TranscriptSegment(
-        text: "I'm rich in wisdom",
-        start: 1.0,
-        duration: 1.0,
-        isFinal: true,
-        confidence: 0.98,
-      );
+      final seg1 = finalSegment(testPhrase.raw, duration: 1.0);
 
       // Second utterance starts before the first ends, so it is a duplicate.
-      final seg2 = TranscriptSegment(
-        text: "I'm rich in wisdom",
-        start: 1.2,
-        duration: 1.0,
-        isFinal: true,
-        confidence: 0.98,
-      );
+      final seg2 = finalSegment(testPhrase.raw, start: 1.2, duration: 1.0);
 
       final d1 = matcher.ingest(seg1);
       expect(d1.length, 1);
@@ -103,20 +77,8 @@ void main() {
     });
 
     test('accepts a rapid repetition when the audio does not overlap', () {
-      final first = TranscriptSegment(
-        text: "I'm rich in wisdom",
-        start: 1.0,
-        duration: 1.0,
-        isFinal: true,
-        confidence: 0.98,
-      );
-      final second = TranscriptSegment(
-        text: "I'm rich in wisdom",
-        start: 2.05,
-        duration: 1.0,
-        isFinal: true,
-        confidence: 0.98,
-      );
+      final first = finalSegment(testPhrase.raw, duration: 1.0);
+      final second = finalSegment(testPhrase.raw, start: 2.05, duration: 1.0);
 
       expect(matcher.ingest(first), hasLength(1));
       final detections = matcher.ingest(second);
@@ -234,15 +196,9 @@ void main() {
     });
 
     test('prefers the exact phrase over a longer phrase with noise', () {
-      final segment = TranscriptSegment(
-        text: "I'm rich in wisdom shout",
-        start: 1.0,
-        duration: 2.0,
-        isFinal: true,
-        confidence: 0.98,
+      final detections = matcher.ingest(
+        finalSegment("I'm rich in wisdom shout"),
       );
-
-      final detections = matcher.ingest(segment);
 
       expect(detections, hasLength(1));
       expect(detections.single.score, 1.0);
@@ -250,27 +206,9 @@ void main() {
     });
 
     test('discarded duplicate tokens cannot join the next repetition', () {
-      final first = TranscriptSegment(
-        text: "I'm rich in wisdom",
-        start: 0.0,
-        duration: 1.0,
-        isFinal: true,
-        confidence: 0.98,
-      );
-      final duplicate = TranscriptSegment(
-        text: "I'm rich in wisdom",
-        start: 0.5,
-        duration: 1.0,
-        isFinal: true,
-        confidence: 0.98,
-      );
-      final next = TranscriptSegment(
-        text: "I'm rich in wisdom",
-        start: 3.0,
-        duration: 1.0,
-        isFinal: true,
-        confidence: 0.98,
-      );
+      final first = finalSegment(testPhrase.raw, start: 0.0, duration: 1.0);
+      final duplicate = finalSegment(testPhrase.raw, start: 0.5, duration: 1.0);
+      final next = finalSegment(testPhrase.raw, start: 3.0, duration: 1.0);
 
       expect(matcher.ingest(first), hasLength(1));
       expect(matcher.ingest(duplicate), isEmpty);
@@ -282,12 +220,9 @@ void main() {
     });
 
     test('token consumption prevents duplicate counting on same segment', () {
-      final seg = TranscriptSegment(
-        text: "I'm rich in wisdom and I'm rich in wisdom",
-        start: 1.0,
+      final seg = finalSegment(
+        "I'm rich in wisdom and I'm rich in wisdom",
         duration: 5.0,
-        isFinal: true,
-        confidence: 0.98,
       );
 
       final detections = matcher.ingest(seg);
@@ -311,12 +246,9 @@ void main() {
         ],
       );
       final longPhraseMatcher = PhraseMatcher(target: longPhrase);
-      final segment = TranscriptSegment(
-        text:
-            'the wisdom of god is at work in me the wisdom of god is at work in me',
-        start: 1.0,
+      final segment = finalSegment(
+        'the wisdom of god is at work in me the wisdom of god is at work in me',
         duration: 6.0,
-        isFinal: true,
         confidence: 0.99,
       );
 
