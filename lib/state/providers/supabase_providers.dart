@@ -45,28 +45,52 @@ final blockServiceProvider = Provider<BlockService?>((ref) {
   final client = BlockClient(
     functionUrl: Uri.parse('${AppEnv.supabaseUrl}/functions/v1/voice-block'),
     anonKey: AppEnv.supabasePublishableKey,
-    accessToken: () async {
-      // Waits for anonymous sign-in rather than racing it: a session started
-      // in the first seconds of a cold launch would otherwise look signed out
-      // and be refused a block it is entitled to.
-      final session = await ref.read(supabaseSessionProvider.future);
-      if (session == null) return null;
-      if (!session.isExpired) return session.accessToken;
-
-      // A long practice outlives an access token, so the credential is read
-      // per request and refreshed here rather than captured at session start.
-      try {
-        final refreshed = await Supabase.instance.client.auth.refreshSession();
-        return refreshed.session?.accessToken;
-      } on AuthException catch (error) {
-        debugPrint('Supabase session refresh failed: ${error.message}');
-        return null;
-      }
+    accessToken: () {
+      final auth = Supabase.instance.client.auth;
+      return resolveAccessToken(
+        // Waits for anonymous sign-in rather than racing it: a session
+        // started in the first seconds of a cold launch would otherwise look
+        // signed out and be refused a block it is entitled to.
+        startup: () => ref.read(supabaseSessionProvider.future),
+        currentSession: () => auth.currentSession,
+        refresh: () async => (await auth.refreshSession()).session,
+        signInAnonymously: () async => (await auth.signInAnonymously()).session,
+      );
     },
   );
   ref.onDispose(client.dispose);
   return client;
 });
+
+/// The JWT to send with a block request, read fresh on every one.
+///
+/// Goes through the same [resolveSupabaseSession] as startup, so there is one
+/// answer to "what session are we on" rather than two that drift — the
+/// closure this replaced returned null where the tested resolver signs back
+/// in anonymously.
+///
+/// The *live* session is what it asks, not the snapshot startup resolved:
+/// the SDK refreshes under us during an hour-long practice, and a snapshot's
+/// `isExpired` latches true the moment its own `exp` passes, so reading it
+/// sent every later acquire, release and renewal retry through a full
+/// `refreshSession()` round trip.
+@visibleForTesting
+Future<String?> resolveAccessToken({
+  required Future<Session?> Function() startup,
+  required Session? Function() currentSession,
+  required Future<Session?> Function() refresh,
+  required Future<Session?> Function() signInAnonymously,
+}) async {
+  final started = await startup();
+  if (started == null) return null;
+
+  final session = await resolveSupabaseSession(
+    existing: currentSession() ?? started,
+    refresh: refresh,
+    signInAnonymously: signInAnonymously,
+  );
+  return session?.accessToken;
+}
 
 /// Chooses the session to run with, given whatever the SDK has persisted.
 ///
