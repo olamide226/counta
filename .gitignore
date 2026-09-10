@@ -59,12 +59,6 @@ supabase/.branches/
 # Internal notes, never committed
 *.internal.md
 
-# Android signing material. Also covered by android/.gitignore; repeated here
-# so the rule is visible from the repo root and cannot be lost if that file is
-# regenerated. This is a public repo — a leaked upload key is unrecoverable.
-android/key.properties
-!android/key.properties.example
-*.jks
-*.keystore
-# Play Console service account credentials, if the owner ever adds automation.
-play-service-account*.json
+# Android signing material (key.properties, *.jks, *.keystore) is ignored by
+# android/.gitignore, which is where those rules live. Verify with:
+#   git check-ignore -v android/key.properties android/upload-keystore.jks
