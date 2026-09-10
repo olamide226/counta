@@ -18,12 +18,18 @@ import {
 export const COUNTA_SCHEMA = "counta";
 
 /**
+ * The one place the schema is named. Every table and every RPC in this file
+ * goes through it, so a new query cannot silently fall back to `public` —
+ * which is the failure store_test.ts exists to catch. Each store used to hold
+ * its own private `table()` and one of them, the voucher redemption RPC, went
+ * around all of them.
+ */
+const counta = (admin: SupabaseClient) => admin.schema(COUNTA_SCHEMA);
+
+/**
  * `counta.voice_blocks` access through a service-role client. RLS grants
  * clients read-only access to their own rows; every write in this file
  * bypasses RLS on purpose and is the only write path to the table.
- *
- * Every query goes through `table()`, so the schema is named in exactly one
- * place and a new query cannot silently fall back to `public`.
  */
 export class SupabaseBlockStore implements BlockStore {
   /** Every column the handler reads; named so a select never ships more. */
@@ -32,9 +38,8 @@ export class SupabaseBlockStore implements BlockStore {
 
   constructor(private readonly admin: SupabaseClient) {}
 
-  /** The one place the schema is named; see COUNTA_SCHEMA. */
   private table() {
-    return this.admin.schema(COUNTA_SCHEMA).from("voice_blocks");
+    return counta(this.admin).from("voice_blocks");
   }
 
   async findLiveBlock(
@@ -135,7 +140,7 @@ export class SupabaseTrialStore implements TrialStore {
   constructor(private readonly admin: SupabaseClient) {}
 
   private table() {
-    return this.admin.schema(COUNTA_SCHEMA).from("trial_grants");
+    return counta(this.admin).from("trial_grants");
   }
 
   async find(userId: string): Promise<TrialGrantRow | null> {
@@ -176,7 +181,7 @@ export class SupabaseVoucherStore implements VoucherStore {
   constructor(private readonly admin: SupabaseClient) {}
 
   private attempts() {
-    return this.admin.schema(COUNTA_SCHEMA).from("voucher_attempts");
+    return counta(this.admin).from("voucher_attempts");
   }
 
   async attemptsSince(
@@ -211,8 +216,7 @@ export class SupabaseVoucherStore implements VoucherStore {
   async markCredited(redemptionId: string): Promise<void> {
     // `is null` guards it, so two concurrent completions of the same
     // redemption record one time rather than overwriting each other's.
-    const { error } = await this.admin
-      .schema(COUNTA_SCHEMA)
+    const { error } = await counta(this.admin)
       .from("voucher_redemptions")
       .update({ credited_at: new Date().toISOString() })
       .eq("id", redemptionId)
@@ -223,8 +227,7 @@ export class SupabaseVoucherStore implements VoucherStore {
   }
 
   async redeem(code: string, userId: string): Promise<RedeemOutcome> {
-    const { data, error } = await this.admin
-      .schema(COUNTA_SCHEMA)
+    const { data, error } = await counta(this.admin)
       .rpc("redeem_voucher", { p_code: code, p_user_id: userId });
     if (error) throw new Error(`counta.redeem_voucher: ${error.message}`);
 
