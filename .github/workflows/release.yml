@@ -41,7 +41,10 @@ jobs:
             - **macOS**: Download the `.dmg` file
             - **Android**: Download the `.apk` file
             - **Windows**: Download the `.zip` file
-            
+
+            The `.aab` file, when present, is the Play-ready bundle and is not
+            installable directly — it is uploaded to the Play Console by hand.
+
             See the [CHANGELOG](https://github.com/${{ github.repository }}/blob/main/CHANGELOG.md) for detailed changes.
 
   build-android:
@@ -59,7 +62,7 @@ jobs:
       - name: Setup Flutter
         uses: subosito/flutter-action@v2
         with:
-          flutter-version: '3.38.8'
+          flutter-version: '3.44.8'
           channel: 'stable'
 
       - name: Install dependencies
@@ -81,6 +84,113 @@ jobs:
           asset_name: counta-${{ needs.create-release.outputs.version }}-android.apk
           asset_content_type: application/vnd.android.package-archive
 
+  # Play-ready Android App Bundle.
+  #
+  # Runs only when the signing secrets exist, so forks and pull requests still
+  # build the rest of the workflow. GitHub does not expose secrets to workflows
+  # triggered from a forked pull request, which makes the skip automatic there.
+  #
+  # This job builds and attaches the AAB. It does NOT upload to Google Play:
+  # nothing in this repository holds store credentials, and promoting a track
+  # from a mistyped tag is not a failure mode worth inviting.
+  build-android-aab:
+    needs: create-release
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      # The `secrets` context is not available in a job-level `if`, so the
+      # presence check has to be a step that publishes an output.
+      - name: Check for signing secrets
+        id: signing
+        env:
+          KEYSTORE_BASE64: ${{ secrets.ANDROID_KEYSTORE_BASE64 }}
+          KEYSTORE_PASSWORD: ${{ secrets.ANDROID_KEYSTORE_PASSWORD }}
+          KEY_ALIAS: ${{ secrets.ANDROID_KEY_ALIAS }}
+          KEY_PASSWORD: ${{ secrets.ANDROID_KEY_PASSWORD }}
+        run: |
+          if [ -n "$KEYSTORE_BASE64" ] && [ -n "$KEYSTORE_PASSWORD" ] \
+             && [ -n "$KEY_ALIAS" ] && [ -n "$KEY_PASSWORD" ]; then
+            echo "available=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "available=false" >> "$GITHUB_OUTPUT"
+            echo "::notice::Android signing secrets not set - skipping the AAB build." \
+                 "See docs/RELEASING.md section 8."
+          fi
+
+      - name: Setup Java
+        if: steps.signing.outputs.available == 'true'
+        uses: actions/setup-java@v4
+        with:
+          distribution: 'zulu'
+          java-version: '17'
+
+      - name: Setup Flutter
+        if: steps.signing.outputs.available == 'true'
+        uses: subosito/flutter-action@v2
+        with:
+          flutter-version: '3.44.8'
+          channel: 'stable'
+
+      - name: Install dependencies
+        if: steps.signing.outputs.available == 'true'
+        run: flutter pub get
+
+      # Written to the runner's workspace and removed by the cleanup step
+      # below, which runs even when the build fails.
+      - name: Write signing material
+        if: steps.signing.outputs.available == 'true'
+        env:
+          KEYSTORE_BASE64: ${{ secrets.ANDROID_KEYSTORE_BASE64 }}
+          KEYSTORE_PASSWORD: ${{ secrets.ANDROID_KEYSTORE_PASSWORD }}
+          KEY_ALIAS: ${{ secrets.ANDROID_KEY_ALIAS }}
+          KEY_PASSWORD: ${{ secrets.ANDROID_KEY_PASSWORD }}
+        run: |
+          echo "$KEYSTORE_BASE64" | base64 --decode > android/upload-keystore.jks
+          cat > android/key.properties <<EOF
+          storeFile=upload-keystore.jks
+          storePassword=$KEYSTORE_PASSWORD
+          keyAlias=$KEY_ALIAS
+          keyPassword=$KEY_PASSWORD
+          EOF
+
+      - name: Build AAB
+        if: steps.signing.outputs.available == 'true'
+        env:
+          # Refuse a debug-signed fallback: an unsigned artifact reaching the
+          # release page looks identical to a signed one until Play rejects it.
+          ORG_GRADLE_PROJECT_requireReleaseSigning: 'true'
+          SUPABASE_URL: ${{ secrets.SUPABASE_URL }}
+          SUPABASE_PUBLISHABLE_KEY: ${{ secrets.SUPABASE_PUBLISHABLE_KEY }}
+        run: |
+          DEFINES=""
+          [ -n "$SUPABASE_URL" ] && DEFINES="$DEFINES --dart-define=SUPABASE_URL=$SUPABASE_URL"
+          [ -n "$SUPABASE_PUBLISHABLE_KEY" ] && DEFINES="$DEFINES --dart-define=SUPABASE_PUBLISHABLE_KEY=$SUPABASE_PUBLISHABLE_KEY"
+          # DEEPGRAM_API_KEY is deliberately absent: a --dart-define is embedded
+          # in the artifact even where the Dart-side read is compile-time dead.
+          flutter build appbundle --release $DEFINES
+
+      - name: Remove signing material
+        if: always()
+        run: rm -f android/upload-keystore.jks android/key.properties
+
+      - name: Rename AAB
+        if: steps.signing.outputs.available == 'true'
+        run: |
+          mv build/app/outputs/bundle/release/app-release.aab \
+             counta-${{ needs.create-release.outputs.version }}-android.aab
+
+      - name: Upload AAB to Release
+        if: steps.signing.outputs.available == 'true'
+        uses: actions/upload-release-asset@v1
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        with:
+          upload_url: ${{ needs.create-release.outputs.upload_url }}
+          asset_path: counta-${{ needs.create-release.outputs.version }}-android.aab
+          asset_name: counta-${{ needs.create-release.outputs.version }}-android.aab
+          asset_content_type: application/octet-stream
+
   build-macos:
     needs: create-release
     runs-on: macos-latest
@@ -90,7 +200,7 @@ jobs:
       - name: Setup Flutter
         uses: subosito/flutter-action@v2
         with:
-          flutter-version: '3.38.8'
+          flutter-version: '3.44.8'
           channel: 'stable'
 
       - name: Install dependencies
@@ -133,7 +243,7 @@ jobs:
       - name: Setup Flutter
         uses: subosito/flutter-action@v2
         with:
-          flutter-version: '3.38.8'
+          flutter-version: '3.44.8'
           channel: 'stable'
 
       - name: Install dependencies
