@@ -8,12 +8,18 @@
 # the .env path and the command-line path pick it up.
 DART_DEFINE_KEYS := DEEPGRAM_API_KEY SUPABASE_URL SUPABASE_PUBLISHABLE_KEY
 
+# $(call dart_defines,KEY...) -> --dart-define=KEY=<value> for each key that has
+# a value. Values come from .env (via `-include` above), the command line, or
+# the environment — make treats all three as variables, which is what lets CI
+# call these targets with the secrets exported as step `env`.
+dart_defines = $(foreach key,$1,$(if $($(key)),--dart-define=$(key)=$($(key))))
+
 # With a .env every key in it becomes a dart-define. Without one, forward
 # whichever of the known keys were passed on the command line.
 DART_DEFINES := $(if $(wildcard .env),--dart-define-from-file=.env,\
-	$(foreach key,$(DART_DEFINE_KEYS),$(if $($(key)),--dart-define=$(key)=$($(key)))))
+	$(call dart_defines,$(DART_DEFINE_KEYS)))
 
-# Store-bound builds get an explicit, narrower set.
+# Store-bound and published builds get everything except the Deepgram key.
 #
 # --dart-define-from-file=.env would forward DEEPGRAM_API_KEY too. Dart's
 # compile-time gate makes the *read* dead code in release (BuildConfig.
@@ -21,11 +27,9 @@ DART_DEFINES := $(if $(wildcard .env),--dart-define-from-file=.env,\
 # the artifact, so a .env-driven release build would ship the master key to
 # anyone who unzips the AAB. Release builds therefore name their keys.
 #
-# Values still come from .env when there is one, because `-include .env` above
-# has already made every key in it a make variable.
-RELEASE_DART_DEFINE_KEYS := SUPABASE_URL SUPABASE_PUBLISHABLE_KEY
-RELEASE_DART_DEFINES := $(foreach key,$(RELEASE_DART_DEFINE_KEYS),\
-	$(if $($(key)),--dart-define=$(key)=$($(key))))
+# The exclusion below is the only place that rule is written down.
+RELEASE_DART_DEFINES := \
+	$(call dart_defines,$(filter-out DEEPGRAM_API_KEY,$(DART_DEFINE_KEYS)))
 
 
 # Default target
