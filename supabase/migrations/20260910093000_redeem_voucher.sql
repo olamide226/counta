@@ -80,6 +80,33 @@ begin
      and v.redeemed_count < v.max_redemptions;
 
   if not found then
+    -- Not necessarily exhausted *for this caller*. Two requests from one user
+    -- racing the last slot — a double tap, or a client retry — both read no
+    -- redemption above, because the loser's lookup ran on a snapshot taken
+    -- before the winner committed. The update then blocks on the winner's row
+    -- lock and, once it is released, re-evaluates against the new version and
+    -- finds the campaign full. Answering `exhausted` there tells a user their
+    -- code is used up for a code they have just redeemed, records a
+    -- rate-limit attempt against them for it, and — worse — makes the
+    -- re-issue path unreachable, so a winner whose ledger call failed can
+    -- never heal.
+    --
+    -- Re-read instead. This is a new statement, so it takes a new snapshot,
+    -- and the update it followed waited on the winner's lock: whatever the
+    -- winner wrote is visible now.
+    select * into v_redemption
+      from counta.voucher_redemptions r
+     where r.voucher_id = v_voucher.id
+       and r.user_id = p_user_id;
+
+    if found then
+      return jsonb_build_object(
+        'outcome', 'already_redeemed',
+        'voucher_id', v_voucher.id,
+        'redemption_id', v_redemption.id,
+        'credits', v_redemption.credits);
+    end if;
+
     return jsonb_build_object('outcome', 'exhausted');
   end if;
 
