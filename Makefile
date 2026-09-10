@@ -1,4 +1,4 @@
-.PHONY: help setup format lint analyze test test-corpus test-coverage build-runner clean build-ios build-ios-ipa build-android build-macos build-web run run-ios run-android run-web doctor icons pull-fixtures supabase-start supabase-stop supabase-test supabase-serve
+.PHONY: help setup format lint analyze test test-corpus test-coverage build-runner clean build-ios build-ios-ipa build-android build-appbundle appbundle release-preflight build-macos build-web run run-ios run-android run-web doctor icons pull-fixtures supabase-start supabase-stop supabase-test supabase-serve
 
 # Environment Configuration
 # Automatically loads variables from .env file if present, or CLI overrides.
@@ -12,6 +12,20 @@ DART_DEFINE_KEYS := DEEPGRAM_API_KEY SUPABASE_URL SUPABASE_PUBLISHABLE_KEY
 # whichever of the known keys were passed on the command line.
 DART_DEFINES := $(if $(wildcard .env),--dart-define-from-file=.env,\
 	$(foreach key,$(DART_DEFINE_KEYS),$(if $($(key)),--dart-define=$(key)=$($(key)))))
+
+# Store-bound builds get an explicit, narrower set.
+#
+# --dart-define-from-file=.env would forward DEEPGRAM_API_KEY too. Dart's
+# compile-time gate makes the *read* dead code in release (BuildConfig.
+# showDebugTools is a const false), but the define itself is still embedded in
+# the artifact, so a .env-driven release build would ship the master key to
+# anyone who unzips the AAB. Release builds therefore name their keys.
+#
+# Values still come from .env when there is one, because `-include .env` above
+# has already made every key in it a make variable.
+RELEASE_DART_DEFINE_KEYS := SUPABASE_URL SUPABASE_PUBLISHABLE_KEY
+RELEASE_DART_DEFINES := $(foreach key,$(RELEASE_DART_DEFINE_KEYS),\
+	$(if $($(key)),--dart-define=$(key)=$($(key))))
 
 
 # Default target
@@ -36,7 +50,8 @@ help:
 	@echo "Build commands:"
 	@echo "  make build-ios      - Build iOS app (debug/ad-hoc)"
 	@echo "  make build-ios-ipa  - Build iOS archive for App Store/TestFlight"
-	@echo "  make build-android  - Build Android APK"
+	@echo "  make build-android  - Build Android APK (direct download / GitHub release)"
+	@echo "  make build-appbundle- Build Play-ready signed AAB (needs android/key.properties)"
 	@echo "  make build-macos    - Build macOS app"
 	@echo "  make build-web      - Build web app"
 	@echo ""
@@ -54,6 +69,9 @@ help:
 	@echo "  make supabase-stop  - Stop the local Supabase stack"
 	@echo "  make supabase-test  - Run the Edge Function Deno tests"
 	@echo "  make supabase-serve - Serve Edge Functions locally (uses supabase/.env)"
+	@echo ""
+	@echo "Release commands (see docs/RELEASING.md):"
+	@echo "  make release-preflight - Everything that must be green before a tag"
 	@echo ""
 	@echo "Other commands:"
 	@echo "  make doctor         - Check Flutter environment"
@@ -127,18 +145,56 @@ build-ios:
 	flutter build ios $(DART_DEFINES)
 	@echo "✅ iOS build complete!"
 
-# Build iOS archive (.ipa) for App Store / TestFlight
+# Build iOS archive (.ipa) for App Store / TestFlight.
+# Store-bound, so it takes RELEASE_DART_DEFINES: no DEEPGRAM_API_KEY is
+# embedded in an artifact that leaves this machine.
 build-ios-ipa:
 	@echo "🍎 Building iOS archive..."
-	flutter build ipa $(DART_DEFINES)
+	flutter build ipa --release $(RELEASE_DART_DEFINES)
 	@echo "✅ iOS archive ready at build/ios/archive/Runner.xcarchive"
 	@echo "   Upload via Xcode Organizer: open build/ios/archive/Runner.xcarchive"
 
-# Build for Android
+# Build for Android (APK — direct download and the GitHub release, not Play)
 build-android:
 	@echo "🤖 Building Android APK..."
 	flutter build apk $(DART_DEFINES)
 	@echo "✅ Android build complete!"
+
+# Play-ready Android App Bundle.
+#
+# Play requires an AAB for a new app; the APK above is for direct download.
+# requireReleaseSigning makes android/app/build.gradle.kts fail loudly rather
+# than fall back to the debug key, because a debug-signed AAB is only rejected
+# once it reaches the Play Console.
+build-appbundle:
+	@echo "🤖 Building Play-ready Android App Bundle..."
+	@test -n "$(SUPABASE_URL)" || echo "⚠️  SUPABASE_URL unset: this build has no backend config."
+	ORG_GRADLE_PROJECT_requireReleaseSigning=true \
+		flutter build appbundle --release $(RELEASE_DART_DEFINES)
+	@echo "✅ AAB ready at build/app/outputs/bundle/release/app-release.aab"
+	@echo "   Upload it to Play Console › Testing › Internal testing › Create new release."
+
+# Alias, because "appbundle" is what `flutter build` calls it.
+appbundle: build-appbundle
+
+# Everything that must be green before a tag. See docs/RELEASING.md.
+release-preflight:
+	@echo "🚦 Release preflight"
+	@echo "--- version ---"
+	@grep '^version:' pubspec.yaml
+	@echo "--- flutter ---"
+	@flutter --version | head -1
+	@echo "--- analyze ---"
+	@dart analyze
+	@echo "--- tests ---"
+	@flutter test
+	@echo "--- transcript corpus gates ---"
+	@flutter test test/fixtures/corpus_test.dart
+	@echo "--- signing ---"
+	@test -f android/key.properties \
+		&& echo "android/key.properties present (upload key configured)" \
+		|| echo "⚠️  android/key.properties missing: make build-appbundle will fail."
+	@echo "✅ Preflight complete. Re-read the checklist in docs/RELEASING.md before tagging."
 
 # Build for macOS
 build-macos:
