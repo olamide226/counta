@@ -32,6 +32,7 @@ docker run -d --name counta-pg -e POSTGRES_PASSWORD=postgres \
 export PG="postgresql://postgres:postgres@127.0.0.1:55432/postgres"
 psql "$PG" -v ON_ERROR_STOP=1 -f supabase/tests/bootstrap_local.sql
 psql "$PG" -v ON_ERROR_STOP=1 -f supabase/migrations/20260907120000_voice_blocks.sql
+psql "$PG" -v ON_ERROR_STOP=1 -f supabase/migrations/20260910092000_voucher_credited_at.sql
 psql "$PG" -v ON_ERROR_STOP=1 -f supabase/migrations/20260910093000_redeem_voucher.sql
 psql "$PG" -v ON_ERROR_STOP=1 -f supabase/tests/redeem_voucher_race.sql
 docker rm -f counta-pg

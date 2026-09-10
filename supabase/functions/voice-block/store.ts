@@ -208,6 +208,20 @@ export class SupabaseVoucherStore implements VoucherStore {
     if (error) throw new Error(`counta.voucher_attempts insert: ${error.message}`);
   }
 
+  async markCredited(redemptionId: string): Promise<void> {
+    // `is null` guards it, so two concurrent completions of the same
+    // redemption record one time rather than overwriting each other's.
+    const { error } = await this.admin
+      .schema(COUNTA_SCHEMA)
+      .from("voucher_redemptions")
+      .update({ credited_at: new Date().toISOString() })
+      .eq("id", redemptionId)
+      .is("credited_at", null);
+    if (error) {
+      throw new Error(`counta.voucher_redemptions credited: ${error.message}`);
+    }
+  }
+
   async redeem(code: string, userId: string): Promise<RedeemOutcome> {
     const { data, error } = await this.admin
       .schema(COUNTA_SCHEMA)
@@ -218,18 +232,28 @@ export class SupabaseVoucherStore implements VoucherStore {
     switch (result?.outcome) {
       case "redeemed":
       case "already_redeemed": {
-        const { voucher_id, redemption_id, credits } = result as {
+        const { voucher_id, redemption_id, credits, credited } = result as {
           voucher_id?: unknown;
           redemption_id?: unknown;
           credits?: unknown;
+          credited?: unknown;
         };
         if (
           typeof voucher_id !== "string" || typeof redemption_id !== "string" ||
-          typeof credits !== "number"
+          typeof credits !== "number" || typeof credited !== "boolean"
         ) {
+          // Never a default: a missing `credited` read as false would re-issue
+          // a payout that has already landed, which is the bug the column
+          // exists to close.
           throw new Error("counta.redeem_voucher: incomplete redemption");
         }
-        return { outcome: result.outcome, voucher_id, redemption_id, credits };
+        return {
+          outcome: result.outcome,
+          voucher_id,
+          redemption_id,
+          credits,
+          credited,
+        };
       }
       case "not_found":
       case "expired":

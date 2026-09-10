@@ -282,21 +282,31 @@ export interface TrialStore {
  * endpoint cannot be used to discover which codes exist (req 12.6).
  */
 export type RedeemOutcome =
-  | {
-    outcome: "redeemed";
-    voucher_id: string;
-    redemption_id: string;
-    credits: number;
-  }
-  | {
-    outcome: "already_redeemed";
-    voucher_id: string;
-    redemption_id: string;
-    credits: number;
-  }
+  | ({ outcome: "redeemed" } & Redemption)
+  | ({ outcome: "already_redeemed" } & Redemption)
   | { outcome: "not_found" }
   | { outcome: "expired" }
   | { outcome: "exhausted" };
+
+/** The redemption behind a `redeemed` or `already_redeemed` outcome. */
+export interface Redemption {
+  voucher_id: string;
+  redemption_id: string;
+  credits: number;
+  /**
+   * Whether this redemption's payout is already confirmed
+   * (`counta.voucher_redemptions.credited_at`).
+   *
+   * The endpoint must not ask the ledger this question. RevenueCat's
+   * `Idempotency-Key` is what makes a re-issued grant a no-op, and those keys
+   * expire on a bounded window; treating "the ledger will deduplicate it" as
+   * "it pays once" credited a resubmitted code again every time, once the
+   * window had passed. False re-issues the *same* keyed grant so a redemption
+   * whose ledger call died mid-flight still heals (req 12.5); true pays
+   * nothing.
+   */
+  credited: boolean;
+}
 
 export interface VoucherStore {
   /**
@@ -310,4 +320,10 @@ export interface VoucherStore {
   recordAttempt(userId: string): Promise<void>;
   /** Claims a slot and writes the redemption in one transaction. */
   redeem(code: string, userId: string): Promise<RedeemOutcome>;
+  /**
+   * Records that this redemption's grant reached the ledger. Called after the
+   * grant, never before: a row marked credited by a payout that then failed
+   * would be a redemption nothing can ever complete.
+   */
+  markCredited(redemptionId: string): Promise<void>;
 }

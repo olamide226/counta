@@ -532,6 +532,7 @@ Authorization: Bearer <supabase-jwt>
 Body: { "code": "SPRING24" }
 
 200 { "redeemed": true,  "credits": 50, "balance": 71 }
+200 { "redeemed": false, "reason": "already_redeemed", "credits": 50 }
 200 { "redeemed": false, "reason": "already_redeemed", "credits": 50, "balance": 71 }
 400 { "error": "invalid_request" }
 401 { "error": "unauthenticated" }
@@ -595,14 +596,21 @@ insert counta.voucher_redemptions                   -> unique violation means
                                                        already redeemed: release
                                                        the slot, re-issue the
                                                        keyed grant, report 200
+redemption already credited?                        -> 200 redeemed:false,
+                                                       no credit moves
 BalanceProvider grant(user, redemption_id, credits) -> 503 on failure
+mark counta.voucher_redemptions.credited_at         -> 500 on failure; the
+                                                       retry re-issues the
+                                                       same keyed grant
 ```
 
 A full campaign is not the same question as a full campaign *for this caller*. Two requests from one user racing the last slot — a double tap, or a client retry — both find no redemption, because the loser's lookup ran on a snapshot taken before the winner committed; the loser's slot claim then waits on the winner's row lock and, once it is released, re-evaluates and finds the cap reached. Answering `voucher_exhausted` there tells a user their code is used up for a code they have just redeemed, spends one of their guesses on it, and leaves the re-issue path unreachable so a winner whose ledger call failed can never heal. The claim therefore re-reads the redemption before concluding exhaustion: that is a new statement, so it takes a new snapshot, and it followed a statement that waited on the winner's lock. `supabase/tests/redeem_voucher_race.sql` drives the race deterministically with dblink.
 
 The slot claim and the redemption row are two writes that must not come apart, so they belong in one transaction — the simplest form is a `counta.redeem_voucher(...)` SQL function called over RPC, added alongside the endpoint in task 10, which also keeps the whole decision one round trip. If they are ever issued as separate statements, claim the slot **first**: a leaked slot means a campaign gives out one fewer redemption than it advertised, while a redemption row with no slot behind it means the cap can be exceeded. When the two failure directions are under-granting and over-granting credit, take the first.
 
-The redemption row is written before any credit moves, and the ledger call is keyed on the redemption id exactly as a block debit is keyed on the block id. A retry therefore re-issues the *same* keyed grant rather than a second one: a redemption whose ledger call died mid-flight completes on the next attempt, and one that already succeeded cannot pay out twice. That is what makes the endpoint idempotent and unfarmable by retry (Requirements 12.5, 12.8). A slot claimed for a grant that then fails permanently is left consumed; the remedy is for the operator to raise the cap, which is better than releasing slots automatically and giving a retry loop something to chew on.
+The redemption row is written before any credit moves, and the ledger call is keyed on the redemption id exactly as a block debit is keyed on the block id, so a retry re-issues the *same* grant rather than a second one and a redemption whose ledger call died mid-flight completes on the next attempt.
+
+That key is not, on its own, what makes the endpoint pay out once. `Idempotency-Key` retention at RevenueCat is a bounded window, and past it a re-issue is a second payment — so a valid, already-redeemed code resubmitted days later credited again, and again, uncounted, because the success path records no rate-limit attempt and so has no rate limit at all. `counta.voucher_redemptions.credited_at` is what closes that: it is set once the grant has landed, and only a redemption still missing it is re-issued. The self-healing property survives (an unconfirmed payout is retried with the same key) and the endpoint stops depending on a third party's retention policy for a rule of its own (Requirements 12.5, 12.8). The balance is echoed only when it moved, exactly as a release reports a refund. A slot claimed for a grant that then fails permanently is left consumed; the remedy is for the operator to raise the cap, which is better than releasing slots automatically and giving a retry loop something to chew on.
 
 ---
 

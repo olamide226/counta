@@ -66,10 +66,24 @@ export class FakeBalanceProvider implements BalanceProvider {
   readonly calls: Array<
     { op: string; userId: string; blockId?: string; credits?: number }
   > = [];
-  private readonly applied = new Set<string>();
+  private applied = new Set<string>();
 
   /** While positive, the next refund rejects and this decrements. */
   failRefunds = 0;
+
+  /**
+   * Forgets every idempotency key, the way RevenueCat does once its retention
+   * window has passed.
+   *
+   * Without this the double is *more* idempotent than the thing it stands in
+   * for — `applied` never expired — and a caller that re-issued a grant on
+   * every repeat looked exactly like one that paid out once. That is precisely
+   * the bug it hid: after the real window closes, a re-issue is a second
+   * payment.
+   */
+  expireIdempotencyKeys(): void {
+    this.applied = new Set<string>();
+  }
 
   constructor(private readonly initialBalance = 20) {}
 
@@ -403,7 +417,13 @@ export interface MemoryVoucher {
 export class MemoryVoucherStore implements VoucherStore {
   readonly attempts: Array<{ user_id: string; at: Date }> = [];
   readonly redemptions: Array<
-    { id: string; voucher_id: string; user_id: string; credits: number }
+    {
+      id: string;
+      voucher_id: string;
+      user_id: string;
+      credits: number;
+      credited: boolean;
+    }
   > = [];
   private seq = 0;
 
@@ -445,6 +465,7 @@ export class MemoryVoucherStore implements VoucherStore {
         voucher_id: voucher.id,
         redemption_id: existing.id,
         credits: existing.credits,
+        credited: existing.credited,
       });
     }
 
@@ -471,6 +492,7 @@ export class MemoryVoucherStore implements VoucherStore {
       voucher_id: voucher.id,
       user_id: userId,
       credits: voucher.credits,
+      credited: false,
     };
     this.redemptions.push(redemption);
     return Promise.resolve({
@@ -478,7 +500,23 @@ export class MemoryVoucherStore implements VoucherStore {
       voucher_id: voucher.id,
       redemption_id: redemption.id,
       credits: redemption.credits,
+      credited: false,
     });
+  }
+
+  /** While positive, the next markCredited rejects and this decrements. */
+  failCredited = 0;
+
+  markCredited(redemptionId: string): Promise<void> {
+    if (this.failCredited > 0) {
+      this.failCredited--;
+      return Promise.reject(
+        new Error("counta.voucher_redemptions credited: boom"),
+      );
+    }
+    const row = this.redemptions.find((r) => r.id === redemptionId);
+    if (row) row.credited = true;
+    return Promise.resolve();
   }
 }
 

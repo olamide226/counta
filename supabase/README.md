@@ -26,7 +26,9 @@ the reasoning behind blocks, and the device gate on the free trial.
 supabase/
   config.toml                       local stack config; anonymous sign-in on
   migrations/*_voice_blocks.sql     counta schema: tables, indexes, RLS, grants
+  migrations/*_voucher_credited_at.sql  records that a redemption's payout landed
   migrations/*_redeem_voucher.sql   counta.redeem_voucher: one-transaction redemption
+  tests/*.sql                       concurrency tests; local databases only
   functions/deno.json               pinned imports + `deno task test`
   functions/voice-block/
     index.ts                        entrypoint: env -> adapters -> handler
@@ -128,6 +130,14 @@ curl -X POST http://127.0.0.1:54321/functions/v1/voice-block/redeem \
   -H "Authorization: Bearer $USER_JWT" -H "Content-Type: application/json" \
   -d '{"code":"SPRING24"}'
 ```
+
+A repeat redemption reports the original and moves no credit, so it carries no
+`balance`: the field is echoed only when it changed, as a release reports a
+refund. `counta.voucher_redemptions.credited_at` is what decides that — a
+redemption whose payout is not yet confirmed is re-issued with the same keyed
+grant, one that is confirmed pays nothing. Without it, "a voucher pays out
+once" rested on RevenueCat retaining the idempotency key, which it does only
+for a bounded window.
 
 Both answer 200 with a negative result rather than an error when the question
 has already been answered — `granted: false, reason: "already_claimed"` and
@@ -296,6 +306,14 @@ Raising `max_redemptions` is also the remedy when a redemption's ledger call
 fails permanently: the slot stays consumed, which is deliberate — releasing
 slots automatically would give a retry loop something to chew on.
 
+```sql
+-- Redemptions whose payout never landed. The user's next tap on the same code
+-- re-issues the grant; a row that stays here is one to chase.
+select id, voucher_id, user_id, credits, redeemed_at
+  from counta.voucher_redemptions
+ where credited_at is null and redeemed_at < now() - interval '1 hour';
+```
+
 ## Notes on the schema
 
 - Everything is in the `counta` schema, not `public`, because the project is
@@ -321,9 +339,12 @@ slots automatically would give a retry loop something to chew on.
   only record and the gate is weaker. The migration comment and the design's
   "Trial eligibility and vouchers" section say why, and why a device
   fingerprint is not the answer.
-- `counta.redeem_voucher(code, user_id)` (second migration) does the lookup,
-  the cap claim and the redemption row in one transaction and returns
-  `{outcome, voucher_id, redemption_id, credits}`. The two writes must not
+- `counta.redeem_voucher(code, user_id)` does the lookup, the cap claim and the
+  redemption row in one transaction and returns
+  `{outcome, voucher_id, redemption_id, credits, credited}`. `credited`
+  reports `counta.voucher_redemptions.credited_at`, so the endpoint can tell a
+  redemption whose payout landed from one whose ledger call died mid-flight
+  without asking RevenueCat. The two writes must not
   come apart: a slot with no redemption behind it under-grants a campaign by
   one, while a redemption with no slot lets the cap be exceeded. It is
   `security invoker` and executable only by `service_role`.

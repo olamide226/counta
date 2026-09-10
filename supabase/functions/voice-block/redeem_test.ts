@@ -3,6 +3,7 @@ import { handleVoiceBlock } from "./handler.ts";
 import {
   CONFIG,
   harness,
+  MemoryVoucherStore,
   OTHER_USER,
   redeemReq,
   tokenFor,
@@ -23,6 +24,7 @@ async function call(deps: Deps, req: Request) {
 }
 
 const THIRD_USER = "99999999-9999-4999-8999-999999999999";
+const NOW = new Date("2026-09-07T12:00:00.000Z");
 
 Deno.test("redeem: a live code grants credits and records the redemption", async () => {
   const h = harness({ campaigns: [voucher()] });
@@ -56,20 +58,47 @@ Deno.test("redeem: the same user redeeming again is told so and paid once", asyn
 
   const again = await call(h.deps, redeemReq());
 
-  // 12.5: the original redemption is reported, and the keyed grant is
-  // re-issued rather than doubled — so the balance does not move.
+  // 12.5: the original redemption is reported, and nothing moves. No balance
+  // either — it is echoed only when it changed, as a release reports a refund.
   assertEquals(again.status, 200);
   assertEquals(again.body, {
     redeemed: false,
     reason: "already_redeemed",
     credits: 50,
-    balance: 70,
   });
   assertEquals(h.balance.balances.get(USER), 70);
+  assertEquals(h.balance.calls.filter((c) => c.op === "grant").length, 1);
   assertEquals(h.vouchers.redemptions.length, 1);
   // A repeat is not a failed attempt, so it does not eat the guess budget.
   assertEquals(h.vouchers.vouchers[0].redeemed_count, 1);
   assertEquals(h.vouchers.attempts.length, 0);
+});
+
+Deno.test("redeem: a repeat pays nothing once the ledger has forgotten the key", async () => {
+  const h = harness({ campaigns: [voucher()] });
+  assertEquals((await call(h.deps, redeemReq())).body.redeemed, true);
+  assertEquals(h.balance.balances.get(USER), 70);
+
+  // Days later. RevenueCat's Idempotency-Key retention is a bounded window,
+  // and "this voucher pays out once" must not rest on it: with the keys gone,
+  // a re-issued grant is a second payment, and nothing counts the repeats
+  // because the success path records no rate-limit attempt.
+  h.balance.expireIdempotencyKeys();
+
+  for (let i = 0; i < 3; i++) {
+    const again = await call(h.deps, redeemReq());
+    assertEquals(again.status, 200, `repeat ${i}`);
+    assertEquals(again.body, {
+      redeemed: false,
+      reason: "already_redeemed",
+      credits: 50,
+    });
+  }
+
+  assertEquals(h.balance.balances.get(USER), 70);
+  assertEquals(h.balance.calls.filter((c) => c.op === "grant").length, 1);
+  assertEquals(h.vouchers.redemptions.length, 1);
+  assertEquals(h.vouchers.vouchers[0].redeemed_count, 1);
 });
 
 Deno.test("redeem: many users share a campaign up to its cap", async () => {
@@ -201,11 +230,43 @@ Deno.test("redeem: a ledger failure completes on retry without paying twice", as
     credits: 50,
     balance: 70,
   });
+  assertEquals(h.vouchers.redemptions[0].credited, true);
 
-  // And a third attempt does not credit again.
-  assertEquals((await call(h.deps, redeemReq())).body.balance, 70);
+  // And a third attempt does not credit again — not even with the ledger's
+  // idempotency keys gone, because the row now says the payout landed.
+  h.balance.expireIdempotencyKeys();
+  const third = await call(h.deps, redeemReq());
+  assertEquals(third.body, {
+    redeemed: false,
+    reason: "already_redeemed",
+    credits: 50,
+  });
   assertEquals(h.balance.balances.get(USER), 70);
   assertEquals(h.vouchers.redemptions.length, 1);
+});
+
+Deno.test("redeem: a payout that lands but is not recorded is re-issued, not doubled", async () => {
+  // markCredited is the one write after the money moves. If it fails the row
+  // stays unconfirmed, so the retry re-issues the *same* keyed grant — which
+  // the ledger applies once — rather than the endpoint assuming a payout it
+  // cannot see.
+  const vouchers = new MemoryVoucherStore([voucher()], { now: NOW });
+  vouchers.failCredited = 1;
+  const h = harness({ vouchers });
+
+  const failed = await call(h.deps, redeemReq());
+  assertEquals(failed.status, 500);
+  assertEquals(vouchers.redemptions[0].credited, false);
+
+  const retried = await call(h.deps, redeemReq());
+  assertEquals(retried.body, {
+    redeemed: false,
+    reason: "already_redeemed",
+    credits: 50,
+    balance: 70,
+  });
+  assertEquals(vouchers.redemptions[0].credited, true);
+  assertEquals(h.balance.balances.get(USER), 70);
 });
 
 Deno.test("redeem: the claimed slots and the redemption rows never disagree", async () => {

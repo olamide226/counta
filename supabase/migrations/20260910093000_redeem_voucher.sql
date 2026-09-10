@@ -55,7 +55,12 @@ begin
       'outcome', 'already_redeemed',
       'voucher_id', v_voucher.id,
       'redemption_id', v_redemption.id,
-      'credits', v_redemption.credits);
+      'credits', v_redemption.credits,
+      -- Whether the payout is already confirmed. False re-issues the same
+      -- keyed grant, so a redemption whose ledger call died mid-flight heals;
+      -- true pays nothing, which is what stops a resubmitted code crediting
+      -- again once the ledger has forgotten its idempotency key.
+      'credited', v_redemption.credited_at is not null);
   end if;
 
   -- A disabled code answers exactly as an unknown one does, with no way to
@@ -104,7 +109,8 @@ begin
         'outcome', 'already_redeemed',
         'voucher_id', v_voucher.id,
         'redemption_id', v_redemption.id,
-        'credits', v_redemption.credits);
+        'credits', v_redemption.credits,
+        'credited', v_redemption.credited_at is not null);
     end if;
 
     return jsonb_build_object('outcome', 'exhausted');
@@ -132,22 +138,27 @@ begin
       'outcome', 'already_redeemed',
       'voucher_id', v_voucher.id,
       'redemption_id', v_redemption.id,
-      'credits', v_redemption.credits);
+      'credits', v_redemption.credits,
+      'credited', v_redemption.credited_at is not null);
   end if;
 
   return jsonb_build_object(
     'outcome', 'redeemed',
     'voucher_id', v_voucher.id,
     'redemption_id', v_new_id,
-    'credits', v_voucher.credits);
+    'credits', v_voucher.credits,
+    -- Written a moment ago by this transaction, so nothing has paid for it.
+    'credited', false);
 end;
 $$;
 
 comment on function counta.redeem_voucher(text, uuid) is
   'Redeems a voucher code for a user in one transaction: lookup by upper(code), '
   'cap claim and redemption row. Returns {outcome, voucher_id, redemption_id, '
-  'credits}; outcome is redeemed | already_redeemed | not_found | expired | '
-  'exhausted, and not_found covers both an unknown and a disabled code.';
+  'credits, credited}; outcome is redeemed | already_redeemed | not_found | '
+  'expired | exhausted, and not_found covers both an unknown and a disabled '
+  'code. `credited` says whether the payout is already confirmed, so only an '
+  'unconfirmed redemption is re-issued.';
 
 -- Only the Edge Function's service role may call it. `authenticated` could not
 -- get past RLS anyway, but a function that grants credit should not be on the
