@@ -430,7 +430,9 @@ class CloudCountingEngine implements CountingEngine {
     final socket = asPrimary && _primary != null
         ? _primary!.socket
         : _socketFactory();
-    _ownedSockets.add(socket);
+    // `add` answers false for the socket a reconnect reuses and for one the
+    // engine was constructed with — neither is this call's to throw away.
+    final freshlyOwned = _ownedSockets.add(socket);
 
     final connection = _Connection(socket, 'stream-${_streamSeq++}');
     _bind(connection);
@@ -449,6 +451,19 @@ class CloudCountingEngine implements CountingEngine {
         _pending = null;
       }
       connection.detach();
+      // A socket this call built and could not connect is dead weight: it
+      // still holds a channel and three controllers. `_retryRenewalLater`
+      // builds another every ten seconds until the block runs out, and
+      // nothing disposed any of them before `dispose()`.
+      if (freshlyOwned) {
+        _ownedSockets.remove(socket);
+        try {
+          await socket.dispose();
+        } catch (_) {
+          // The connect failure is the reason the caller needs; a socket that
+          // will not close on top of it adds nothing.
+        }
+      }
       rethrow;
     }
     return connection;

@@ -471,6 +471,45 @@ void main() {
         });
       });
 
+      test('every refused renewal socket is disposed, not hoarded', () {
+        fakeAsync((async) {
+          final blocks = FakeBlockService(blockSeconds: 300);
+          final engine = CloudCountingEngine(
+            blockService: blocks,
+            audioSource: audio,
+            socketFactory: () {
+              final socket = sockets.isEmpty
+                  ? FakeSpeechSocket('s1')
+                  : _RefusingSocket('s${sockets.length + 1}');
+              sockets.add(socket);
+              return socket;
+            },
+            renewalRetryDelay: const Duration(seconds: 10),
+            transcriptionSilenceTimeout: const Duration(days: 1),
+            transcriptionWatchdogInterval: const Duration(days: 1),
+          );
+
+          engine.start(testPhrase);
+          async.flushMicrotasks();
+
+          // The renewal at 270 s, then a retry every ten seconds inside the
+          // block it is trying to replace.
+          async.elapse(const Duration(seconds: 299));
+          async.flushMicrotasks();
+
+          final refused = sockets.skip(1).toList();
+          expect(refused, hasLength(greaterThan(1)));
+          expect(
+            refused.every((socket) => socket.disposed),
+            isTrue,
+            reason: 'each attempt built a real socket and only detached it',
+          );
+
+          engine.dispose();
+          async.flushTimers();
+        });
+      });
+
       test('a block bought for a renewal that failed is still released', () {
         fakeAsync((async) {
           final blocks = FakeBlockService(blockSeconds: 300);
