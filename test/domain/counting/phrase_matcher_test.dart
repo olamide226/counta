@@ -507,6 +507,14 @@ void main() {
           hasLength(1),
         );
       });
+
+      test('the unnamed stream is registered, not forgiven', () {
+        // It used to open itself inside `ingest`, which made the one id
+        // production never sends the only one a typo could not be caught by.
+        // The constructor opens it, so it closes like any other.
+        matcher.closeStream(PhraseMatcher.defaultStreamId);
+        expect(matcher.ingest(finalSegment(testPhrase.raw)), isEmpty);
+      });
     });
   });
 

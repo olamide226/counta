@@ -120,10 +120,17 @@ class PhraseMatcher {
   int _detectionsCount = 0;
   double? _lastMatchEndMs;
 
-  PhraseMatcher({required this.target, this.config = const MatcherConfig()});
+  PhraseMatcher({required this.target, this.config = const MatcherConfig()}) {
+    openStream(defaultStreamId);
+  }
 
   /// Stream id used when a caller does not name one — a session with a single
   /// connection, and every fixture replay.
+  ///
+  /// Opened by the constructor, so it is an ordinary registered stream sitting
+  /// at session zero rather than a case [ingest] has to forgive. It used to
+  /// open itself on first use, which meant the one id production never sends
+  /// was the only one a typo could not be caught by.
   static const String defaultStreamId = 'default';
 
   /// Registers a transcript stream and where its zero sits on the session
@@ -310,7 +317,8 @@ class PhraseMatcher {
   /// [streamId] names the connection the segment came from. Its offsets are
   /// rebased onto the session timeline with the offset given to [openStream],
   /// which is what lets two overlapping connections — and everything after a
-  /// reconnect — be compared against the same acceptance gate.
+  /// reconnect — be compared against the same acceptance gate. A segment on an
+  /// id nobody opened is dropped.
   List<Detection> ingest(
     TranscriptSegment segment, {
     String streamId = defaultStreamId,
@@ -323,12 +331,10 @@ class PhraseMatcher {
 
     if (normalisedTarget.isEmpty) return [];
 
-    // The default id opens on demand, for a single-connection session and
-    // every fixture replay. Any other id the engine has not opened has no
-    // place on the session timeline, so nothing said on it can be positioned.
-    final stream = streamId == defaultStreamId
-        ? _streams.putIfAbsent(defaultStreamId, () => _StreamWindow(0.0))
-        : _streams[streamId];
+    // One rule for every id, [defaultStreamId] included: a stream nobody
+    // opened has no place on the session timeline, so nothing said on it can
+    // be positioned on one.
+    final stream = _streams[streamId];
     if (stream == null) return [];
 
     final offsetSec = stream.offsetMs / 1000.0;
@@ -488,6 +494,7 @@ class PhraseMatcher {
 
   void reset() {
     _streams.clear();
+    openStream(defaultStreamId);
     _observedUtteranceDurationsMs.clear();
     _cachedMedianMs = null;
     _windowsEvaluated = 0;
