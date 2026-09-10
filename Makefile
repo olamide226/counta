@@ -155,9 +155,16 @@ build-ios-ipa:
 	@echo "   Upload via Xcode Organizer: open build/ios/archive/Runner.xcarchive"
 
 # Build for Android (APK — direct download and the GitHub release, not Play)
+#
+# Takes RELEASE_DART_DEFINES for the same reason the store targets do: this is
+# a release-mode artifact that gets published, and a .env-driven build would
+# embed DEEPGRAM_API_KEY in something anyone can unzip. The key would be dead
+# weight even if it were safe — BuildConfig.showDebugTools is a const false in
+# release, so nothing reads it. Use `make run-android` for a dev build that
+# can actually do voice.
 build-android:
 	@echo "🤖 Building Android APK..."
-	flutter build apk $(DART_DEFINES)
+	flutter build apk $(RELEASE_DART_DEFINES)
 	@echo "✅ Android build complete!"
 
 # Play-ready Android App Bundle.
