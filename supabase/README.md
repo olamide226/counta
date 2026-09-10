@@ -145,7 +145,9 @@ for a bounded window.
 
 Both answer 200 with a negative result rather than an error when the question
 has already been answered — `granted: false, reason: "already_claimed"` and
-`redeemed: false, reason: "already_redeemed"`. Every reinstall asks the first
+`redeemed: false, reason: "already_redeemed"`. The trial's answer has one shape
+whichever of its three exits produced it; which one did is the `via` field on
+the `trial_already_claimed` log line, not something the client has to parse. Every reinstall asks the first
 one and a user who taps Redeem twice asks the second, and in both cases the
 client does what it would have done anyway: show the balance.
 
@@ -153,10 +155,12 @@ The full response table is in the design doc's "Edge Function contract". Two
 things it is worth knowing before reading a log:
 
 - The trial's 503s are two different failures. `attestation_unavailable` means
-  Apple or Google could not be reached, answered `UNEVALUATED`, or rejected
-  our own credentials — the trial stays unclaimed and the client may retry
-  (req 11.9). `provider_unavailable` means the RevenueCat ledger call failed
-  after the device passed; the retry re-issues the same keyed grant.
+  Apple or Google answered without deciding — an `UNEVALUATED` verdict, or a
+  401/403 rejecting our own credentials — so the trial stays unclaimed and the
+  client may retry (req 11.9). `provider_unavailable` means an upstream could
+  not be reached or failed outright: an unreachable Apple, or the RevenueCat
+  ledger call failing after the device passed. Grep `trial_refused` for the
+  first and `provider_unavailable` for the second.
 - `invalid_attestation` (400) is the provider reading the payload and saying
   no. The same token will never pass, so a client that retries it is wasting
   the request.

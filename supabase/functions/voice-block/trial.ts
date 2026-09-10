@@ -3,7 +3,7 @@ import {
   AttestationError,
   DeviceAttestation,
   Deps,
-  ProviderError,
+  TrialGate,
   TrialPlatform,
 } from "./types.ts";
 
@@ -66,17 +66,7 @@ export async function trial(
   // and one is not.
   const existing = await trials.find(userId);
   if (existing) {
-    deps.log("trial_already_claimed", {
-      user_id: userId,
-      platform,
-      gate: existing.gate,
-      via: "grant_row",
-    });
-    return json(200, {
-      granted: false,
-      reason: "already_claimed",
-      credits: existing.credits,
-    });
+    return alreadyClaimed(deps, userId, platform, existing.gate, "grant_row");
   }
 
   let verdict: DeviceAttestation;
@@ -88,16 +78,8 @@ export async function trial(
 
   if (!verdict.eligible) {
     // iOS only: Apple's bit is already set, so this device has taken the
-    // trial under some other Supabase user (req 11.2). Not an error — every
-    // reinstall asks this question, and the client shows the paywall either
-    // way (design: Edge Function contract).
-    deps.log("trial_already_claimed", {
-      user_id: userId,
-      platform,
-      gate: attestor.gate,
-      via: "attestation",
-    });
-    return json(200, { granted: false, reason: "already_claimed" });
+    // trial under some other Supabase user (req 11.2).
+    return alreadyClaimed(deps, userId, platform, attestor.gate, "attestation");
   }
 
   // Credits before the row, and the ledger call keyed on the user id.
@@ -125,13 +107,13 @@ export async function trial(
   if (!row) {
     // A concurrent request for this same user won. Both were the one keyed
     // grant, so the user was paid once; there is nothing to undo.
-    deps.log("trial_already_claimed", {
-      user_id: userId,
+    return alreadyClaimed(
+      deps,
+      userId,
       platform,
-      gate: attestor.gate,
-      via: "insert_conflict",
-    });
-    return json(200, { granted: false, reason: "already_claimed", credits });
+      attestor.gate,
+      "insert_conflict",
+    );
   }
 
   // Last, and deliberately: the bit is what makes the device ineligible for
@@ -163,13 +145,44 @@ export async function trial(
 }
 
 /**
+ * The one "already claimed" answer.
+ *
+ * Three exits reach it — this caller already holds a grant row, Apple's bit is
+ * already set under some other user, or a concurrent request for this same
+ * user won the insert — and they used to return three differently shaped
+ * bodies, so what the client had to parse depended on which internal branch
+ * fired. The distinction is real but it is an operator's, not a client's: it
+ * lives in `via` here, where it already was.
+ *
+ * A 200 rather than an error, because it is the expected answer to an ordinary
+ * question — every reinstall asks it — and the client does what it would have
+ * done anyway: show the balance (design: Edge Function contract).
+ */
+function alreadyClaimed(
+  deps: Deps,
+  userId: string,
+  platform: TrialPlatform,
+  gate: TrialGate,
+  via: "grant_row" | "attestation" | "insert_conflict",
+): Response {
+  deps.log("trial_already_claimed", { user_id: userId, platform, gate, via });
+  return json(200, { granted: false, reason: "already_claimed" });
+}
+
+/**
  * Turns an attestation failure into the client's answer.
  *
  * The split is what the client does next. A rejection is Apple or Google
  * reading the payload and saying no, and the same token will never pass, so
- * the client must stop; anything else is an answer nobody could give, and
- * requirement 11.9 says to refuse without granting and let the client retry.
- * The trial stays unclaimed in both cases.
+ * the client must stop; an indeterminate verdict is an answer nobody could
+ * give, and requirement 11.9 says to refuse without granting and let the
+ * client retry. The trial stays unclaimed in both cases.
+ *
+ * A ProviderError is not handled here. An upstream nobody could reach is the
+ * router's 503 `provider_unavailable`, exactly as it is for RevenueCat and
+ * Deepgram; relabelling it `attestation_unavailable` gave one condition two
+ * vocabularies and left an operator reading the logs unable to tell which of
+ * them meant what.
  */
 function refuse(
   deps: Deps,
@@ -177,18 +190,14 @@ function refuse(
   platform: TrialPlatform,
   error: unknown,
 ): Response {
-  const rejected = error instanceof AttestationError &&
-    error.failure === "rejected";
-  if (!rejected && !(error instanceof AttestationError) && !(error instanceof ProviderError)) {
-    throw error;
-  }
+  if (!(error instanceof AttestationError)) throw error;
   deps.log("trial_refused", {
     user_id: userId,
     platform,
-    outcome: rejected ? "rejected" : "indeterminate",
+    outcome: error.failure,
     message: String(error),
   });
-  return rejected
+  return error.failure === "rejected"
     ? json(400, { error: "invalid_attestation" })
     : json(503, { error: "attestation_unavailable" });
 }

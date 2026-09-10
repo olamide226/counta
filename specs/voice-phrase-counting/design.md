@@ -506,8 +506,7 @@ Body: { "platform": "ios",     "device_token":    "<base64 DCDevice token>" }
 Body: { "platform": "android", "integrity_token": "<Play Integrity token>" }
 
 200 { "granted": true,  "credits": 20, "balance": 20 }
-200 { "granted": false, "reason": "already_claimed" }              // the device
-200 { "granted": false, "reason": "already_claimed", "credits": 20 } // this user
+200 { "granted": false, "reason": "already_claimed" }
 400 { "error": "invalid_attestation" }
 401 { "error": "unauthenticated" }
 409 { "error": "platform_unsupported" }
@@ -516,15 +515,20 @@ Body: { "platform": "android", "integrity_token": "<Play Integrity token>" }
 ```
 
 The two 503s are different failures and the client can treat them alike but an
-operator cannot. `attestation_unavailable` is Apple or Google being
-unreachable, answering `UNEVALUATED`, or rejecting our own credentials — the
-device is undecided and the trial stays unclaimed (Requirement 11.9).
-`provider_unavailable` is the ledger call failing after the device passed.
+operator cannot. `attestation_unavailable` is Apple or Google *answering*
+without deciding — an `UNEVALUATED` verdict, or a 401/403 that rejects our own
+credentials — so the device is undecided and the trial stays unclaimed
+(Requirement 11.9). `provider_unavailable` is any upstream that could not be
+reached or that failed outright, attestation providers included, and is the one
+the router already returns for RevenueCat and Deepgram. Giving an unreachable
+Apple its own vocabulary made one condition read as two.
 
-The `credits` field distinguishes the two "already claimed" answers without the
-client having to care: with it, this *caller* has a `counta.trial_grants` row;
-without it, this *device* has the DeviceCheck bit set under some other,
-earlier, anonymous user.
+"Already claimed" is one answer with one shape, whichever of the three exits
+produced it: this caller already holds a `counta.trial_grants` row, this
+*device* has the DeviceCheck bit set under some other earlier anonymous user,
+or a concurrent request for this same user won the insert. The distinction is
+an operator's, not a client's — the client shows the balance in every case —
+and it is carried by the `via` field on the `trial_already_claimed` log line.
 
 ```
 POST /functions/v1/voice-block/redeem

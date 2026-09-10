@@ -12,7 +12,7 @@ import {
   trialReq,
   USER,
 } from "./testing/fakes.ts";
-import { AttestationError, ProviderError } from "./types.ts";
+import { AttestationError, ProviderError, TrialPlatform } from "./types.ts";
 
 // POST /voice-block/trial — requirement 11, end to end through the handler
 // with the attestation faked. Nothing here reaches Apple or Google.
@@ -35,14 +35,16 @@ Deno.test("trial: grants once, then reports the existing outcome", async () => {
   assertEquals(granted?.fields.credits, 20);
 
   // 11.8: the retry is answered from the grant row without spending an
-  // attestation call, and pays nothing.
+  // attestation call, and pays nothing. One shape for every already-claimed
+  // answer, so the client's parse does not depend on which branch fired; the
+  // distinction an operator wants is in the log's `via`.
   const second = await call(h.deps, trialReq());
   assertEquals(second.status, 200);
-  assertEquals(second.body, {
-    granted: false,
-    reason: "already_claimed",
-    credits: 20,
-  });
+  assertEquals(second.body, { granted: false, reason: "already_claimed" });
+  assertEquals(
+    h.logs.find((l) => l.event === "trial_already_claimed")?.fields.via,
+    "grant_row",
+  );
   assertEquals(h.balance.balances.get(USER), 40);
   assertEquals(h.balance.calls.filter((c) => c.op === "grant").length, 1);
   assertEquals(h.ios.checks.length, 1);
@@ -65,51 +67,99 @@ Deno.test("trial: a device whose DeviceCheck bit is set is refused, whoever asks
   assertEquals(h.balance.calls.length, 0);
 });
 
-Deno.test("trial: an indeterminate verdict refuses without granting", async () => {
-  const ios = new FakeAttestor("devicecheck", {
-    failWith: new AttestationError("indeterminate", "appRecognitionVerdict UNEVALUATED"),
-  });
-  const h = harness({ attestors: { ios } });
+interface Refusal {
+  name: string;
+  platform: TrialPlatform;
+  failWith: Error;
+  status: number;
+  body: Record<string, unknown>;
+  /** The event that must appear, and its outcome field when it has one. */
+  event: string;
+  outcome?: string;
+}
 
-  const { status, body } = await call(h.deps, trialReq());
-
-  // 11.9: refuse, grant nothing, and let the client try again — reading an
-  // unevaluated verdict as "no" would deny a real device for ever.
-  assertEquals(status, 503);
-  assertEquals(body, { error: "attestation_unavailable" });
-  assertEquals(h.trials.rows.length, 0);
-  assertEquals(h.balance.calls.length, 0);
-  assertEquals(ios.claims, []);
-});
-
-Deno.test("trial: an unreachable attestation provider refuses without granting", async () => {
-  const ios = new FakeAttestor("devicecheck", {
+// Every way an attestation can fail to clear, and what the client is told.
+// Four near-identical tests before this: the only thing that varied was the
+// error going in and the answer coming out, which is a table.
+const REFUSALS: Refusal[] = [
+  {
+    // 11.9: Google could not evaluate the verdict. Reading that as "no" would
+    // deny a real device for ever, so it is refused and left retryable.
+    name: "an unevaluated verdict",
+    platform: "ios",
+    failWith: new AttestationError(
+      "indeterminate",
+      "appRecognitionVerdict UNEVALUATED",
+    ),
+    status: 503,
+    body: { error: "attestation_unavailable" },
+    event: "trial_refused",
+    outcome: "indeterminate",
+  },
+  {
+    // Not attestation_unavailable: an upstream nobody could reach is the
+    // router's 503, the same one RevenueCat and Deepgram get. One condition,
+    // one vocabulary.
+    name: "a provider nobody could reach",
+    platform: "ios",
     failWith: new ProviderError("unavailable", "devicecheck: connection reset"),
-  });
-  const h = harness({ attestors: { ios } });
+    status: 503,
+    body: { error: "provider_unavailable" },
+    event: "provider_unavailable",
+  },
+  {
+    // Apple read the payload and said no. The same token will never pass, so
+    // the client must stop rather than retry a 503 for ever.
+    name: "a payload the provider rejects",
+    platform: "ios",
+    failWith: new AttestationError(
+      "rejected",
+      "devicecheck 400: Bad Device Token",
+    ),
+    status: 400,
+    body: { error: "invalid_attestation" },
+    event: "trial_refused",
+    outcome: "rejected",
+  },
+  {
+    name: "an Android verdict that is not genuine",
+    platform: "android",
+    failWith: new AttestationError("rejected", "playintegrity: device []"),
+    status: 400,
+    body: { error: "invalid_attestation" },
+    event: "trial_refused",
+    outcome: "rejected",
+  },
+];
 
-  const { status, body } = await call(h.deps, trialReq());
+Deno.test("trial: every refusal grants nothing and says whether to retry", async () => {
+  for (const refusal of REFUSALS) {
+    const ios = refusal.platform === "ios";
+    const attestor = ios
+      ? new FakeAttestor("devicecheck", { failWith: refusal.failWith })
+      : androidAttestor({ failWith: refusal.failWith });
+    const h = harness({
+      attestors: ios ? { ios: attestor } : { android: attestor },
+    });
 
-  assertEquals(status, 503);
-  assertEquals(body, { error: "attestation_unavailable" });
-  assertEquals(h.trials.rows.length, 0);
-  assertEquals(h.balance.calls.length, 0);
-  const refused = h.logs.find((l) => l.event === "trial_refused");
-  assertEquals(refused?.fields.outcome, "indeterminate");
-});
+    const { status, body } = await call(
+      h.deps,
+      trialReq(ios ? undefined : ANDROID),
+    );
 
-Deno.test("trial: a payload the provider rejects is 400, not a retryable 503", async () => {
-  const ios = new FakeAttestor("devicecheck", {
-    failWith: new AttestationError("rejected", "devicecheck 400: Bad Device Token"),
-  });
-  const h = harness({ attestors: { ios } });
+    assertEquals(status, refusal.status, refusal.name);
+    assertEquals(body, refusal.body, refusal.name);
+    // Nothing was granted, recorded or claimed by any of them.
+    assertEquals(h.trials.rows.length, 0, refusal.name);
+    assertEquals(h.balance.calls.length, 0, refusal.name);
+    assertEquals(attestor.claims, [], refusal.name);
 
-  const { status, body } = await call(h.deps, trialReq());
-
-  assertEquals(status, 400);
-  assertEquals(body, { error: "invalid_attestation" });
-  assertEquals(h.trials.rows.length, 0);
-  assertEquals(h.balance.calls.length, 0);
+    const logged = h.logs.find((l) => l.event === refusal.event);
+    assertEquals(logged?.event, refusal.event, refusal.name);
+    if (refusal.outcome !== undefined) {
+      assertEquals(logged?.fields.outcome, refusal.outcome, refusal.name);
+    }
+  }
 });
 
 Deno.test("trial: Android grants on a genuine verdict and records only the row", async () => {
@@ -125,20 +175,6 @@ Deno.test("trial: Android grants on a genuine verdict and records only the row",
   // record and the gate is weaker than the iOS one by construction (11.6).
   assertEquals(h.android.claims, [INTEGRITY_TOKEN]);
   assertEquals(h.android.claimed.size, 0);
-});
-
-Deno.test("trial: Android refuses a verdict that is not genuine", async () => {
-  const android = androidAttestor({
-    failWith: new AttestationError("rejected", "playintegrity: device []"),
-  });
-  const h = harness({ attestors: { android } });
-
-  const { status, body } = await call(h.deps, trialReq(ANDROID));
-
-  assertEquals(status, 400);
-  assertEquals(body, { error: "invalid_attestation" });
-  assertEquals(h.trials.rows.length, 0);
-  assertEquals(h.balance.calls.length, 0);
 });
 
 Deno.test("trial: a platform with no attestation is not offered the trial", async () => {
@@ -208,7 +244,6 @@ Deno.test("trial: a ledger failure leaves a retry able to finish it, paying once
   assertEquals((await call(h.deps, trialReq())).body, {
     granted: false,
     reason: "already_claimed",
-    credits: 20,
   });
   assertEquals(h.balance.balances.get(USER), 40);
 });
@@ -238,6 +273,12 @@ Deno.test("trial: a grant row written by a concurrent request pays out once", as
 
   assertEquals([a.status, b.status], [200, 200]);
   assertEquals([a.body.granted, b.body.granted].sort(), [false, true]);
+  // Whichever lost was told so through the insert-conflict exit, in the same
+  // shape the other two use.
+  assertEquals(
+    h.logs.find((l) => l.event === "trial_already_claimed")?.fields.via,
+    "insert_conflict",
+  );
   assertEquals(h.trials.rows.length, 1);
   // Both requests issued the same keyed grant, so the ledger applied it once.
   assertEquals(h.balance.balances.get(USER), 40);
