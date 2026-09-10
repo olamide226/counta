@@ -193,6 +193,38 @@ void main() {
         });
       });
 
+      test('restarting a live engine disarms the old renewal timer', () {
+        fakeAsync((async) {
+          // `SessionController.startSession` restarts the engine it already
+          // has. The replaced run's renewal timer used to survive that and go
+          // on buying blocks for a session that no longer existed.
+          final blocks = FakeBlockService(blockSeconds: 10);
+          final engine = engineWith(blocks);
+
+          engine.start(testPhrase);
+          async.flushMicrotasks();
+
+          async.elapse(const Duration(seconds: 5));
+          engine.start(testPhrase);
+          async.flushMicrotasks();
+          expect(blocks.acquiredSessionIds, hasLength(2));
+
+          // Nine seconds into the *replaced* run. Its orphaned timer used to
+          // fire here and buy a block the live run had no use for.
+          async.elapse(const Duration(seconds: 4));
+          async.flushMicrotasks();
+          expect(blocks.acquiredSessionIds, hasLength(2));
+
+          // Nine seconds into the run that is actually live.
+          async.elapse(const Duration(seconds: 5));
+          async.flushMicrotasks();
+          expect(blocks.acquiredSessionIds, hasLength(3));
+
+          engine.dispose();
+          async.flushTimers();
+        });
+      });
+
       test('giving up on a reconnect releases the block and the mic', () async {
         final blocks = FakeBlockService(blockSeconds: 300);
         final socket = _RefusableSocket('s1');

@@ -340,6 +340,11 @@ class CloudCountingEngine implements CountingEngine {
           normalisedTokens: ['i', 'am', 'rich', 'in', 'wisdom'],
         );
 
+    // `startSession` can restart a live engine, and every timer below belongs
+    // to the run being replaced — the renewal one above all, which would go
+    // on buying blocks for a session that no longer exists.
+    _cancelTimers();
+
     _seq = 0;
     _voiceCount = 0;
     _manualCount = 0;
