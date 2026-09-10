@@ -121,7 +121,12 @@ class AudioSource {
   Future<void> _startCapture(int sampleRate) async {
     final hasPerm = await hasPermission();
     if (!hasPerm) {
-      _controller?.addError(StateError('Microphone permission not granted'));
+      // Typed, because the engine maps exactly this to
+      // EngineStatus.permissionDenied and the UI offers a settings link off
+      // that status. A generic StateError took the "unknown failure" branch
+      // instead, so a real refusal showed the wrong screen — the tests missed
+      // it because the fake source raised the right type all along.
+      _controller?.addError(const AudioSourcePermissionDenied());
       return;
     }
 
