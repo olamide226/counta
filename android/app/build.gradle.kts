@@ -14,7 +14,7 @@ plugins {
 // Release builds are signed with the *upload* key, not the app signing key:
 // Play App Signing holds the key that actually signs what users install, and
 // this one only proves to Google that an upload came from us. See
-// docs/RELEASING.md for how to create it and why that distinction matters.
+// docs/RELEASE-BACKGROUND.md for how to create it and why that matters.
 //
 // The material lives in android/key.properties, which is gitignored along with
 // *.jks / *.keystore. This is a public repository — nothing here may read a
@@ -58,7 +58,7 @@ if (!hasUploadKey && requireReleaseSigning) {
             appendLine("No upload key configured, but this build is marked as store-bound.")
             appendLine("Expected android/key.properties with: ${uploadKeyFields.joinToString(", ")}")
             appendLine("Copy android/key.properties.example and fill it in.")
-            append("See docs/RELEASING.md, 'Android release signing'.")
+            append("See docs/RELEASE-BACKGROUND.md, 'Android release signing'.")
         },
     )
 }

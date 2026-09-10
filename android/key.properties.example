@@ -16,7 +16,7 @@
 #
 # Back the .jks file and its passwords up somewhere you will still have them in
 # five years. Losing the upload key is recoverable through Play support only
-# because Google holds the app signing key — see docs/RELEASING.md.
+# because Google holds the app signing key — see docs/RELEASE-BACKGROUND.md.
 
 # Path to the keystore. Absolute is safest. A relative path resolves against
 # the android/ directory (where this file lives), not android/app/.

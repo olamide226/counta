@@ -239,8 +239,12 @@ The core application logic that determines app behavior is well-tested and relia
 
 ## 🚢 Releasing
 
-Signing, versioning, build commands, cadence, run books for Play and the App
-Store, rollback, and the current known limitations: **[docs/RELEASING.md](docs/RELEASING.md)**.
+Versioning, build commands, the preflight checklist, run books for Play and
+the App Store, and rollback: **[docs/RELEASING.md](docs/RELEASING.md)**.
+
+Why that process is shaped the way it is — cadence, Play App Signing, upload-key
+and CI secret setup, and the current known limitations:
+**[docs/RELEASE-BACKGROUND.md](docs/RELEASE-BACKGROUND.md)**.
 
 If you have forked this repo, that document is written to work for your own
 copy — you supply your own upload key and store accounts.

@@ -14,10 +14,10 @@ permissions:
   contents: write
 
 env:
-  # One pin for every job. docs/RELEASE-BACKGROUND.md explains why it must
-  # equal the version you build with locally: targetSdk resolves from
-  # flutter.targetSdkVersion, so a runner on an older Flutter silently targets
-  # a lower API level than the artifact you verified.
+  # One pin for every job. It must equal the version you build with locally:
+  # targetSdk resolves from flutter.targetSdkVersion, so a runner on an older
+  # Flutter silently targets a lower API level than the artifact you verified.
+  # See docs/RELEASING.md section 7.
   FLUTTER_VERSION: '3.44.8'
 
 jobs:
