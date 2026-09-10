@@ -457,9 +457,17 @@ class CloudCountingEngine implements CountingEngine {
   void _bind(_Connection connection) {
     connection.state = connection.socket.state.listen((socketState) {
       // Only the connection carrying the session drives engine state. A
-      // pending renewal's transitions are the renewal's business, and a
-      // retired connection's close is the engine's own teardown.
-      if (!identical(connection, _primary)) return;
+      // retired connection's close is the engine's own teardown. A pending
+      // renewal's transitions are the renewal's business — except for the two
+      // that mean it will never carry anything.
+      if (!identical(connection, _primary)) {
+        if (identical(connection, _pending) &&
+            (socketState == SocketState.disconnected ||
+                socketState == SocketState.error)) {
+          _abandonPendingConnection(connection);
+        }
+        return;
+      }
 
       switch (socketState) {
         case SocketState.connecting:
@@ -625,6 +633,29 @@ class CloudCountingEngine implements CountingEngine {
       _overlapTimer = null;
       unawaited(_retireOutgoing(next));
     });
+  }
+
+  /// Cancels a renewal whose incoming connection died before the seam ended.
+  ///
+  /// [_retireOutgoing] would otherwise promote the dead socket and gracefully
+  /// close the healthy one. `SocketState` has no replay and the transcription
+  /// watchdog only ever watches the primary, so the session went quiet with
+  /// nothing on screen to say why. The block the renewal bought is live
+  /// either way, and its own timers still govern what happens next.
+  void _abandonPendingConnection(_Connection pending) {
+    if (!identical(_pending, pending)) return;
+    _pending = null;
+    _overlapTimer?.cancel();
+    _overlapTimer = null;
+
+    _report(
+      pending.socket.closeDescription ??
+          'A renewed voice connection dropped; staying on the current one.',
+    );
+    pending.detach();
+    _matcher?.closeStream(pending.streamId);
+    _ownedSockets.remove(pending.socket);
+    unawaited(pending.socket.dispose());
   }
 
   Future<void> _retireOutgoing(_Connection next) async {

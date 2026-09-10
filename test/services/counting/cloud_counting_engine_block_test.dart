@@ -426,6 +426,51 @@ void main() {
         });
       });
 
+      test('a renewal connection that dies leaves the seam alone', () {
+        fakeAsync((async) {
+          final blocks = FakeBlockService(blockSeconds: 300);
+          final engine = engineWith(
+            blocks,
+            renewalOverlap: const Duration(seconds: 3),
+          );
+
+          engine.start(testPhrase);
+          async.flushMicrotasks();
+          async.elapse(const Duration(seconds: 270));
+          async.flushMicrotasks();
+          expect(sockets, hasLength(2));
+
+          // The incoming connection opens and then dies inside the seam.
+          sockets[1].emitDrop(reason: 'renewal socket hung up');
+          async.flushMicrotasks();
+
+          async.elapse(const Duration(seconds: 3));
+          async.flushMicrotasks();
+
+          // The dead socket used to be promoted and the healthy one closed,
+          // which left the session with no connection at all and no status
+          // change to say so — it simply stopped counting.
+          expect(
+            sockets[0].closeCount,
+            0,
+            reason: 'the healthy connection carries the session on',
+          );
+          expect(sockets[1].disposed, isTrue);
+          expect(engine.currentBlock?.id, 'block-2');
+
+          audio.emitFrame();
+          async.flushMicrotasks();
+          sockets[0].emitSegment(
+            finalSegment("I'm rich in wisdom", start: 300.0, duration: 1.0),
+          );
+          async.flushMicrotasks();
+          expect(engine.voiceCount, 1);
+
+          engine.dispose();
+          async.flushTimers();
+        });
+      });
+
       test('a block bought for a renewal that failed is still released', () {
         fakeAsync((async) {
           final blocks = FakeBlockService(blockSeconds: 300);
