@@ -15,7 +15,7 @@ export function providerFetch(
   url: string,
   init: RequestInit,
 ): Promise<Response> {
-  return dispatch(provider, fetchFn, url, init, NO_PASS_THROUGH);
+  return dispatch(provider, fetchFn, url, init);
 }
 
 /**
@@ -65,7 +65,7 @@ async function dispatch(
   fetchFn: typeof fetch,
   url: string,
   init: RequestInit,
-  passThrough: readonly number[],
+  passThrough: readonly number[] = [],
 ): Promise<Response> {
   const what = `${provider}: ${init.method ?? "GET"} ${url}`;
 
@@ -99,4 +99,3 @@ function retryAfterMs(response: Response): number | undefined {
 
 /** 400 is the client's payload; 401 and 403 are our own credentials. */
 const PASS_THROUGH = [400, 401, 403] as const;
-const NO_PASS_THROUGH = [] as const;

@@ -1,7 +1,6 @@
 import { assertEquals } from "@std/assert";
 import {
   call,
-  CONFIG,
   FakeTokenMinter,
   grantReq,
   harness,
@@ -9,6 +8,7 @@ import {
   releaseReq,
   SESSION,
   tokenFor,
+  TOKEN_MINT,
   tokenReq,
   USER,
 } from "./testing/fakes.ts";
@@ -103,7 +103,7 @@ Deno.test("token: the mint budget is per user and lifts with its window", async 
   const granted = await call(h.deps, grantReq());
   const body = { block_id: granted.body.block_id };
 
-  for (let i = 0; i < CONFIG.tokenMintMax; i++) {
+  for (let i = 0; i < TOKEN_MINT.max; i++) {
     assertEquals((await call(h.deps, tokenReq(body))).status, 200, `mint ${i}`);
   }
 
@@ -111,7 +111,7 @@ Deno.test("token: the mint budget is per user and lifts with its window", async 
   assertEquals(limited.status, 429);
   // The same answer the block budget gives, from a different store: the hint
   // in the body and in the header, counted from the oldest mint in the window.
-  const retryAfter = CONFIG.tokenMintWindowMinutes * 60;
+  const retryAfter = TOKEN_MINT.windowMinutes * 60;
   assertEquals(limited.body, {
     error: "rate_limited",
     retry_after_seconds: retryAfter,
@@ -120,7 +120,7 @@ Deno.test("token: the mint budget is per user and lifts with its window", async 
   assertEquals(h.logs.some((l) => l.event === "token_rate_limited"), true);
   // Refused before Deepgram was asked: an unmetered mint route is an
   // unmetered path to provider credentials.
-  assertEquals(h.minter.minted, CONFIG.tokenMintMax + 1); // +1 for the grant
+  assertEquals(h.minter.minted, TOKEN_MINT.max + 1); // +1 for the grant
 
   // Another caller has their own budget.
   const other = harness();
@@ -135,7 +135,7 @@ Deno.test("token: the mint budget is per user and lifts with its window", async 
 
   // A refused request is not itself counted, so the window can clear.
   h.clock.now = new Date(
-    h.clock.now.getTime() + CONFIG.tokenMintWindowMinutes * 60_000 + 1000,
+    h.clock.now.getTime() + TOKEN_MINT.windowMinutes * 60_000 + 1000,
   );
   // The block is long gone by then, but the limiter has let go: a 404 rather
   // than a 429 is what says the budget lifted.

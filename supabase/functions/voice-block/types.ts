@@ -2,6 +2,8 @@
 // (request, deps) so every collaborator here has a fake for tests and a real
 // adapter for production (see providers/ and store.ts).
 
+import type { MemoryRateLimiter } from "./ratelimit.ts";
+
 /** Why an upstream provider call failed. */
 export type ProviderFailure = "rate_limited" | "unavailable";
 
@@ -139,19 +141,6 @@ export interface BlockStore {
 }
 
 /**
- * A budget on a route that writes nothing and so has no rows to count.
- *
- * One method, deliberately: `allow` both asks and records, because a limiter
- * that separates the two invites a caller to check and then forget to charge.
- * `ratelimit.ts` holds the only implementation; it is a port so tests can
- * drive the window without a clock.
- */
-export interface RateLimiter {
-  /** Records this hit and reports whether it is within budget. */
-  allow(key: string, now: Date): RateDecision;
-}
-
-/**
  * What a budget decided, in the shape every budget here answers in.
  *
  * `retryAfterSeconds` is the whole reason this is a record rather than a
@@ -177,9 +166,6 @@ export interface HandlerConfig {
   refundWindowSeconds: number;
   rateLimitMax: number;
   rateLimitWindowMinutes: number;
-  /** Token mints allowed per user per window on /token. */
-  tokenMintMax: number;
-  tokenMintWindowMinutes: number;
   /** Credits the one-per-device trial pays out (req 4.3). */
   trialCredits: number;
   /** Failed voucher redemptions allowed per user per window (req 12.8). */
@@ -192,8 +178,17 @@ export interface Deps {
   balance: BalanceProvider;
   minter: TokenMinter;
   blocks: BlockStore;
-  /** Budget for /token, which mints a credential but writes no row. */
-  tokenLimiter: RateLimiter;
+  /**
+   * Budget for /token, which mints a credential but writes no row.
+   *
+   * The concrete class, not a port. There was an interface here with one
+   * implementation, justified as a seam tests could drive — but the clock is
+   * injected separately and every test constructs MemoryRateLimiter directly,
+   * so nothing was ever substituted through it. Re-introduce it on the day a
+   * Postgres-backed limiter exists, which is the condition ratelimit.ts's own
+   * comment already names.
+   */
+  tokenLimiter: MemoryRateLimiter;
   trials: TrialStore;
   vouchers: VoucherStore;
   /**

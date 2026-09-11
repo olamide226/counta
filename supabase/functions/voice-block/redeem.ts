@@ -21,7 +21,6 @@ export async function redeem(
   userId: string,
 ): Promise<Response> {
   const { config, vouchers, balance } = deps;
-  const now = deps.now();
 
   const body = await readJson(req);
   const raw = body?.code;
@@ -95,7 +94,7 @@ export async function redeem(
     // False on a repeat of a redemption that has already been paid for: the
     // answer is the same, but no credit moved.
     granted: balanceAfter !== undefined,
-    redeemed_at: now.toISOString(),
+    redeemed_at: deps.now().toISOString(),
   });
 
   // The balance is reported only when it moved, as a release reports a refund:

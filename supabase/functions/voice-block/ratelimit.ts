@@ -1,4 +1,4 @@
-import type { RateDecision, RateLimiter } from "./types.ts";
+import type { RateDecision } from "./types.ts";
 
 /**
  * A sliding-window counter held in the worker's memory.
@@ -16,7 +16,7 @@ import type { RateDecision, RateLimiter } from "./types.ts";
  * `RATE_LIMIT_MAX` blocks per window. Tighten it into the database only if the
  * looseness ever shows up in the Deepgram bill.
  */
-export class MemoryRateLimiter implements RateLimiter {
+export class MemoryRateLimiter {
   /**
    * Hit times per key, and — because a Map iterates in insertion order and
    * every touch below re-inserts — least-recently-seen key first. That
@@ -38,6 +38,13 @@ export class MemoryRateLimiter implements RateLimiter {
     return this.hits.size;
   }
 
+  /**
+   * Records this hit and reports whether it is within budget.
+   *
+   * One method, deliberately: asking and recording are the same call, because
+   * a limiter that separates them invites a caller to check and then forget to
+   * charge.
+   */
   allow(key: string, now: Date): RateDecision {
     const at = now.getTime();
     const cutoff = at - this.windowMs;

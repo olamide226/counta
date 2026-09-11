@@ -225,14 +225,17 @@ export const CONFIG: HandlerConfig = {
   refundWindowSeconds: 30,
   rateLimitMax: 6,
   rateLimitWindowMinutes: 10,
-  // Small on purpose: a test that has to mint twenty tokens to reach the
-  // limit is a test nobody reads.
-  tokenMintMax: 4,
-  tokenMintWindowMinutes: 5,
   trialCredits: 20,
   voucherAttemptMax: 3,
   voucherAttemptWindowMinutes: 60,
 };
+
+/**
+ * The /token mint budget. Not in CONFIG, because no handler reads it — only
+ * the limiter's constructor does (types.ts). Small on purpose: a test that has
+ * to mint twenty tokens to reach the limit is a test nobody reads.
+ */
+export const TOKEN_MINT = { max: 4, windowMinutes: 5 };
 
 export interface Harness {
   deps: Deps;
@@ -282,8 +285,8 @@ export function harness(
     minter,
     blocks,
     tokenLimiter: new MemoryRateLimiter(
-      CONFIG.tokenMintMax,
-      CONFIG.tokenMintWindowMinutes * 60_000,
+      TOKEN_MINT.max,
+      TOKEN_MINT.windowMinutes * 60_000,
     ),
     trials,
     vouchers,
