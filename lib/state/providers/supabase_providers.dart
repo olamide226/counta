@@ -51,7 +51,7 @@ final blockServiceProvider = Provider<BlockService?>((ref) {
         // Waits for anonymous sign-in rather than racing it: a session
         // started in the first seconds of a cold launch would otherwise look
         // signed out and be refused a block it is entitled to.
-        startup: () => ref.read(supabaseSessionProvider.future),
+        startup: ref.read(supabaseSessionProvider.future),
         currentSession: () => auth.currentSession,
         refresh: () async => (await auth.refreshSession()).session,
         signInAnonymously: () async => (await auth.signInAnonymously()).session,
@@ -74,18 +74,23 @@ final blockServiceProvider = Provider<BlockService?>((ref) {
 /// `isExpired` latches true the moment its own `exp` passes, so reading it
 /// sent every later acquire, release and renewal retry through a full
 /// `refreshSession()` round trip.
+/// [startup] is the future itself, not a thunk that makes one: there is a
+/// single production call site and it already holds the provider's memoised
+/// future. Awaiting it decides only whether this build has a backend at all —
+/// the session to run with comes from [currentSession], and a null one there
+/// signs back in like any other missing session rather than falling back to
+/// the snapshot.
 @visibleForTesting
 Future<String?> resolveAccessToken({
-  required Future<Session?> Function() startup,
+  required Future<Session?> startup,
   required Session? Function() currentSession,
   required Future<Session?> Function() refresh,
   required Future<Session?> Function() signInAnonymously,
 }) async {
-  final started = await startup();
-  if (started == null) return null;
+  if (await startup == null) return null;
 
   final session = await resolveSupabaseSession(
-    existing: currentSession() ?? started,
+    existing: currentSession(),
     refresh: refresh,
     signInAnonymously: signInAnonymously,
   );

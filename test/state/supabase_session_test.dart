@@ -111,7 +111,7 @@ void main() {
       final live = _session(DateTime.now().add(const Duration(hours: 1)));
 
       final token = await resolveAccessToken(
-        startup: () async => snapshot,
+        startup: Future.value(snapshot),
         currentSession: () => live,
         refresh: () async => fail('the SDK has already refreshed'),
         signInAnonymously: () async => fail('there is a live session'),
@@ -125,7 +125,7 @@ void main() {
       final refreshed = _session(DateTime.now().add(const Duration(hours: 1)));
 
       final token = await resolveAccessToken(
-        startup: () async => stale,
+        startup: Future.value(stale),
         currentSession: () => stale,
         refresh: () async => refreshed,
         signInAnonymously: () async => fail('the refresh answered'),
@@ -141,7 +141,7 @@ void main() {
       final fresh = _session(DateTime.now().add(const Duration(hours: 1)));
 
       final token = await resolveAccessToken(
-        startup: () async => stale,
+        startup: Future.value(stale),
         currentSession: () => stale,
         refresh: () async => throw AuthSessionMissingException(),
         signInAnonymously: () async => fresh,
@@ -152,7 +152,7 @@ void main() {
 
     test('a build with no backend session has no credential', () async {
       final token = await resolveAccessToken(
-        startup: () async => null,
+        startup: Future<Session?>.value(),
         currentSession: () => fail('nothing was signed in'),
         refresh: () async => fail('nothing to refresh'),
         signInAnonymously: () async => fail('startup already decided'),
