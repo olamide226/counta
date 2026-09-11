@@ -1,32 +1,34 @@
+import { redeem } from "./redeem.ts";
+import { secondsUntilClear } from "./ratelimit.ts";
+import { isUuid, json, rateLimited, readJson } from "./respond.ts";
+import { mintToken } from "./token.ts";
+import { trial } from "./trial.ts";
 import { BlockConflictError, Deps, ProviderError } from "./types.ts";
 
-// Pure request handler for POST /voice-block and POST /voice-block/release.
-// No Deno.env, no network: everything arrives through `deps`, which is what
-// makes index_test.ts possible without a running stack.
+// Pure request handler for the five POST routes under /voice-block. No
+// Deno.env, no network: everything arrives through `deps`, which is what makes
+// index_test.ts possible without a running stack.
+//
+// Every route verifies the same JWT and every credit movement goes through the
+// same BalanceProvider, so there is one code path that moves money and one
+// place to audit it (design: Edge Function contract).
 
-const UUID_RE =
-  /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
-
-export function json(status: number, body: Record<string, unknown>): Response {
-  return new Response(JSON.stringify(body), {
-    status,
-    headers: { "Content-Type": "application/json" },
-  });
-}
+/** Suffix -> route. The bare function name is the block grant. */
+const ROUTES: Record<
+  string,
+  (req: Request, deps: Deps, userId: string) => Promise<Response>
+> = {
+  "/voice-block": grant,
+  "/release": release,
+  "/token": mintToken,
+  "/trial": trial,
+  "/redeem": redeem,
+};
 
 function bearerToken(req: Request): string | null {
   const header = req.headers.get("Authorization") ?? "";
   const match = /^Bearer\s+(.+)$/i.exec(header.trim());
   return match ? match[1].trim() : null;
-}
-
-async function readJson(req: Request): Promise<Record<string, unknown> | null> {
-  try {
-    const body = await req.json();
-    return body && typeof body === "object" ? body : null;
-  } catch {
-    return null;
-  }
 }
 
 export async function handleVoiceBlock(
@@ -38,8 +40,8 @@ export async function handleVoiceBlock(
   }
 
   const path = new URL(req.url).pathname.replace(/\/+$/, "");
-  const isRelease = path.endsWith("/release");
-  if (!isRelease && !path.endsWith("/voice-block")) {
+  const suffix = Object.keys(ROUTES).find((s) => path.endsWith(s));
+  if (!suffix) {
     return json(404, { error: "not_found" });
   }
 
@@ -50,9 +52,7 @@ export async function handleVoiceBlock(
   }
 
   try {
-    return isRelease
-      ? await release(req, deps, userId)
-      : await grant(req, deps, userId);
+    return await ROUTES[suffix](req, deps, userId);
   } catch (error) {
     if (error instanceof ProviderError) {
       deps.log("provider_unavailable", {
@@ -72,7 +72,7 @@ async function grant(req: Request, deps: Deps, userId: string): Promise<Response
 
   const body = await readJson(req);
   const sessionId = body?.session_id;
-  if (typeof sessionId !== "string" || !UUID_RE.test(sessionId)) {
+  if (typeof sessionId !== "string" || !isUuid(sessionId)) {
     return json(400, { error: "invalid_session_id" });
   }
 
@@ -82,13 +82,25 @@ async function grant(req: Request, deps: Deps, userId: string): Promise<Response
   const windowStart = new Date(
     now.getTime() - config.rateLimitWindowMinutes * 60_000,
   );
-  const [recent, live] = await Promise.all([
-    blocks.countGrantsSince(userId, windowStart),
+  const [grants, live] = await Promise.all([
+    blocks.grantsSince(userId, windowStart),
     blocks.findLiveBlock(userId, now),
   ]);
-  if (recent >= config.rateLimitMax) {
-    deps.log("rate_limited", { user_id: userId, recent });
-    return json(429, { error: "rate_limited" });
+  if (grants.count >= config.rateLimitMax) {
+    // The oldest grant in the window is what says when it has room again —
+    // the same arithmetic the mint budget does in memory and the redemption
+    // transaction does in SQL, so all three publish one answer (respond.ts).
+    const retryAfter = secondsUntilClear(
+      (grants.oldest ?? now).getTime(),
+      config.rateLimitWindowMinutes * 60_000,
+      now.getTime(),
+    );
+    deps.log("rate_limited", {
+      user_id: userId,
+      recent: grants.count,
+      retry_after_seconds: retryAfter,
+    });
+    return rateLimited(retryAfter);
   }
 
   // 3.8 / 3.9: one live block per user, with renewal identified rather than
@@ -198,7 +210,7 @@ async function release(req: Request, deps: Deps, userId: string): Promise<Respon
 
   const body = await readJson(req);
   const blockId = body?.block_id;
-  if (typeof blockId !== "string" || !UUID_RE.test(blockId)) {
+  if (typeof blockId !== "string" || !isUuid(blockId)) {
     return json(400, { error: "invalid_block_id" });
   }
   // A refund costs real money, so it may only be granted on a count the client

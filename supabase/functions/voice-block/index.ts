@@ -3,11 +3,18 @@
 // except as constructor arguments to the adapters that need them.
 
 import { createClient } from "@supabase/supabase-js";
-import { handleVoiceBlock, json } from "./handler.ts";
+import { buildAttestors } from "./attestors.ts";
+import { handleVoiceBlock } from "./handler.ts";
+import { json } from "./respond.ts";
 import { RevenueCatBalanceProvider } from "./providers/balance.ts";
 import { DeepgramTokenMinter } from "./providers/minter.ts";
 import { SupabaseAuthenticator } from "./auth.ts";
-import { SupabaseBlockStore } from "./store.ts";
+import { MemoryRateLimiter } from "./ratelimit.ts";
+import {
+  SupabaseBlockStore,
+  SupabaseTrialStore,
+  SupabaseVoucherStore,
+} from "./store.ts";
 import type { Deps, HandlerConfig } from "./types.ts";
 
 function env(name: string): string | undefined {
@@ -35,7 +42,27 @@ function buildConfig(): HandlerConfig {
     refundWindowSeconds: intEnv("REFUND_WINDOW_SECONDS", 30),
     rateLimitMax: intEnv("RATE_LIMIT_MAX", 6),
     rateLimitWindowMinutes: intEnv("RATE_LIMIT_WINDOW_MINUTES", 10),
+    trialCredits: intEnv("TRIAL_CREDITS", 20),
+    voucherAttemptMax: intEnv("VOUCHER_ATTEMPT_MAX", 10),
+    voucherAttemptWindowMinutes: intEnv("VOUCHER_ATTEMPT_WINDOW_MINUTES", 60),
   };
+}
+
+/**
+ * Keeps the worker alive for work started before the response and finishing
+ * after it (the DeviceCheck bit write).
+ *
+ * `EdgeRuntime` is the Supabase edge runtime's global and is absent under
+ * `deno test` and `deno run`. Its absence is not a failure: the promise has
+ * already been started and still runs — all that is lost is the guarantee
+ * that the isolate stays up for it, which is exactly the guarantee only a
+ * deployed worker can give.
+ */
+function afterResponse(work: Promise<unknown>): void {
+  const runtime = (globalThis as {
+    EdgeRuntime?: { waitUntil?: (work: Promise<unknown>) => void };
+  }).EdgeRuntime;
+  runtime?.waitUntil?.(work);
 }
 
 /** One log line shape everywhere, so the function logs stay greppable. */
@@ -60,15 +87,27 @@ function deps(): Deps {
     auth: { persistSession: false, autoRefreshToken: false },
   });
 
+  const config = buildConfig();
   const built: Deps = {
     auth: new SupabaseAuthenticator({
       client: admin,
       jwksUrl: `${supabaseUrl}/auth/v1/.well-known/jwks.json`,
     }),
     blocks: new SupabaseBlockStore(admin),
-    // Only the real adapters are reachable from here. The fakes live in
-    // testing/ and are never imported by this module, so no environment
-    // variable can turn the deployed function into a free-credit dispenser.
+    // Read here rather than through HandlerConfig: no handler asks what the
+    // mint budget is, only this constructor does, and a config field nothing
+    // reads makes "what the handler needs" mean something looser.
+    tokenLimiter: new MemoryRateLimiter(
+      intEnv("TOKEN_MINT_MAX", 20),
+      intEnv("TOKEN_MINT_WINDOW_MINUTES", 5) * 60_000,
+    ),
+    trials: new SupabaseTrialStore(admin),
+    vouchers: new SupabaseVoucherStore(admin),
+    attestors: buildAttestors(env),
+    // Only the real adapters are reachable from here. The fakes — including
+    // the attestor that says every device is eligible — live in testing/ and
+    // are never imported by this module, so no environment variable can turn
+    // the deployed function into a free-credit dispenser.
     balance: new RevenueCatBalanceProvider({
       secretKey: requireEnv("REVENUECAT_SECRET_KEY"),
       projectId: requireEnv("REVENUECAT_PROJECT_ID"),
@@ -77,9 +116,10 @@ function deps(): Deps {
     minter: new DeepgramTokenMinter({
       apiKey: requireEnv("DEEPGRAM_API_KEY"),
     }),
-    config: buildConfig(),
+    config,
     now: () => new Date(),
     newBlockId: () => crypto.randomUUID(),
+    afterResponse,
     log,
   };
   cachedDeps = built;

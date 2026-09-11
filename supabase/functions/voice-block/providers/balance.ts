@@ -20,6 +20,12 @@ const MAX_WRITE_RETRIES = 2;
  */
 const MAX_BACKOFF_MS = 2_000;
 
+/**
+ * Pages of the balance list to walk before giving up. A project has a handful
+ * of virtual currencies, so this is only ever a bound on a runaway cursor.
+ */
+const MAX_BALANCE_PAGES = 5;
+
 export interface RevenueCatOptions {
   secretKey: string;
   projectId: string;
@@ -29,8 +35,14 @@ export interface RevenueCatOptions {
   sleep?: (ms: number) => Promise<void>;
 }
 
+/**
+ * `object: "list"` of `virtual_currency_balance` items, per the documented
+ * example response. `next_page` is a path relative to the host, already
+ * carrying `/v2` and the `starting_after` cursor.
+ */
 interface VirtualCurrencyList {
   items?: Array<{ currency_code?: string; balance?: number }>;
+  next_page?: string | null;
 }
 
 /**
@@ -42,6 +54,8 @@ interface VirtualCurrencyList {
  *   POST /projects/{p}/customers/{c}/virtual_currencies/transactions
  *        { adjustments: { [code]: delta }, reference }
  * Both live in the Virtual Currencies domain, rate limited to 480 req/min.
+ * The transactions response is the same balance list as the GET, so a write
+ * reports the balance it produced without a second round trip.
  */
 export class RevenueCatBalanceProvider implements BalanceProvider {
   private readonly fetchFn: typeof fetch;
@@ -53,13 +67,17 @@ export class RevenueCatBalanceProvider implements BalanceProvider {
       ((ms) => new Promise((resolve) => setTimeout(resolve, ms)));
   }
 
-  async getBalance(userId: string): Promise<number> {
-    const list = await this.request<VirtualCurrencyList>(
-      "GET",
-      `${this.customerPath(userId)}/virtual_currencies?include_empty_balances=true`,
-      { retries: 0 },
+  /**
+   * The balance list is paginated, and a currency that fell onto page two
+   * would otherwise read as a zero balance — which fails every grant with a
+   * 402 that no amount of buying credit would fix. `include_empty_balances`
+   * keeps the currency present even at zero, `limit` makes a second page
+   * unlikely, and the cursor is followed for the case where it happens anyway.
+   */
+  getBalance(userId: string): Promise<number> {
+    return this.readBalance(
+      `${this.customerPath(userId)}/virtual_currencies?include_empty_balances=true&limit=100`,
     );
-    return this.balanceFrom(list);
   }
 
   spend(userId: string, blockId: string, credits: number): Promise<number> {
@@ -74,6 +92,10 @@ export class RevenueCatBalanceProvider implements BalanceProvider {
     );
   }
 
+  grant(userId: string, reference: string, credits: number): Promise<number> {
+    return this.adjust(userId, Math.abs(credits), reference);
+  }
+
   private async adjust(
     userId: string,
     delta: number,
@@ -81,14 +103,35 @@ export class RevenueCatBalanceProvider implements BalanceProvider {
   ): Promise<number> {
     const list = await this.request<VirtualCurrencyList>(
       "POST",
-      `${this.customerPath(userId)}/virtual_currencies/transactions?include_empty_balances=true`,
+      `${this.customerPath(userId)}/virtual_currencies/transactions?include_empty_balances=true&limit=100`,
       {
         body: { adjustments: { [this.opts.currencyCode]: delta }, reference },
         idempotencyKey: reference,
         retries: MAX_WRITE_RETRIES,
       },
     );
-    return this.balanceFrom(list);
+    const balance = this.balanceFrom(list);
+    // The currency this call just moved is normally on the first page of the
+    // response. If it is not, re-read rather than guess how to page a POST.
+    return balance ?? (list.next_page ? await this.getBalance(userId) : 0);
+  }
+
+  private async readBalance(firstPage: string): Promise<number> {
+    let path: string | undefined = firstPage;
+    for (let page = 0; page < MAX_BALANCE_PAGES && path; page++) {
+      const list: VirtualCurrencyList = await this.request<VirtualCurrencyList>(
+        "GET",
+        path,
+        { retries: 0 },
+      );
+      const balance = this.balanceFrom(list);
+      if (balance !== undefined) return balance;
+      // `next_page` already carries the /v2 prefix that BASE_URL supplies.
+      path = list.next_page?.replace(/^\/v2/, "") ?? undefined;
+    }
+    // A currency absent from every page is a currency the project does not
+    // have — a zero balance, which the handler answers with 402.
+    return 0;
   }
 
   private customerPath(userId: string): string {
@@ -97,11 +140,12 @@ export class RevenueCatBalanceProvider implements BalanceProvider {
     }`;
   }
 
-  private balanceFrom(list: VirtualCurrencyList): number {
+  /** The configured currency's balance, or undefined if it is not on this page. */
+  private balanceFrom(list: VirtualCurrencyList): number | undefined {
     const match = (list.items ?? []).find(
       (item) => item.currency_code === this.opts.currencyCode,
     );
-    return match?.balance ?? 0;
+    return match === undefined ? undefined : match.balance ?? 0;
   }
 
   private async request<T>(

@@ -2,6 +2,8 @@
 // (request, deps) so every collaborator here has a fake for tests and a real
 // adapter for production (see providers/ and store.ts).
 
+import type { MemoryRateLimiter } from "./ratelimit.ts";
+
 /** Why an upstream provider call failed. */
 export type ProviderFailure = "rate_limited" | "unavailable";
 
@@ -54,6 +56,21 @@ export interface BalanceProvider {
    * operation, and so a retry of either refunds exactly once.
    */
   refund(userId: string, blockId: string, credits: number): Promise<number>;
+  /**
+   * Credits an award that is not a block refund: the device-gated trial and
+   * voucher redemptions. Resolves to the balance after the grant.
+   *
+   * `reference` is the caller's stable identity for the award — the user id
+   * for a trial, the redemption id for a voucher — and is both the ledger
+   * reference and the idempotency key. A retry therefore re-issues the *same*
+   * grant rather than a second one, which is what lets an award whose ledger
+   * call died mid-flight finish on the next attempt without ever paying twice
+   * (reqs 11.8, 12.5).
+   *
+   * Kept separate from `refund` so a grep for who hands out new credit finds
+   * two sites and not every balance movement.
+   */
+  grant(userId: string, reference: string, credits: number): Promise<number>;
 }
 
 export interface TokenMinter {
@@ -73,6 +90,13 @@ export interface VoiceBlockRow {
   detections: number | null;
 }
 
+/** The block-grant budget's view of a user's window (BlockStore.grantsSince). */
+export interface GrantWindow {
+  count: number;
+  /** Oldest grant in the window, or null when there were none. */
+  oldest: Date | null;
+}
+
 export interface BlockStore {
   /** The user's unreconciled, unexpired block, if any. */
   findLiveBlock(userId: string, now: Date): Promise<VoiceBlockRow | null>;
@@ -82,8 +106,12 @@ export interface BlockStore {
    * never released and has no report to record.
    */
   supersede(blockId: string): Promise<void>;
-  /** Number of blocks granted to the user since `since` (rate limiting). */
-  countGrantsSince(userId: string, since: Date): Promise<number>;
+  /**
+   * The user's grants since `since` (rate limiting): how many, and when the
+   * oldest of them was. The oldest is what says when the window has room
+   * again, and it costs nothing to ask for alongside the count.
+   */
+  grantsSince(userId: string, since: Date): Promise<GrantWindow>;
   /**
    * Reconciles the user's unreconciled blocks that have already expired.
    *
@@ -112,6 +140,20 @@ export interface BlockStore {
   ): Promise<boolean>;
 }
 
+/**
+ * What a budget decided, in the shape every budget here answers in.
+ *
+ * `retryAfterSeconds` is the whole reason this is a record rather than a
+ * boolean: a 429 with no hint leaves the client guessing, and the three
+ * limiters used to give three different answers to that (respond.ts).
+ * Meaningless when `allowed`, and never zero when it is not — a hint of zero
+ * invites an immediate retry that is refused again.
+ */
+export interface RateDecision {
+  allowed: boolean;
+  retryAfterSeconds: number;
+}
+
 export interface Authenticator {
   /** Resolves the Supabase user id for a bearer token, or null if invalid. */
   userIdForToken(token: string): Promise<string | null>;
@@ -124,6 +166,11 @@ export interface HandlerConfig {
   refundWindowSeconds: number;
   rateLimitMax: number;
   rateLimitWindowMinutes: number;
+  /** Credits the one-per-device trial pays out (req 4.3). */
+  trialCredits: number;
+  /** Failed voucher redemptions allowed per user per window (req 12.8). */
+  voucherAttemptMax: number;
+  voucherAttemptWindowMinutes: number;
 }
 
 export interface Deps {
@@ -131,10 +178,215 @@ export interface Deps {
   balance: BalanceProvider;
   minter: TokenMinter;
   blocks: BlockStore;
+  /**
+   * Budget for /token, which mints a credential but writes no row.
+   *
+   * The concrete class, not a port. There was an interface here with one
+   * implementation, justified as a seam tests could drive — but the clock is
+   * injected separately and every test constructs MemoryRateLimiter directly,
+   * so nothing was ever substituted through it. Re-introduce it on the day a
+   * Postgres-backed limiter exists, which is the condition ratelimit.ts's own
+   * comment already names.
+   */
+  tokenLimiter: MemoryRateLimiter;
+  trials: TrialStore;
+  vouchers: VoucherStore;
+  /**
+   * The attestation gate for each platform that has one. A platform missing
+   * from this map is not offered the trial (req 11.10) — which is also how an
+   * operator who has configured no Apple or Google credentials ends up with
+   * the trial off rather than with an endpoint that always 503s.
+   */
+  attestors: Partial<Record<TrialPlatform, DeviceAttestor>>;
   config: HandlerConfig;
   /** Injected so tests control time; both constructors always supply it. */
   now: () => Date;
   /** New block id, minted before the debit so the ledger can be keyed on it. */
   newBlockId: () => string;
-  log: (event: string, fields: Record<string, unknown>) => void;
+  /**
+   * Runs work that must finish but must not hold the response open.
+   *
+   * One caller: the DeviceCheck bit write, which is already declared
+   * non-fatal, so making every successful iOS trial wait on an Apple round
+   * trip bought the client nothing. A port rather than a direct
+   * `EdgeRuntime.waitUntil` because a test has to be able to wait for it —
+   * "the claim happened, but after the answer" is the property, and neither
+   * half of that is assertable if the work is invisible.
+   */
+  afterResponse: (work: Promise<unknown>) => void;
+  log: LogFn;
+}
+
+/** One structured log line. Every event in this function goes through it. */
+export type LogFn = (event: string, fields: Record<string, unknown>) => void;
+
+// ---------------------------------------------------------------------------
+// Trial (req 11) and vouchers (req 12)
+
+/** The two platforms that offer a device attestation (req 11.10). */
+export type TrialPlatform = "ios" | "android";
+
+/** Which attestation decided a grant; recorded on counta.trial_grants.gate. */
+export type TrialGate = "devicecheck" | "play_integrity";
+
+/** Why an attestation did not clear. */
+export type AttestationFailure =
+  /**
+   * The provider read the payload and said no. The same token will never
+   * pass, so the client must not retry it (design: Error Handling -> 400).
+   */
+  | "rejected"
+  /**
+   * The provider answered, but not with a verdict — an UNEVALUATED field, a
+   * missing verdict, a body that does not parse. Req 11.9: refuse without
+   * granting, and tell the client the check can be retried.
+   */
+  | "indeterminate";
+
+/**
+ * A verdict-level attestation failure, as opposed to a transport one. An
+ * unreachable provider still throws ProviderError from providerFetch; both
+ * refuse the trial, but only this one can distinguish "Apple says this token
+ * is junk" (400, never retry it) from "nobody could decide" (503, do retry).
+ */
+export class AttestationError extends Error {
+  constructor(readonly failure: AttestationFailure, message: string) {
+    super(message);
+    this.name = "AttestationError";
+  }
+}
+
+export interface DeviceAttestation {
+  /** Whether this device may claim the trial. */
+  eligible: boolean;
+  /**
+   * Records the claim where the platform will enforce it next time: iOS sets
+   * the allocated DeviceCheck bit, Android has nowhere to write one and does
+   * nothing. Called only after the credits are granted, so a failure between
+   * the two costs the operator one extra trial rather than silently burning a
+   * device's only claim (design: "iOS: DeviceCheck").
+   */
+  claim(): Promise<void>;
+}
+
+/**
+ * A platform's answer to "may this device take the trial?".
+ *
+ * Shaped like BalanceProvider and TokenMinter — one port, a real adapter per
+ * platform under providers/, fakes under testing/ — so the handler is testable
+ * without Apple or Google, and so the deployed bundle can only ever construct
+ * the real ones.
+ */
+export interface DeviceAttestor {
+  /** Recorded on the grant row. */
+  readonly gate: TrialGate;
+  /**
+   * The request-body field this platform's attestation arrives in —
+   * `device_token` for DeviceCheck, `integrity_token` for Play Integrity.
+   *
+   * On the port beside `gate` because it is a fact about this adapter's
+   * protocol, not about the endpoint. The handler used to hold its own table
+   * of it, next to its own list of supported platforms, next to the keys of
+   * the injected map: three statements of the same thing, and a third platform
+   * would have had to be added to all three. Now it touches index.ts and its
+   * adapter.
+   */
+  readonly tokenField: string;
+  /**
+   * Rejects with AttestationError for a verdict-level refusal and with
+   * ProviderError when the provider could not be reached at all.
+   */
+  check(attestation: string): Promise<DeviceAttestation>;
+}
+
+export interface TrialGrantRow {
+  user_id: string;
+  platform: TrialPlatform;
+  gate: TrialGate;
+  credits: number;
+  granted_at: string; // ISO timestamp
+}
+
+export interface TrialStore {
+  find(userId: string): Promise<TrialGrantRow | null>;
+  /**
+   * Inserts the grant. Resolves null when the row already exists: the primary
+   * key on user_id is what makes a retried grant idempotent (req 11.8).
+   */
+  insert(row: Omit<TrialGrantRow, "granted_at">): Promise<TrialGrantRow | null>;
+}
+
+/**
+ * What counta.redeem_voucher decided, in one round trip.
+ *
+ * The whole decision is one Postgres function because the slot claim and the
+ * redemption row must not come apart: a leaked slot under-grants a campaign,
+ * while a redemption row with no slot behind it lets the cap be exceeded
+ * (design: Edge Function contract).
+ *
+ * `not_found` deliberately covers both an unknown and a disabled code, so the
+ * endpoint cannot be used to discover which codes exist (req 12.6).
+ *
+ * The guess budget (req 12.8) is decided in there too. It was the last part of
+ * requirement 12 outside the transaction and the only part that was racy: the
+ * handler counted, then decided, then recorded, so two concurrent requests
+ * could both read a count under the limit and both spend a guess neither was
+ * charged for.
+ */
+export type RedeemOutcome =
+  | ({ outcome: "redeemed" } & Redemption)
+  | ({ outcome: "already_redeemed" } & Redemption)
+  | { outcome: "not_found" }
+  | { outcome: "expired" }
+  | { outcome: "exhausted" }
+  | {
+    outcome: "too_many_attempts";
+    attempts: number;
+    /** When the oldest attempt in the window falls out of it, at the earliest. */
+    retry_after_seconds: number;
+  };
+
+/** The redemption behind a `redeemed` or `already_redeemed` outcome. */
+export interface Redemption {
+  voucher_id: string;
+  redemption_id: string;
+  credits: number;
+  /**
+   * Whether this redemption's payout is already confirmed
+   * (`counta.voucher_redemptions.credited_at`).
+   *
+   * The endpoint must not ask the ledger this question. RevenueCat's
+   * `Idempotency-Key` is what makes a re-issued grant a no-op, and those keys
+   * expire on a bounded window; treating "the ledger will deduplicate it" as
+   * "it pays once" credited a resubmitted code again every time, once the
+   * window had passed. False re-issues the *same* keyed grant so a redemption
+   * whose ledger call died mid-flight still heals (req 12.5); true pays
+   * nothing.
+   */
+  credited: boolean;
+}
+
+/** The guess budget, passed to the transaction that enforces it. */
+export interface AttemptBudget {
+  windowMinutes: number;
+  maxAttempts: number;
+}
+
+export interface VoucherStore {
+  /**
+   * Checks the guess budget, claims a slot, writes the redemption and records
+   * a failed attempt — whichever of those the outcome calls for — in one
+   * transaction, and so in one round trip on every path.
+   */
+  redeem(
+    code: string,
+    userId: string,
+    budget: AttemptBudget,
+  ): Promise<RedeemOutcome>;
+  /**
+   * Records that this redemption's grant reached the ledger. Called after the
+   * grant, never before: a row marked credited by a payout that then failed
+   * would be a redemption nothing can ever complete.
+   */
+  markCredited(redemptionId: string): Promise<void>;
 }

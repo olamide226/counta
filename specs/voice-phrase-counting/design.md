@@ -478,6 +478,23 @@ Body: { "block_id", "streamed_secs", "detections", "eligible_for_refund" }
 400 { "error": "invalid_detections" }
 ```
 
+```
+POST /functions/v1/voice-block/token
+Authorization: Bearer <supabase-jwt>
+Body: { "block_id": "<uuid>" }
+
+200 { "token": "<deepgram jwt>", "expires_in": 30 }
+400 { "error": "invalid_request" }
+401 { "error": "unauthenticated" }
+404 { "error": "block_not_found" }
+429 { "error": "rate_limited" }
+503 { "error": "provider_unavailable" }
+```
+
+`/token` mints a fresh streaming credential for a block the caller already holds, and **never debits**. It exists because the 30-second token TTL governs connection establishment only: a socket already open stays authorised for its lifetime, but a socket that *drops* 200 seconds into a 300-second block has no credential left to open a new one, so only the first 10% of a block could survive a network blip. Asking `/voice-block` for another grant is worse than useless — a grant carrying the live block's `session_id` is read as the renewal of Requirement 3.9 and would debit a whole block per dropped socket. The block was paid for when it was granted; a user must not be charged for a bad network.
+
+Ownership, the reconciled flag and the expiry are all checked server-side against `counta.voice_blocks`, and unknown, not-the-caller's, already-released and expired blocks are deliberately one answer: a block belonging to another user must be indistinguishable from one that does not exist, or the endpoint becomes an oracle for live block ids. The route is rate limited per user (`TOKEN_MINT_MAX` per `TOKEN_MINT_WINDOW_MINUTES`) because a mint is cheap but not free, and an unmetered route that hands out provider credentials is exactly the thing not to leave lying around. That budget is held in the worker's memory rather than in Postgres — a token mint writes no row, so metering it with a database round trip would cost more than the thing being metered; the trade is a per-worker rather than a per-user bound, on a route that already requires a live block.
+
 One block is live per user at a time, and renewal is identified by `session_id` rather than inferred from a clock. A grant whose `session_id` matches the caller's live block is the 90% renewal of Requirement 3.9: it is granted and the block it replaces is marked reconciled in the same request, so the invariant still holds. A grant carrying any other `session_id` is a 409 no matter how close the live block is to expiry — treating a nearly expired block as "not live" would hand a second, unrelated session a concurrent block for the length of that window, which is what Requirement 3.8 exists to prevent. A partial unique index on `counta.voice_blocks (user_id) where not reconciled` enforces this in the database as well, so two concurrent requests cannot both pass the check.
 
 Refund eligibility is asserted by the client but validated server-side against `granted_at`: a refund is only issued if the release arrives within 30 seconds of grant and reports zero detections (Requirement 3.11). Client assertion alone is not trusted.
@@ -494,7 +511,24 @@ Body: { "platform": "android", "integrity_token": "<Play Integrity token>" }
 401 { "error": "unauthenticated" }
 409 { "error": "platform_unsupported" }
 503 { "error": "attestation_unavailable" }
+503 { "error": "provider_unavailable" }
 ```
+
+The two 503s are different failures and the client can treat them alike but an
+operator cannot. `attestation_unavailable` is Apple or Google *answering*
+without deciding — an `UNEVALUATED` verdict, or a 401/403 that rejects our own
+credentials — so the device is undecided and the trial stays unclaimed
+(Requirement 11.9). `provider_unavailable` is any upstream that could not be
+reached or that failed outright, attestation providers included, and is the one
+the router already returns for RevenueCat and Deepgram. Giving an unreachable
+Apple its own vocabulary made one condition read as two.
+
+"Already claimed" is one answer with one shape, whichever of the three exits
+produced it: this caller already holds a `counta.trial_grants` row, this
+*device* has the DeviceCheck bit set under some other earlier anonymous user,
+or a concurrent request for this same user won the insert. The distinction is
+an operator's, not a client's — the client shows the balance in every case —
+and it is carried by the `via` field on the `trial_already_claimed` log line.
 
 ```
 POST /functions/v1/voice-block/redeem
@@ -503,6 +537,7 @@ Body: { "code": "SPRING24" }
 
 200 { "redeemed": true,  "credits": 50, "balance": 71 }
 200 { "redeemed": false, "reason": "already_redeemed", "credits": 50 }
+200 { "redeemed": false, "reason": "already_redeemed", "credits": 50, "balance": 71 }
 400 { "error": "invalid_request" }
 401 { "error": "unauthenticated" }
 404 { "error": "voucher_invalid" }
@@ -518,24 +553,73 @@ Both new endpoints sit behind the same JWT verification as the block endpoints a
 
 `voucher_invalid` deliberately covers both "no such code" and "disabled", with no way to tell them apart (Requirement 12.6): distinguishing them turns the endpoint into an oracle for discovering live codes. Expiry and exhaustion do get their own answers (12.7), because those reach a user holding a real code, and telling that user the code is fake is worse than the little the distinction leaks. Failed attempts are counted per user in `counta.voucher_attempts` and rate limited, which is what actually bounds guessing.
 
+Ordering inside a trial grant matters as much as it does inside a block grant:
+
+```
+verify JWT
+platform is ios or android, and has a configured gate  -> 409 platform_unsupported
+counta.trial_grants row for this user?                 -> 200 granted:false
+DeviceAttestor.check(payload)                          -> 400 rejected,
+                                                          503 indeterminate,
+                                                          200 granted:false if
+                                                          the bit is set
+BalanceProvider.grant(user, "trial:<user>", credits)   -> 503 on failure
+insert counta.trial_grants                             -> PK collision means a
+                                                          concurrent request won
+DeviceAttestation.claim()  (iOS: set the bit)          -> started here, awaited
+                                                          after the response;
+                                                          logged, never thrown
+```
+
+The credits move before either record is written, and the ledger call is keyed
+on the user id. That key is what makes every step after it recoverable: a
+retry re-issues the *same* grant, which the ledger applies once, so a failure
+anywhere below leaves the caller with credits, no grant row and no bit — a
+state the next attempt walks straight through. Writing the row first would
+work too, but then every later "already claimed" answer would have to re-issue
+the grant to stay self-healing, and that spends a RevenueCat write on every
+reinstall for no gain.
+
+The bit write is started last and finished after the response has been sent (`EdgeRuntime.waitUntil`). The ordering is unchanged — the credits and the grant row are both committed before it is called — but a call that cannot fail the request need not delay it either, and this one saves every successful iOS trial an Apple round trip. Its failure is still logged, and the rejection is still caught: an unobserved one would take the isolate down instead of costing one bit.
+
+The bit is set last, and never allowed to fail the request. It is what makes
+the device ineligible for ever (Requirement 11.3), so setting it before the
+credits landed would burn a device's only claim on a request that then failed;
+refusing a grant the user has already been given because the bit write failed
+would cost them the feature. Losing a bit costs the operator one extra trial,
+which is the cheaper of the two mistakes — so the failure is logged loudly and
+the grant stands.
+
 Ordering inside a redemption matters as much as it does inside a block grant:
 
 ```
 verify JWT
-rate-limit check on counta.voucher_attempts         -> 429
+                        --- counta.redeem_voucher, one transaction ---
+guess budget on counta.voucher_attempts             -> 429, recording nothing
 look up voucher by upper(code)                      -> 404 / 409 expired,
-                                                       record an attempt
-claim a slot: redeemed_count + 1 under the cap      -> 409 voucher_exhausted
+                                                       recording an attempt
+claim a slot: redeemed_count + 1 under the cap      -> re-read the redemption;
+                                                       409 voucher_exhausted
+                                                       only if there is none
 insert counta.voucher_redemptions                   -> unique violation means
                                                        already redeemed: release
-                                                       the slot, re-issue the
-                                                       keyed grant, report 200
+                                                       the slot, report the row
+                        --- back in the Edge Function ---
+redemption already credited?                        -> 200 redeemed:false,
+                                                       no credit moves
 BalanceProvider grant(user, redemption_id, credits) -> 503 on failure
+mark counta.voucher_redemptions.credited_at         -> 500 on failure; the
+                                                       retry re-issues the
+                                                       same keyed grant
 ```
 
-The slot claim and the redemption row are two writes that must not come apart, so they belong in one transaction — the simplest form is a `counta.redeem_voucher(...)` SQL function called over RPC, added alongside the endpoint in task 10, which also keeps the whole decision one round trip. If they are ever issued as separate statements, claim the slot **first**: a leaked slot means a campaign gives out one fewer redemption than it advertised, while a redemption row with no slot behind it means the cap can be exceeded. When the two failure directions are under-granting and over-granting credit, take the first.
+A full campaign is not the same question as a full campaign *for this caller*. Two requests from one user racing the last slot — a double tap, or a client retry — both find no redemption, because the loser's lookup ran on a snapshot taken before the winner committed; the loser's slot claim then waits on the winner's row lock and, once it is released, re-evaluates and finds the cap reached. Answering `voucher_exhausted` there tells a user their code is used up for a code they have just redeemed, spends one of their guesses on it, and leaves the re-issue path unreachable so a winner whose ledger call failed can never heal. The claim therefore re-reads the redemption before concluding exhaustion: that is a new statement, so it takes a new snapshot, and it followed a statement that waited on the winner's lock. `supabase/tests/redeem_voucher_race.sql` drives the race deterministically with dblink.
 
-The redemption row is written before any credit moves, and the ledger call is keyed on the redemption id exactly as a block debit is keyed on the block id. A retry therefore re-issues the *same* keyed grant rather than a second one: a redemption whose ledger call died mid-flight completes on the next attempt, and one that already succeeded cannot pay out twice. That is what makes the endpoint idempotent and unfarmable by retry (Requirements 12.5, 12.8). A slot claimed for a grant that then fails permanently is left consumed; the remedy is for the operator to raise the cap, which is better than releasing slots automatically and giving a retry loop something to chew on.
+The slot claim and the redemption row are two writes that must not come apart, so they belong in one transaction — a `counta.redeem_voucher(code, user_id, window_minutes, max_attempts)` SQL function called over RPC, which also keeps the whole decision one round trip. The guess budget is in there with them: it was the last part of Requirement 12 left outside the transaction, and the only part that was racy across concurrent requests, because the handler counted, then decided, then recorded, so two requests could both read a count under the limit and both spend a guess neither was charged for. Counting, deciding and recording in one statement makes the budget atomic and takes the endpoint to one round trip on every path — the confirmation write after a first payout being the only exception. If they are ever issued as separate statements, claim the slot **first**: a leaked slot means a campaign gives out one fewer redemption than it advertised, while a redemption row with no slot behind it means the cap can be exceeded. When the two failure directions are under-granting and over-granting credit, take the first.
+
+The redemption row is written before any credit moves, and the ledger call is keyed on the redemption id exactly as a block debit is keyed on the block id, so a retry re-issues the *same* grant rather than a second one and a redemption whose ledger call died mid-flight completes on the next attempt.
+
+That key is not, on its own, what makes the endpoint pay out once. `Idempotency-Key` retention at RevenueCat is a bounded window, and past it a re-issue is a second payment — so a valid, already-redeemed code resubmitted days later credited again, and again, uncounted, because the success path records no rate-limit attempt and so has no rate limit at all. `counta.voucher_redemptions.credited_at` is what closes that: it is set once the grant has landed, and only a redemption still missing it is re-issued. The self-healing property survives (an unconfirmed payout is retried with the same key) and the endpoint stops depending on a third party's retention policy for a rule of its own (Requirements 12.5, 12.8). The balance is echoed only when it moved, exactly as a release reports a refund. A slot claimed for a grant that then fails permanently is left consumed; the remedy is for the operator to raise the cap, which is better than releasing slots automatically and giving a retry loop something to chew on.
 
 ---
 
@@ -558,12 +642,16 @@ DCDevice token  --------> sign ES256 JWT (team key)
                                                      <----  bit0, bit1, last_update_time
                           bit0 set?  --------------------->  200 { granted: false }
                           BalanceProvider grant(...)
-                          POST /v1/update_two_bits   ---->   bit0 := 1
                           insert counta.trial_grants
+                          POST /v1/update_two_bits   ---->   bit0 := 1
                 200 { granted: true, credits: 20 }
 ```
 
-The bit is set *after* the credits are granted and before the response, so a crash between the two costs the operator one extra trial rather than silently burning a device's only claim. A device Apple has never seen answers "failed to find bit state", which is read as unclaimed.
+The bit is set *after* the credits are granted and before the response, so a crash between the two costs the operator one extra trial rather than silently burning a device's only claim. The grant row goes in first for the same reason in miniature: if the bit write is the thing that fails, this caller at least cannot ask again.
+
+A device Apple has never seen has no bit state, and Apple answers that with a **200** whose body is not the bit document. Apple's own docs give a "descriptive string" column rather than a wire contract, and the strings observed in production differ from it, so the implementation matches on the *absence* of `bit0`/`bit1` and reads that as unclaimed. Nothing branches on Apple's body text; the status code decides and the body only reaches the logs.
+
+The two bits are individually optional on `update_two_bits`, and Apple does not document what omitting one does to its stored value. Both are therefore always sent, with the sibling app's bit written back exactly as the query returned it — guessing wrong would silently clobber another product's flag.
 
 #### DeviceCheck bit allocation
 
@@ -583,11 +671,15 @@ Android has no DeviceCheck equivalent. Play Integrity attests that a genuine, un
 1. a Play Integrity verdict, verified server-side, requiring device integrity, an app recognised by Play, and a licensed install, and
 2. a row in `counta.trial_grants` keyed on the Supabase user id.
 
+Concretely, the Edge Function mints a Google access token with the service account's JWT-bearer grant, calls `POST https://playintegrity.googleapis.com/v1/{package}:decodeIntegrityToken`, and accepts the verdict only when it names this package, was minted within the last ten minutes, and reports `appRecognitionVerdict: PLAY_RECOGNIZED`, `MEETS_DEVICE_INTEGRITY` among the device verdicts, and `appLicensingVerdict: LICENSED`. `MEETS_BASIC_INTEGRITY` alone is not enough, and an empty device-verdict array is Google's positive statement that the device shows signs of attack.
+
+A verdict Google marks `UNEVALUATED` is not a refusal — it is not an answer. Reading it as "no" would permanently deny a legitimate device that happened to ask during a Play Store outage, so it becomes the 503 of Requirement 11.9 and the trial stays unclaimed. The freshness window is there because a leaked genuine token, replayed across many fresh anonymous accounts, would otherwise buy a trial each for the price of one real device.
+
 That stops emulators, rooted-device farms, repackaged builds and scripted signups, which is most of the volume abuse. It does **not** stop a person with a real phone deleting the app, signing in anonymously again, and taking a second trial. **The Android trial gate is weaker than the iOS one, and no amount of design fixes that**; saying so plainly here is better than an implementation that reads as equivalent.
 
 The obvious way to close the gap is a device fingerprint — hardware ids, an advertising id, a hash of build properties. Both stores prohibit it for this purpose, so it appears nowhere in this design (Requirement 11.7). If Android farming turns out to be material in practice, the honest levers are a smaller Android trial, a trial that requires a signed-in Google account rather than an anonymous one, or no Android trial at all. Each is a product decision, not a technical trick.
 
-Platforms with no attestation at all (macOS, Windows, Linux, web) are not offered the trial (Requirement 11.10); the endpoint answers `platform_unsupported`.
+Platforms with no attestation at all (macOS, Windows, Linux, web) are not offered the trial (Requirement 11.10); the endpoint answers `platform_unsupported`. Which platforms *are* offered it is the set of attestors the entrypoint injected, and each attestor names the body field its payload arrives in, so a third platform is an adapter and a line in `index.ts` rather than an edit to the handler. It also makes "no such platform" and "this platform has no configured gate" one branch instead of two that have to keep answering alike.
 
 ### Credentials the operator must obtain
 
