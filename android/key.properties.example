@@ -1,0 +1,32 @@
+# Android upload-key signing material — TEMPLATE ONLY.
+#
+#   cp android/key.properties.example android/key.properties
+#
+# android/key.properties is gitignored and must stay that way. So is the .jks
+# file it points at. This is a public repository: never commit either, and
+# never paste a real password into this example file.
+#
+# Create the upload key once (Play App Signing then holds the *app signing*
+# key; this one only authorises uploads):
+#
+#   keytool -genkey -v \
+#     -keystore ~/counta-upload-key.jks \
+#     -keyalg RSA -keysize 2048 -validity 10000 \
+#     -alias counta-upload
+#
+# Back the .jks file and its passwords up somewhere you will still have them in
+# five years. Losing the upload key is recoverable through Play support only
+# because Google holds the app signing key — see docs/RELEASE-BACKGROUND.md.
+
+# Path to the keystore. Absolute is safest. A relative path resolves against
+# the android/ directory (where this file lives), not android/app/.
+storeFile=/Users/you/counta-upload-key.jks
+
+# Password for the keystore itself.
+storePassword=CHANGE_ME
+
+# The -alias you passed to keytool.
+keyAlias=counta-upload
+
+# Password for that key. keytool offers to reuse the store password.
+keyPassword=CHANGE_ME

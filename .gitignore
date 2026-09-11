@@ -58,3 +58,11 @@ supabase/.branches/
 
 # Internal notes, never committed
 *.internal.md
+
+# Android signing material. The per-directory rules live in android/.gitignore,
+# but its patterns only match under android/, and a keystore committed to a
+# public repository cannot be un-published. These repo-wide patterns are the
+# backstop for a key that lands anywhere else. Verify with:
+#   git check-ignore -v android/key.properties android/upload-keystore.jks
+*.jks
+*.keystore
