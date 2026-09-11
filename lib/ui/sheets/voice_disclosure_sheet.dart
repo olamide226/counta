@@ -40,8 +40,8 @@ class VoiceDisclosureSheet extends StatelessWidget {
             const SizedBox(height: 16),
             Text(
               'While a voice session is running, your microphone audio is '
-              'streamed to Deepgram, a third-party speech recognition '
-              'service, so the app can hear your phrase and count it.',
+              'streamed to a third-party speech recognition service, so the '
+              'app can hear your phrase and count it.',
               style: theme.textTheme.bodyMedium,
             ),
             const SizedBox(height: 12),
@@ -54,8 +54,9 @@ class VoiceDisclosureSheet extends StatelessWidget {
             const _Point(
               icon: Icons.block,
               text:
-                  'Audio is never saved to this device or stored by Counta. '
-                  'Deepgram is instructed not to keep it for training.',
+                  'Audio is never saved to this device or stored by Counta, '
+                  'and the service is instructed not to retain it or use it '
+                  'for training.',
             ),
             const _Point(
               icon: Icons.visibility_outlined,
