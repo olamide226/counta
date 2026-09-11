@@ -745,8 +745,6 @@ class CloudCountingEngine implements CountingEngine {
   }
 
   void _scheduleRenewal(_ActiveBlock active) {
-    active.cancel();
-
     if (_stopped || blockService == null || active.block.blockSeconds <= 0) {
       return;
     }
@@ -848,10 +846,34 @@ class CloudCountingEngine implements CountingEngine {
       pending.socket.closeDescription ??
           'A renewed voice connection dropped; staying on the current one.',
     );
-    pending.detach();
-    _matcher?.closeStream(pending.streamId);
-    _ownedSockets.remove(pending.socket);
-    unawaited(pending.socket.dispose());
+    // Nothing to drain: the socket is the thing that just died.
+    unawaited(_discard(pending));
+  }
+
+  /// Lets go of a connection: stop listening to it, forget its transcript
+  /// stream, stop owning its socket, close it.
+  ///
+  /// The same four steps every path that finishes with a connection needs.
+  /// Written out three times they had already diverged — the session teardown
+  /// did only two of them, leaving the matcher holding a window for a stream
+  /// nothing would ever send on again and the socket alive until `dispose()`.
+  Future<void> _discard(_Connection connection) async {
+    connection.detach();
+    _matcher?.closeStream(connection.streamId);
+    _ownedSockets.remove(connection.socket);
+    await connection.socket.dispose();
+  }
+
+  /// Drains a connection and then lets go of it. Drained, not dropped: its
+  /// trailing finals still reach the matcher, on its own stream, where
+  /// duplicate audio is deduplicated.
+  Future<void> _drainAndDiscard(_Connection connection, String note) async {
+    try {
+      await connection.socket.closeGracefully();
+    } catch (e) {
+      _report('$note: $e');
+    }
+    await _discard(connection);
   }
 
   Future<void> _retireOutgoing(_Connection next) async {
@@ -866,17 +888,10 @@ class CloudCountingEngine implements CountingEngine {
     _startTranscriptionWatchdog();
 
     if (outgoing == null || identical(outgoing, next)) return;
-    try {
-      // Drained, not dropped: its trailing finals still reach the matcher, on
-      // its own stream, and duplicate audio is deduplicated there.
-      await outgoing.socket.closeGracefully();
-    } catch (e) {
-      _report('A retired voice connection did not close cleanly: $e');
-    }
-    outgoing.detach();
-    _matcher?.closeStream(outgoing.streamId);
-    _ownedSockets.remove(outgoing.socket);
-    await outgoing.socket.dispose();
+    await _drainAndDiscard(
+      outgoing,
+      'A retired voice connection did not close cleanly',
+    );
   }
 
   void _onBlockExpired(_ActiveBlock active) {
@@ -957,8 +972,9 @@ class CloudCountingEngine implements CountingEngine {
     final service = blockService;
     if (service == null) return;
 
+    // The timers are `_cancelTimers`' to own, and every path here has been
+    // through it.
     final active = _active;
-    active?.cancel();
     _active = null;
 
     // A renewal that bought a block and then could not connect it holds one
@@ -1026,12 +1042,10 @@ class CloudCountingEngine implements CountingEngine {
     _primary = null;
     _pending = null;
     for (final connection in connections) {
-      try {
-        await connection.socket.closeGracefully();
-      } catch (e) {
-        _report('Voice session did not shut down cleanly: $e');
-      }
-      connection.detach();
+      await _drainAndDiscard(
+        connection,
+        'Voice session did not shut down cleanly',
+      );
     }
   }
 
@@ -1152,15 +1166,16 @@ class CloudCountingEngine implements CountingEngine {
         }
 
         if (_stopped) return;
-        if (error is AudioSourceStalled) {
-          // iOS pauses capture on an audio-session interruption and never
-          // resumes it, so a restart is the only way back.
-          _report('Microphone stopped delivering audio — restarting capture.');
-          _scheduleReconnect(restartAudio: true);
-        } else {
-          _report('Microphone error: $error');
-          _scheduleReconnect(restartAudio: true);
-        }
+        // iOS pauses capture on an audio-session interruption and never
+        // resumes it, so a restart is the only way back — and an unknown
+        // error gets the same treatment, because a microphone that is not
+        // delivering is the failure either way. Only the wording differs.
+        _report(
+          error is AudioSourceStalled
+              ? 'Microphone stopped delivering audio — restarting capture.'
+              : 'Microphone error: $error',
+        );
+        _scheduleReconnect(restartAudio: true);
       },
     );
   }
