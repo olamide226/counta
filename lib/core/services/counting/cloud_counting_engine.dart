@@ -102,6 +102,140 @@ class _ActiveBlock {
   }
 }
 
+/// The point in a session at which a credential was refused.
+///
+/// The same [BlockFailure] means different things at different points: no
+/// credit at the start of a session is the paywall's cue, while no credit at a
+/// renewal is requirement 3.10 — the block already paid for runs to completion
+/// first.
+enum _CredentialPhase {
+  /// Buying the session's first block.
+  start,
+
+  /// Buying the next block while the current one is still paying.
+  renewal,
+
+  /// Minting a fresh token against the block the session already holds.
+  reconnect,
+}
+
+/// What the engine does about a refusal.
+sealed class _CredentialAction {
+  const _CredentialAction(this.message);
+
+  /// What to tell the user. Reported whatever else happens.
+  final String message;
+}
+
+/// Streaming is over, and [status] is what the session ends as.
+final class _EndSession extends _CredentialAction {
+  const _EndSession(this.status, super.message);
+
+  final EngineStatus status;
+}
+
+/// Come back for a credential later. [after] is the server's own hint, null
+/// when it named no window and the phase's own delay applies.
+final class _RetryLater extends _CredentialAction {
+  const _RetryLater(super.message, [this.after]);
+
+  final Duration? after;
+}
+
+/// Requirement 3.10: nothing more can be bought, but the block already paid
+/// for is not cut short. Counting carries on until it runs out.
+final class _RunOutTheBlock extends _CredentialAction {
+  const _RunOutTheBlock(super.message);
+}
+
+/// Maps a refusal onto what the engine does about it, for every phase.
+///
+/// One exhaustive `switch` over the sealed [BlockFailure], with the phase
+/// inside each case, so the compiler is what guarantees every failure has an
+/// answer everywhere. Three hand-written `catch` ladders in three vocabularies
+/// did not: at a reconnect, everything but [BlockNotFound] fell through to a
+/// generic `catch` and was retried for the whole reconnect window — including
+/// [BlockInsufficientCredit] and [BlockInFlight], which no amount of retrying
+/// recovers from.
+_CredentialAction _actionFor(BlockFailure failure, _CredentialPhase phase) {
+  /// The wording a phase puts in front of a server's own reason.
+  String prefixed() => switch (phase) {
+    _CredentialPhase.renewal =>
+      'Could not renew voice counting: ${failure.message}',
+    _CredentialPhase.reconnect => 'Reconnection failed: ${failure.message}',
+    // A refusal at the start always ends the session, and the server's reason
+    // is written to be read on its own there.
+    _CredentialPhase.start => failure.message,
+  };
+
+  switch (failure) {
+    case BlockInsufficientCredit(:final balance, :final required):
+      return switch (phase) {
+        _CredentialPhase.start => _EndSession(
+          EngineStatus.exhausted,
+          'Out of voice minutes: $balance left, and a session needs $required.',
+        ),
+        _CredentialPhase.renewal => _RunOutTheBlock(
+          'Voice minutes have run out ($balance left). Counting continues '
+          'until this block ends.',
+        ),
+        // Unlike a renewal, there is no block still paying to run out: the
+        // one this session was reconnecting onto is what it could not resume.
+        _CredentialPhase.reconnect => const _EndSession(
+          EngineStatus.exhausted,
+          'Voice minutes have run out. Your count is safe — keep tapping, or '
+          'add minutes to carry on.',
+        ),
+      };
+
+    case BlockInFlight(:final expiresAt):
+      return switch (phase) {
+        _CredentialPhase.start => _EndSession(EngineStatus.error, prefixed()),
+        // Recoverable by waiting for the stale block to expire, and the
+        // server told us when that is.
+        _CredentialPhase.renewal => _RetryLater(
+          prefixed(),
+          expiresAt?.difference(DateTime.now()),
+        ),
+        _CredentialPhase.reconnect => const _EndSession(
+          EngineStatus.degraded,
+          'Voice counting stopped: its streaming time belongs to another '
+          'session now. Your count is safe and tapping still works.',
+        ),
+      };
+
+    case BlockNotFound():
+      return switch (phase) {
+        _CredentialPhase.start => _EndSession(EngineStatus.error, prefixed()),
+        _CredentialPhase.renewal => _RetryLater(prefixed()),
+        // The block is gone server-side: expired, reconciled, or never this
+        // caller's. No credential can be minted against it, so retrying for
+        // the rest of the window would only burn the session down slowly.
+        _CredentialPhase.reconnect => const _EndSession(
+          EngineStatus.degraded,
+          'Voice counting stopped: its streaming time is no longer valid. '
+          'Your count is safe and tapping still works.',
+        ),
+      };
+
+    // The rest are transient or not the session's fault, and a session that
+    // has already started keeps trying: the JWT is read fresh per request, so
+    // even a 401 can come good when the SDK refreshes under us.
+    case BlockRateLimited(:final retryAfter):
+      return phase == _CredentialPhase.start
+          ? _EndSession(EngineStatus.error, prefixed())
+          : _RetryLater(prefixed(), retryAfter);
+
+    case BlockUnauthenticated():
+    case BlockProviderUnavailable():
+    case BlockRequestRejected():
+    case BlockUnreachable():
+      return phase == _CredentialPhase.start
+          ? _EndSession(EngineStatus.error, prefixed())
+          : _RetryLater(prefixed());
+  }
+}
+
 /// Concrete implementation of [CountingEngine] using cloud streaming STT
 /// (Deepgram/SpeechSocket), [AudioSource] PCM capture, local [PhraseMatcher],
 /// and pre-paid blocks from [BlockService].
@@ -436,17 +570,36 @@ class CloudCountingEngine implements CountingEngine {
       final block = await service.acquire(_sessionId!);
       _adoptBlock(block);
       return block.deepgramToken;
-    } on BlockInsufficientCredit catch (e) {
-      // The paywall's cue. Nothing was debited and no socket was opened.
-      await _endStreaming(
-        EngineStatus.exhausted,
-        'Out of voice minutes: ${e.balance} left, and a session needs '
-        '${e.required}.',
+    } on BlockFailure catch (e) {
+      // Nothing has been bought to run out and there is no live session to
+      // retry inside of, so every decision here is an ending — the paywall's
+      // cue among them. Rethrowing as well lets the caller that opened the
+      // session keep its sheet open and show why.
+      await _applyCredentialAction(
+        _actionFor(e, _CredentialPhase.start),
+        retry: (_) => unawaited(_endStreaming(EngineStatus.error, e.message)),
       );
       rethrow;
-    } on BlockFailure catch (e) {
-      await _endStreaming(EngineStatus.error, e.message);
-      rethrow;
+    }
+  }
+
+  /// Carries out a decision from [_actionFor].
+  ///
+  /// [retry] is how *this* phase comes back for a credential: the renewal
+  /// timer, or the reconnect backoff.
+  Future<void> _applyCredentialAction(
+    _CredentialAction action, {
+    required void Function(Duration? after) retry,
+  }) async {
+    switch (action) {
+      case _EndSession(:final status, :final message):
+        await _endStreaming(status, message);
+      case _RunOutTheBlock(:final message):
+        _outOfCredit = true;
+        _report(message);
+      case _RetryLater(:final message, :final after):
+        _report(message);
+        retry(after);
     }
   }
 
@@ -634,29 +787,14 @@ class CloudCountingEngine implements CountingEngine {
       _pendingBlock = null;
       _adoptBlock(block);
       _startOverlap(next);
-    } on BlockInsufficientCredit catch (e) {
-      // 3.10: the block already paid for is not cut short. The session keeps
-      // counting until it runs out, and only then does it stop.
-      _outOfCredit = true;
-      _report(
-        'Voice minutes have run out (${e.balance} left). Counting continues '
-        'until this block ends.',
-      );
-    } on BlockRateLimited catch (e) {
-      // Honour the window when the server named one — coming back sooner only
-      // earns another 429. It does not always name one, and
-      // `_retryRenewalLater` falls back to its own delay when it did not.
-      _report('Could not renew voice counting: ${e.message}');
-      _retryRenewalLater(e.retryAfter);
-    } on BlockInFlight catch (e) {
-      // Recoverable by waiting for the stale block to expire, and the server
-      // told us when that is.
-      _report('Could not renew voice counting: ${e.message}');
-      final expiresAt = e.expiresAt;
-      _retryRenewalLater(expiresAt?.difference(DateTime.now()));
     } on BlockFailure catch (e) {
-      _report('Could not renew voice counting: ${e.message}');
-      _retryRenewalLater();
+      // Honours a window the server named — coming back sooner only earns
+      // another 429. It does not always name one, and `_retryRenewalLater`
+      // falls back to its own delay when it did not.
+      await _applyCredentialAction(
+        _actionFor(e, _CredentialPhase.renewal),
+        retry: _retryRenewalLater,
+      );
     } catch (e) {
       // The block is bought and held in _pendingBlock; only the socket failed.
       _report('Could not renew voice counting: $e');
@@ -1121,14 +1259,18 @@ class CloudCountingEngine implements CountingEngine {
         if (restartAudio || _audioSubscription == null) {
           _attachAudio();
         }
-      } on BlockNotFound {
-        // The block is gone server-side: expired, reconciled, or never this
-        // caller's. No credential can be minted against it, so retrying for
-        // the rest of the window would only burn the session down slowly.
-        await _endStreaming(
-          EngineStatus.degraded,
-          'Voice counting stopped: its streaming time is no longer valid. '
-          'Your count is safe and tapping still works.',
+      } on BlockFailure catch (e) {
+        await _applyCredentialAction(
+          _actionFor(e, _CredentialPhase.reconnect),
+          // The server's own hint is not used here: the reconnect's backoff
+          // owns the timing, and it has a window to spend rather than a
+          // single deadline to hit.
+          retry: (_) {
+            // Cleared before rescheduling — `_scheduleReconnect` refuses to
+            // stack an attempt on one still in flight, and this one is over.
+            _reconnectInFlight = false;
+            _scheduleReconnect(restartAudio: restartAudio);
+          },
         );
         return;
       } catch (e) {

@@ -886,6 +886,76 @@ void main() {
         expect(blocks.releases.single.blockId, 'block-1');
       });
 
+      test('a reconnect refused for credit ends, it does not retry', () async {
+        // `refreshToken` promises a `BlockFailure` and nothing narrower, and
+        // only `BlockNotFound` had an answer of its own: everything else fell
+        // through to the generic `catch` and was retried for the whole
+        // five-minute window, holding the microphone open the entire time for
+        // a refusal no retry can recover from.
+        final blocks = FakeBlockService(
+          blockSeconds: 300,
+          refreshFailures: const [
+            BlockInsufficientCredit(balance: 0, required: 5),
+          ],
+        );
+        final engine = engineWith(blocks);
+        addTearDown(engine.dispose);
+
+        await engine.start(testPhrase);
+        await pumpEventQueue();
+
+        sockets.single.emitDrop(reason: 'server hung up');
+        await Future<void>.delayed(const Duration(milliseconds: 300));
+
+        expect(engine.currentStatus, EngineStatus.exhausted);
+        expect(
+          blocks.refreshedBlockIds,
+          hasLength(1),
+          reason: 'no credit is not something a second attempt fixes',
+        );
+        expect(audio.stopCount, greaterThanOrEqualTo(1));
+        expect(blocks.releases.single.blockId, 'block-1');
+      });
+
+      test('a reconnect refused as in-flight ends too', () async {
+        final blocks = FakeBlockService(
+          blockSeconds: 300,
+          refreshFailures: const [BlockInFlight()],
+        );
+        final engine = engineWith(blocks);
+        addTearDown(engine.dispose);
+
+        await engine.start(testPhrase);
+        await pumpEventQueue();
+
+        sockets.single.emitDrop(reason: 'server hung up');
+        await Future<void>.delayed(const Duration(milliseconds: 300));
+
+        // The block is another session's now; this one cannot get it back.
+        expect(engine.currentStatus, EngineStatus.degraded);
+        expect(blocks.refreshedBlockIds, hasLength(1));
+      });
+
+      test('a transient refusal is still retried', () async {
+        // The other half of the same switch: a provider blip is exactly what
+        // the reconnect window exists for, and must not end the session.
+        final blocks = FakeBlockService(
+          blockSeconds: 300,
+          refreshFailures: const [BlockProviderUnavailable()],
+        );
+        final engine = engineWith(blocks);
+        addTearDown(engine.dispose);
+
+        await engine.start(testPhrase);
+        await pumpEventQueue();
+
+        sockets.single.emitDrop(reason: 'server hung up');
+        await Future<void>.delayed(const Duration(milliseconds: 300));
+
+        expect(engine.currentStatus, EngineStatus.live);
+        expect(blocks.refreshedBlockIds, hasLength(2));
+      });
+
       test('counting continues after a reconnect', () async {
         final blocks = FakeBlockService(blockSeconds: 300);
         final engine = engineWith(blocks);
