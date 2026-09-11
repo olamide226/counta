@@ -1,144 +1,11 @@
-import 'dart:async';
 import 'dart:io';
-import 'dart:typed_data';
 import 'package:flutter_test/flutter_test.dart';
 
 import 'package:counta/core/services/counting/cloud_counting_engine.dart';
 import 'package:counta/domain/counting/counting_engine.dart';
-import 'package:counta/domain/counting/speech_socket.dart';
 import 'package:counta/domain/counting/transcript_segment.dart';
-import 'package:counta/core/services/counting/audio_source.dart';
 
-const testToken = 'test-deepgram-token';
-
-class FakeSpeechSocket implements SpeechSocket {
-  /// Every credential the engine handed to [connect], in order.
-  final List<String> tokensSeen = [];
-  final _segmentsController = StreamController<TranscriptSegment>.broadcast();
-  final _stateController = StreamController<SocketState>.broadcast();
-  final _activityController = StreamController<void>.broadcast();
-  SocketState _currentState = SocketState.disconnected;
-
-  @override
-  Stream<TranscriptSegment> get segments => _segmentsController.stream;
-
-  @override
-  Stream<SocketState> get state => _stateController.stream;
-
-  @override
-  Stream<void> get activity => _activityController.stream;
-
-  @override
-  SocketState get currentState => _currentState;
-
-  @override
-  String? closeDescription;
-
-  int connectCount = 0;
-
-  @override
-  Future<void> connect({
-    required String apiKeyOrToken,
-    PhraseSpec? phrase,
-  }) async {
-    connectCount++;
-    tokensSeen.add(apiKeyOrToken);
-    _currentState = SocketState.connected;
-    _stateController.add(_currentState);
-  }
-
-  /// Simulates the server hanging up mid-session, without the engine asking.
-  void emitDrop({String? reason}) {
-    closeDescription = reason;
-    _currentState = SocketState.disconnected;
-    _stateController.add(_currentState);
-  }
-
-  void emitSegment(TranscriptSegment segment) {
-    _activityController.add(null);
-    _segmentsController.add(segment);
-  }
-
-  void emitActivity() => _activityController.add(null);
-
-  final List<Uint8List> sentFrames = [];
-
-  @override
-  void sendAudio(Uint8List pcmFrames) => sentFrames.add(pcmFrames);
-
-  @override
-  Future<void> closeGracefully({int drainTimeoutMs = 2000}) async {
-    _currentState = SocketState.disconnected;
-    _stateController.add(_currentState);
-  }
-
-  @override
-  Future<void> dispose() async {
-    await _segmentsController.close();
-    await _stateController.close();
-    await _activityController.close();
-  }
-}
-
-class FakeAudioSource implements AudioSource {
-  StreamController<Uint8List>? _controller;
-  int startCount = 0;
-  int stopCount = 0;
-
-  /// What the OS answers when capture asks for the microphone.
-  bool permissionGranted = true;
-
-  /// Holds the stream silent: no first frame, no error. Models a microphone
-  /// that has been granted but never delivers, so a stop can race startup.
-  bool silent = false;
-
-  @override
-  Future<bool> hasPermission() async => permissionGranted;
-
-  @override
-  Stream<Uint8List> start({int sampleRate = 16000}) {
-    startCount++;
-    // A fresh controller per start, so the engine can restart capture after a
-    // stall the same way the real source does.
-    _controller = StreamController<Uint8List>.broadcast();
-
-    // The real source answers on the stream, asynchronously: a refusal as a
-    // typed error, and a working microphone as its first frame.
-    scheduleMicrotask(() {
-      if (silent) {
-        return;
-      }
-      if (!permissionGranted) {
-        _controller?.addError(const AudioSourcePermissionDenied());
-      } else {
-        _controller?.add(Uint8List(320));
-      }
-    });
-    return _controller!.stream;
-  }
-
-  /// Simulates iOS pausing capture without closing the stream.
-  void emitStall() {
-    _controller?.addError(const AudioSourceStalled(Duration(seconds: 3)));
-  }
-
-  void emitFrame() {
-    _controller?.add(Uint8List(320));
-  }
-
-  @override
-  Future<void> stop() async {
-    stopCount++;
-    final controller = _controller;
-    _controller = null;
-    await controller?.close();
-  }
-
-  @override
-  Future<void> dispose() async {
-    await stop();
-  }
-}
+import '../../helpers/voice_fakes.dart';
 
 void main() {
   group('CloudCountingEngine', () {
@@ -151,7 +18,7 @@ void main() {
       fakeAudio = FakeAudioSource();
       engine = CloudCountingEngine(
         tokenProvider: () async => testToken,
-        speechSocket: fakeSocket,
+        socketFactory: () => fakeSocket,
         audioSource: fakeAudio,
       );
     });
@@ -229,6 +96,33 @@ void main() {
         expect(engine.currentStatus, EngineStatus.idle);
       });
 
+      test('a restart while capture is still unconfirmed does not hang', () {
+        // The same class of hang the stop path was fixed for, reached the
+        // other way. The replaced run is still waiting for its first frame,
+        // and the restart installs a completer of its own over it: unless
+        // ending the previous run settles it, that `start()` waits for ever
+        // on a completer nothing can reach any more.
+        fakeAudio.silent = true;
+        final replaced = engine.start();
+
+        return Future<void>.delayed(Duration.zero).then((_) async {
+          expect(fakeSocket.connectCount, 0);
+
+          fakeAudio.silent = false;
+          final restarted = engine.start();
+
+          await replaced.timeout(
+            const Duration(seconds: 2),
+            onTimeout: () => fail('the replaced start() never completed'),
+          );
+          await restarted.timeout(
+            const Duration(seconds: 2),
+            onTimeout: () => fail('the restarted start() never completed'),
+          );
+          expect(engine.currentStatus, EngineStatus.live);
+        });
+      });
+
       test(
         'stop after a denied start is clean and returns an empty summary',
         () async {
@@ -272,7 +166,7 @@ void main() {
         final localEngine = CloudCountingEngine(
           tokenProvider: () async =>
               throw const VoiceUnavailable('Voice counting is not wired up.'),
-          speechSocket: socket,
+          socketFactory: () => socket,
           audioSource: FakeAudioSource(),
         );
         addTearDown(localEngine.dispose);
@@ -304,7 +198,7 @@ void main() {
         final socket = FakeSpeechSocket();
         final localEngine = CloudCountingEngine(
           tokenProvider: () async => throw StateError('no block token'),
-          speechSocket: socket,
+          socketFactory: () => socket,
           audioSource: FakeAudioSource(),
         );
         addTearDown(localEngine.dispose);
@@ -388,7 +282,7 @@ void main() {
       final throwingSocket = _ThrowingCloseSocket();
       final localEngine = CloudCountingEngine(
         tokenProvider: () async => testToken,
-        speechSocket: throwingSocket,
+        socketFactory: () => throwingSocket,
         audioSource: FakeAudioSource(),
       );
 
@@ -448,7 +342,7 @@ void main() {
         final localAudio = FakeAudioSource();
         final localEngine = CloudCountingEngine(
           tokenProvider: () async => testToken,
-          speechSocket: localSocket,
+          socketFactory: () => localSocket,
           audioSource: localAudio,
           transcriptionSilenceTimeout: const Duration(milliseconds: 80),
           transcriptionWatchdogInterval: const Duration(milliseconds: 10),
@@ -478,7 +372,7 @@ void main() {
         final localAudio = FakeAudioSource();
         final localEngine = CloudCountingEngine(
           tokenProvider: () async => testToken,
-          speechSocket: localSocket,
+          socketFactory: () => localSocket,
           audioSource: localAudio,
           transcriptionSilenceTimeout: const Duration(milliseconds: 70),
           transcriptionWatchdogInterval: const Duration(milliseconds: 10),
@@ -505,7 +399,7 @@ void main() {
       final failing = _FailingReconnectSocket();
       final localEngine = CloudCountingEngine(
         tokenProvider: () async => testToken,
-        speechSocket: failing,
+        socketFactory: () => failing,
         audioSource: FakeAudioSource(),
         reconnectWindow: const Duration(minutes: 5),
         maxReconnectBackoff: const Duration(milliseconds: 20),
@@ -531,7 +425,7 @@ void main() {
       final failing = _FailingReconnectSocket();
       final localEngine = CloudCountingEngine(
         tokenProvider: () async => testToken,
-        speechSocket: failing,
+        socketFactory: () => failing,
         audioSource: FakeAudioSource(),
         reconnectWindow: const Duration(milliseconds: 120),
         maxReconnectBackoff: const Duration(milliseconds: 10),

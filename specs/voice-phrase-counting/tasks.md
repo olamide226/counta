@@ -79,14 +79,21 @@ Each task is scoped to be completable in isolation and leaves the app in a worki
   - [x] 8.7 Add per-user rate limiting on `/voice-block`
   - _Requirements: 3.2, 3.3, 3.4, 3.5, 3.6, 3.7, 3.8, 3.11, 3.12, 11.8, 12.4_
 
-- [ ] **9. Implement block lifecycle in the client**
-  - [ ] 9.1 Implement `BlockClient.acquire` and `.release` against the Edge Function
-  - [ ] 9.2 Acquire a block before opening any Deepgram connection at session start
-  - [ ] 9.3 Implement renewal at 90% of block duration with overlapping sockets and offset-based deduplication in the matcher
-  - [ ] 9.4 Handle 402 at renewal: run the current block to completion, then transition to `exhausted`
-  - [ ] 9.5 Call `release` with refund eligibility on session stop
-  - [ ] 9.6 Write tests for renewal timing, overlap correctness and each error status
+- [x] **9. Implement block lifecycle in the client**
+  - [x] 9.1 Implement `BlockClient.acquire` and `.release` against the Edge Function
+    - Port in `domain/counting/block_service.dart`, adapter in `core/services/counting/block_client.dart`. Every documented status becomes a `BlockFailure` subtype; no `http` type and no bare `Exception` reaches a caller.
+  - [x] 9.2 Acquire a block before opening any Deepgram connection at session start
+    - The block request sits where the token fetch did, after capture has proved itself, so a session that cannot deliver audio never spends credit (2.2).
+  - [x] 9.3 Implement renewal at 90% of block duration with overlapping sockets and offset-based deduplication in the matcher
+    - `PhraseMatcher` keeps a window per transcript stream and rebases each onto the session timeline from an offset the engine derives from bytes streamed. The same fix makes counting survive a reconnect, which restarts the provider's clock at zero.
+  - [x] 9.4 Handle 402 at renewal: run the current block to completion, then transition to `exhausted`
+    - A renewal failing for any other reason retries until the block expires and then pauses in `degraded`: the user has credit, so it is not a paywall.
+  - [x] 9.5 Call `release` with refund eligibility on session stop
+    - Streamed seconds and an honest detection count, bounded by a short timeout: an unreported block is left unreconciled server-side (15.3) rather than making the user wait on the network.
+  - [x] 9.6 Write tests for renewal timing, overlap correctness and each error status
+    - Plus reconnect-does-not-re-acquire, which is what stops every dropped socket debiting another block.
   - _Requirements: 3.1, 3.9, 3.10, 3.11_
+  - _Gap: there is no way to re-mint a Deepgram token for a block that is still live. A reconnect later than `DEEPGRAM_TOKEN_TTL_SECONDS` (30 s) after the grant retries with an expired token until the 90% renewal restores the session. Closing it needs a server-side token refresh keyed on the live block id._
 
 ---
 

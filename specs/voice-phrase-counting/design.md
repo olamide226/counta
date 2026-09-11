@@ -144,8 +144,14 @@ Owns the credit lifecycle. The only component that talks to the Edge Function.
 class BlockClient {
   Future<Block> acquire(String sessionId);
   Future<void>  release(String blockId, {required bool eligibleForRefund});
-  Stream<int>   get balanceUpdates;
 }
+```
+
+The balance is carried on the answers that state one — `Block.balanceAfter`,
+`BlockInsufficientCredit.balance`, `BlockRelease.balance`. A `balanceUpdates`
+stream lands with the paywall screen that reads it (task 10), not before.
+
+```dart
 
 class Block {
   final String   id;

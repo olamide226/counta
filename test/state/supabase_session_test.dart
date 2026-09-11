@@ -1,6 +1,7 @@
 import 'dart:convert';
 
 import 'package:counta/state/providers/supabase_providers.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 
@@ -95,6 +96,81 @@ void main() {
       );
 
       expect(resolved, same(fresh));
+    });
+  });
+
+  group('resolveAccessToken', () {
+    test('reads the live session, not the startup snapshot', () async {
+      // The snapshot startup resolved is fixed in time: once its own `exp`
+      // passes, `isExpired` is true for ever. Reading it sent every acquire,
+      // release and renewal retry of a long practice through a full
+      // refreshSession() round trip, however fresh the SDK's session was.
+      final snapshot = _session(
+        DateTime.now().subtract(const Duration(hours: 1)),
+      );
+      final live = _session(DateTime.now().add(const Duration(hours: 1)));
+
+      final token = await resolveAccessToken(
+        startup: Future.value(snapshot),
+        currentSession: () => live,
+        refresh: () async => fail('the SDK has already refreshed'),
+        signInAnonymously: () async => fail('there is a live session'),
+      );
+
+      expect(token, live.accessToken);
+    });
+
+    test('refreshes when the live session really has expired', () async {
+      final stale = _session(DateTime.now().subtract(const Duration(hours: 1)));
+      final refreshed = _session(DateTime.now().add(const Duration(hours: 1)));
+
+      final token = await resolveAccessToken(
+        startup: Future.value(stale),
+        currentSession: () => stale,
+        refresh: () async => refreshed,
+        signInAnonymously: () async => fail('the refresh answered'),
+      );
+
+      expect(token, refreshed.accessToken);
+    });
+
+    test('a revoked refresh signs back in rather than giving up', () async {
+      // The closure this replaced returned null here, so the block request
+      // failed 401 in exactly the case the shared resolver recovers from.
+      final stale = _session(DateTime.now().subtract(const Duration(hours: 1)));
+      final fresh = _session(DateTime.now().add(const Duration(hours: 1)));
+
+      final token = await resolveAccessToken(
+        startup: Future.value(stale),
+        currentSession: () => stale,
+        refresh: () async => throw AuthSessionMissingException(),
+        signInAnonymously: () async => fresh,
+      );
+
+      expect(token, fresh.accessToken);
+    });
+
+    test('a build with no backend session has no credential', () async {
+      final token = await resolveAccessToken(
+        startup: Future<Session?>.value(),
+        currentSession: () => fail('nothing was signed in'),
+        refresh: () async => fail('nothing to refresh'),
+        signInAnonymously: () async => fail('startup already decided'),
+      );
+
+      expect(token, isNull);
+    });
+  });
+
+  group('blockServiceProvider', () {
+    test('a build with no Supabase configuration has no block service', () {
+      // Voice counting is unavailable rather than half-wired: with no backend
+      // there is nothing that could pay for streaming time, so no HTTP client
+      // is built and the engine falls back to the dev-token path.
+      final container = ProviderContainer();
+      addTearDown(container.dispose);
+
+      expect(container.read(blockServiceProvider), isNull);
     });
   });
 }

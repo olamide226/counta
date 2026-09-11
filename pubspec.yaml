@@ -49,6 +49,7 @@ dependencies:
   live_activities: ^2.5.1
   permission_handler: 12.0.3
   supabase_flutter: 2.17.2
+  http: ^1.6.0
 
 dev_dependencies:
   flutter_test:

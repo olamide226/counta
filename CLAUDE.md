@@ -68,7 +68,11 @@ The interface carries `counts`, `status`, `diagnostics`, `incrementManual()` and
 
 **Platform requirements:** iOS declares `UIBackgroundModes: audio` so sessions survive backgrounding, and `AudioSource` sets `allowHapticsAndSystemSoundsDuringRecording` — without it the app's own tap sounds raise an audio-session interruption that permanently pauses recording. Android background recording is **not** supported yet: it needs a foreground service, which `record_android` does not provide.
 
-**Credentials:** `CloudCountingEngine` takes a required `tokenProvider` and never reads `DEEPGRAM_API_KEY` itself. The only reader of that define is `core/config/dev_secrets.dart`, which throws unless `BuildConfig.showDebugTools` is on. Production tokens come from the `voice-block` Supabase Edge Function under `supabase/` (see `supabase/README.md`; `make supabase-test` runs its Deno tests).
+**Credentials and blocks:** `CloudCountingEngine` never reads `DEEPGRAM_API_KEY` itself. The only reader of that define is `core/config/dev_secrets.dart`, which throws unless `BuildConfig.showDebugTools` is on. A configured build passes a `BlockService` instead: the engine buys a block before opening any socket, renews at 90% of the block, and releases on stop. `BlockClient` (`core/services/counting/block_client.dart`) is the only thing that talks to the `voice-block` Edge Function under `supabase/` (see `supabase/README.md`; `make supabase-test` runs its Deno tests), and maps every documented status onto a `BlockFailure` subtype declared in `domain/counting/block_service.dart`. Exactly one credential source is wired at a time — a build with a block service never falls back to the dev key.
+
+A **renewal** opens the next connection and confirms it before closing the outgoing one, and both stream the same audio for `renewalOverlap`. That is why `PhraseMatcher` keeps a token window *per transcript stream* and rebases each onto the session timeline: every Deepgram connection numbers its own audio from zero. The engine derives each stream's offset from bytes streamed, not from a clock, so the two copies of a repetition land on the same span and the acceptance gate counts it once. The same rebase is what makes counting survive a **reconnect**, which also restarts the provider's clock. A reconnect reuses the current block and never acquires another — the server would read a grant carrying the live block's session id as a renewal and debit for it. It mints a fresh credential for that same block through `BlockService.refreshToken` (`POST .../voice-block/token`), which never debits: a block's own token lives ~30 s and only authorises *establishing* a connection, so replaying it could recover nothing but a drop in the block's first tenth. `BlockNotFound` (404) there means the block is gone and the session ends rather than retrying.
+
+Every ending goes through `_teardown(status, [reason])` — the one place that sets `_stopped`, cancels the timers, settles a pending capture confirmation, clears the pre-connect buffer, stops capture, closes the sockets and releases *every* block the run holds. `stop()` calls it with `idle` and then builds the `SessionSummary`; a restart calls it before setting up the new run; `_endStreaming` is the same thing behind an "already stopped" guard, for terminal failures — a failed start, a reconnect that ran out of window, an expired block. Anything that reports a status without it leaves a renewal timer armed, and an engine nobody disposed goes on buying blocks with no microphone attached.
 
 ## Key Provider Structure
 
@@ -80,7 +84,8 @@ The interface carries `counts`, `status`, `diagnostics`, `incrementManual()` and
 - `screenWakeServiceProvider` — holds the wakelock while a voice session is in the foreground
 - `hiveInitProvider` — `FutureProvider` for async Hive initialization at startup
 - `sessionStartupProvider` — `FutureProvider<CountSession?>`: takes the previous run's checkpoint, then attaches the checkpointer. Watched by `App`; must run before anything counts
-- `supabaseSessionProvider` — `FutureProvider<Session?>`: initialises Supabase from `SUPABASE_URL` / `SUPABASE_PUBLISHABLE_KEY` dart-defines and signs in anonymously; null when the build has no backend config. `deepgramTokenProviderProvider` supplies the engine's credential (dev key via `DevSecrets` in dev builds only; the block client in task 9 replaces it)
+- `supabaseSessionProvider` — `FutureProvider<Session?>`: initialises Supabase from `SUPABASE_URL` / `SUPABASE_PUBLISHABLE_KEY` dart-defines and signs in anonymously; null when the build has no backend config
+- `blockServiceProvider` — `Provider<BlockService?>`: the `BlockClient`, or null when the build has no Supabase config. `deepgramTokenProviderProvider` is the fallback for that case only (dev key via `DevSecrets`, else `VoiceUnavailable`)
 - `appLifecycleProvider` — handles background/foreground transitions; shows an ongoing notification for a backgrounded voice session instead of a resume prompt
 
 ## Hive Persistence
@@ -99,7 +104,7 @@ Retiring a checkpoint happens in exactly one place: `SessionsNotifier.saveSessio
 
 Tests live in `test/` mirroring `lib/` structure. Uses `ProviderContainer` with mock overrides. Core business logic (counter provider, alert service, models, themes) is tested; UI and platform services are not.
 
-Shared doubles live in `test/helpers/` — use them rather than growing another copy: `InMemoryCheckpointStore`, `FakeCountingEngine` (configurable `startStatus`, records starts/manual calls/disposal), `testSession(...)`, `withTempHive()`, and the settings/sessions/service mocks.
+Shared doubles live in `test/helpers/` — use them rather than growing another copy: `InMemoryCheckpointStore`, `FakeCountingEngine` (configurable `startStatus`, records starts/manual calls/disposal), `testSession(...)`, `withTempHive()`, and the settings/sessions/service mocks. `voice_fakes.dart` holds `FakeSpeechSocket`, `FakeAudioSource` and `FakeBlockService`; because it reaches the `record` plugin through `AudioSource`, the plugin-free `finalSegment(...)` / `testPhrase` live in `transcript_fixtures.dart` (re-exported by the fakes) so the `domain/` tests can import them too.
 
 ## Conventions
 
