@@ -161,7 +161,7 @@ The system has no backend today. This feature introduces exactly one server-side
 
 #### Acceptance Criteria
 
-9.1. WHEN the user first enables voice counting THEN the system SHALL display a disclosure stating that audio is transmitted to a third-party speech recognition provider during voice sessions.
+9.1. WHEN the user first enables voice counting THEN the system SHALL display a disclosure stating that audio is transmitted to a third-party speech recognition provider during voice sessions. The disclosure SHALL describe the provider generically and SHALL NOT name the vendor: naming it in app copy makes changing provider an app release, whereas the privacy policy can be updated the same day. The current processor SHALL be named in the privacy policy instead, which is also where data-protection law expects to find it.
 9.2. THE system SHALL NOT transmit audio at any time other than during an explicitly started voice session.
 9.3. WHILE audio is being transmitted THE system SHALL display a persistent, visually distinct recording indicator.
 9.4. THE system SHALL NOT store raw audio to disk at any point.
