@@ -6,6 +6,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../../core/theme/sound_mode_presentation.dart';
 
 import '../../core/config/build_config.dart';
+import '../../state/providers/hive_providers.dart';
 import '../../state/providers/session_controller.dart';
 import '../../state/providers/app_lifecycle_provider.dart';
 import '../../state/providers/counter_provider.dart';
@@ -96,19 +97,30 @@ class _CounterScreenState extends ConsumerState<CounterScreen>
     BuildContext context,
     SessionController sessionController,
   ) {
+    // Read before the route is pushed: the callbacks below run across awaits,
+    // and reaching for a provider after one is how a screen that has since
+    // been popped throws instead of recording anything.
+    final history = ref.read(phraseHistoryRepositoryProvider);
+
     Navigator.of(context).push(
       MaterialPageRoute(
         builder: (_) => PhraseSetupScreen(
-          initialPhrase: sessionController.activePhrase?.raw,
+          initialPhrases: sessionController.activePhrases?.rawPhrases,
+          recentPhrases: history.getRecent(),
           // The controller owns the whole voice lifecycle — disclosure,
           // engine swap, and the fallback to tap counting when the engine
           // cannot run. The screen only reacts to how it ended.
-          onStartSession: (phraseSpec) async {
-            final outcome = await sessionController.startVoiceSession(
-              phraseSpec,
-            );
+          onStartSession: (phrases) async {
+            final outcome = await sessionController.startVoiceSession(phrases);
             if (outcome == EngineStatus.permissionDenied) {
               await _handleMicrophoneDenied();
+            }
+            // Remembered only once a session really started, so a setup that
+            // failed on permissions or credit does not come back as a
+            // suggestion.
+            if (!SessionController.terminalStatuses.contains(outcome) &&
+                outcome != EngineStatus.idle) {
+              await history.record(phrases);
             }
           },
         ),
@@ -220,9 +232,13 @@ class _CounterScreenState extends ConsumerState<CounterScreen>
             if (isVoiceActive)
               VoiceSessionBanner(
                 status: sessionController.status,
-                phrase: sessionController.activePhrase?.raw ?? 'Voice session',
+                phrases:
+                    sessionController.activePhrases?.rawPhrases ??
+                    const ['Voice session'],
                 voiceCount: sessionController.voiceCount,
                 manualCount: sessionController.manualCount,
+                phraseCounts: sessionController.voiceCountsByPhrase,
+                lastMatchedPhrase: sessionController.lastVoicePhrase,
                 diagnostic: sessionController.lastDiagnostic,
                 onStop: () => _stopVoiceSession(sessionController),
               ),

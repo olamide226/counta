@@ -10,6 +10,7 @@ import '../../../core/services/counting/audio_source.dart';
 import '../../../core/services/counting/deepgram_socket.dart';
 import '../../../domain/validation/phrase_validator.dart';
 import 'latency_stats.dart';
+import '../../../domain/counting/counting_engine.dart';
 import '../../../domain/counting/speech_socket.dart';
 import '../../../domain/counting/transcript_segment.dart';
 
@@ -177,7 +178,10 @@ class _StreamingDebugScreenState extends State<StreamingDebugScreen> {
     }
 
     try {
-      await _speechSocket!.connect(apiKeyOrToken: apiKey, phrase: phrase);
+      await _speechSocket!.connect(
+        apiKeyOrToken: apiKey,
+        phrases: PhraseSet.single(phrase),
+      );
 
       final audioStream = _audioSource!.start();
       _audioSubscription = audioStream.listen(

@@ -69,23 +69,29 @@ class SessionDetailScreen extends ConsumerWidget {
             label: 'Final Count',
             value: session.finalCount.toString(),
           ),
-          if (session.phrase != null) ...[
+          if (session.allPhrases.isNotEmpty) ...[
             const SizedBox(height: 16),
             _buildStatCard(
               context,
               icon: Icons.graphic_eq_rounded,
-              label: 'Phrase chanted',
-              value: '“${session.phrase}”',
+              label: session.allPhrases.length > 1
+                  ? 'Phrases chanted'
+                  : 'Phrase chanted',
+              value: session.allPhrases.map((phrase) => '“$phrase”').join('\n'),
             ),
           ],
           if (session.voiceCount != null || session.manualCount != null) ...[
             const SizedBox(height: 16),
             SessionSummaryCard(
-              title: session.phrase ?? session.mantra,
+              title: session.phraseLabel ?? session.mantra,
               total: session.finalCount,
               voiceCount: session.voiceCount,
               manualCount: session.manualCount,
               isVoiceSession: session.isVoiceSession,
+              phraseCounts: phraseBreakdown(
+                session.allPhrases,
+                session.phraseCounts ?? const {},
+              ),
             ),
           ],
           if (session.creditsConsumed != null) ...[

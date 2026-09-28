@@ -63,6 +63,10 @@ class RecoverSessionSheet extends ConsumerWidget {
             voiceCount: checkpoint.voiceCount,
             manualCount: checkpoint.manualCount,
             isVoiceSession: checkpoint.isVoiceSession,
+            phraseCounts: phraseBreakdown(
+              checkpoint.allPhrases,
+              checkpoint.phraseCounts ?? const {},
+            ),
           ),
           const SizedBox(height: 24),
           FilledButton.icon(

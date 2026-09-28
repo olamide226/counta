@@ -1,85 +1,111 @@
 import 'dart:convert';
+
 import 'package:hive/hive.dart';
 
+import '../hive/hive_init.dart';
+import '../../domain/counting/counting_engine.dart';
 import '../../domain/models/phrase_history_entry.dart';
-import '../../domain/validation/phrase_validator.dart';
 
 abstract class PhraseHistoryRepository {
-  List<PhraseHistoryEntry> getRecentPhrases({int limit = 5});
-  Future<void> addOrUpdatePhrase(String rawPhrase);
+  /// Setups most recently used first.
+  List<PhraseHistoryEntry> getRecent({int limit = 6});
+
+  /// Remembers a setup a voice session actually started with.
+  Future<void> record(PhraseSet phrases);
+
   Future<void> clear();
 }
 
 class HivePhraseHistoryRepository implements PhraseHistoryRepository {
   static const String boxName = 'phrase_history';
+
+  /// Setups kept at all. History is a convenience, not a record — the saved
+  /// sessions are the record — so it is trimmed rather than left to grow.
+  static const int maxEntries = 20;
+
   final Box _box;
-  final PhraseValidator _validator = PhraseValidator();
 
   HivePhraseHistoryRepository(this._box);
 
-  @override
-  List<PhraseHistoryEntry> getRecentPhrases({int limit = 5}) {
-    final entries = <PhraseHistoryEntry>[];
-    for (final key in _box.keys) {
-      final rawVal = _box.get(key);
-      if (rawVal != null) {
-        try {
-          final Map<String, dynamic> jsonMap = rawVal is String
-              ? jsonDecode(rawVal)
-              : Map<String, dynamic>.from(rawVal);
-          entries.add(PhraseHistoryEntry.fromJson(jsonMap));
-        } catch (_) {}
-      }
-    }
+  /// The key is built from the normalised tokens the validator already
+  /// produced, so it agrees with the duplicate check in setup by construction.
+  static String keyFor(PhraseSet phrases) => [
+    for (final phrase in phrases.phrases) phrase.normalisedTokens.join(' '),
+  ].join(' | ');
 
-    entries.sort((a, b) => b.lastUsedAt.compareTo(a.lastUsedAt));
+  @override
+  List<PhraseHistoryEntry> getRecent({int limit = 6}) {
+    final entries = _readAll()
+      ..sort((a, b) => b.lastUsedAt.compareTo(a.lastUsedAt));
     return entries.take(limit).toList();
   }
 
-  @override
-  Future<void> addOrUpdatePhrase(String rawPhrase) async {
-    final validation = _validator.validate(rawPhrase);
-    if (!validation.isValid || validation.phraseSpec == null) return;
-
-    final spec = validation.phraseSpec!;
-    final normalisedKey = spec.normalisedTokens.join(' ');
-
-    PhraseHistoryEntry entry;
-    final existingRaw = _box.get(normalisedKey);
-
-    if (existingRaw != null) {
+  List<PhraseHistoryEntry> _readAll() {
+    final entries = <PhraseHistoryEntry>[];
+    for (final value in _box.values) {
+      if (value is! String) continue;
       try {
-        final Map<String, dynamic> jsonMap = existingRaw is String
-            ? jsonDecode(existingRaw)
-            : Map<String, dynamic>.from(existingRaw);
-        final existing = PhraseHistoryEntry.fromJson(jsonMap);
-        entry = existing.copyWith(
-          raw: spec.raw,
-          lastUsedAt: DateTime.now(),
-          useCount: existing.useCount + 1,
+        final entry = PhraseHistoryEntry.fromJson(
+          jsonDecode(value) as Map<String, dynamic>,
         );
-      } catch (_) {
-        entry = PhraseHistoryEntry(
-          normalised: normalisedKey,
-          raw: spec.raw,
-          lastUsedAt: DateTime.now(),
-          useCount: 1,
-        );
+        if (entry.phrases.isNotEmpty) entries.add(entry);
+      } on FormatException {
+        // A corrupt entry costs the user one chip, not the whole list.
+      } on TypeError {
+        // Same: an entry of the wrong shape is skipped, not fatal.
       }
-    } else {
-      entry = PhraseHistoryEntry(
-        normalised: normalisedKey,
-        raw: spec.raw,
-        lastUsedAt: DateTime.now(),
-        useCount: 1,
-      );
+    }
+    return entries;
+  }
+
+  @override
+  Future<void> record(PhraseSet phrases) async {
+    final key = keyFor(phrases);
+    final now = DateTime.now();
+
+    final existing = _box.get(key);
+    var useCount = 1;
+    if (existing is String) {
+      try {
+        useCount =
+            PhraseHistoryEntry.fromJson(
+              jsonDecode(existing) as Map<String, dynamic>,
+            ).useCount +
+            1;
+      } on FormatException {
+        // Start the count again rather than refuse to remember the setup.
+      } on TypeError {
+        // As above.
+      }
     }
 
-    await _box.put(normalisedKey, jsonEncode(entry.toJson()));
+    // The latest wording wins: retyping "Im rich" as "I'm rich" should show
+    // the tidier one next time, not whichever came first.
+    final entry = PhraseHistoryEntry(
+      key: key,
+      phrases: phrases.rawPhrases,
+      lastUsedAt: now,
+      useCount: useCount,
+    );
+    await _box.put(key, jsonEncode(entry.toJson()));
+    await _trim();
+  }
+
+  Future<void> _trim() async {
+    if (_box.length <= maxEntries) return;
+    final stale =
+        (_readAll()..sort((a, b) => b.lastUsedAt.compareTo(a.lastUsedAt)))
+            .skip(maxEntries)
+            .map((entry) => entry.key);
+    await _box.deleteAll(stale);
   }
 
   @override
   Future<void> clear() async {
     await _box.clear();
   }
+}
+
+PhraseHistoryRepository createPhraseHistoryRepository() {
+  return HivePhraseHistoryRepository(getPhraseHistoryBox());
 }
