@@ -34,13 +34,15 @@ class CountSessionAdapter extends TypeAdapter<CountSession> {
       manualCount: fields[14] as int?,
       completed: fields[15] == null ? true : fields[15] as bool,
       creditsConsumed: fields[16] as int?,
+      phrases: (fields[17] as List?)?.cast<String>(),
+      phraseCounts: (fields[18] as Map?)?.cast<String, int>(),
     );
   }
 
   @override
   void write(BinaryWriter writer, CountSession obj) {
     writer
-      ..writeByte(17)
+      ..writeByte(19)
       ..writeByte(0)
       ..write(obj.id)
       ..writeByte(1)
@@ -74,7 +76,11 @@ class CountSessionAdapter extends TypeAdapter<CountSession> {
       ..writeByte(15)
       ..write(obj.completed)
       ..writeByte(16)
-      ..write(obj.creditsConsumed);
+      ..write(obj.creditsConsumed)
+      ..writeByte(17)
+      ..write(obj.phrases)
+      ..writeByte(18)
+      ..write(obj.phraseCounts);
   }
 
   @override

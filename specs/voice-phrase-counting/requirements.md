@@ -11,7 +11,7 @@ The system has no backend today. This feature introduces exactly one server-side
 ### Scope
 
 **In scope for this iteration**
-- Single-phrase counting per session, phrase declared before the session starts
+- Counting one phrase per session, or a set of up to five, declared before the session starts. Every phrase advances one shared session total
 - Foreground-only sessions (screen may dim, app must remain foreground)
 - English language recognition
 - Block-based credit consumption with in-app purchase of credit packs
@@ -21,7 +21,8 @@ The system has no backend today. This feature introduces exactly one server-side
 **Out of scope for this iteration**
 - Background or screen-off counting
 - Automatic detection of which phrase to count without user declaration
-- Multi-phrase or multi-language sessions
+- Multi-language sessions, and sets larger than five phrases
+- Separate per-phrase counters, or counting a *round* only once every phrase in a set has been said
 - Server-side audio relay and server-side matching
 - Cross-device sync of session history
 
@@ -31,7 +32,8 @@ The system has no backend today. This feature introduces exactly one server-side
 |---|---|
 | **Block** | A pre-paid unit of streaming time (default 300 seconds) granted by the Edge Function |
 | **Credit** | One voice minute. The unit of the RevenueCat virtual currency |
-| **Detection** | A single accepted match of the target phrase in the transcript stream |
+| **Detection** | A single accepted match of one of the session's phrases in the transcript stream |
+| **Phrase set** | The one to five phrases a session listens for. Any of them advances the same total |
 | **Refractory period** | Time after a detection during which further detections are suppressed |
 | **Segment** | A finalised transcript fragment returned by Deepgram with `is_final: true` |
 | **Session** | One continuous counting activity, from Start to Stop, spanning one or more blocks |
@@ -46,13 +48,19 @@ The system has no backend today. This feature introduces exactly one server-side
 
 #### Acceptance Criteria
 
-1.1. WHEN the user opens the voice counting setup screen THEN the system SHALL present a text input for the target phrase and a list of the user's five most recently used phrases.
+1.1. WHEN the user opens the voice counting setup screen THEN the system SHALL present a single text input for the target phrase and a list of the user's most recently used phrase setups. The single-phrase case SHALL NOT require any additional interaction.
 1.2. WHEN the user submits a phrase THEN the system SHALL normalise it and store it as the session's target phrase.
 1.3. IF the submitted phrase normalises to fewer than 2 tokens THEN the system SHALL reject it and display guidance that short phrases produce unreliable counts.
 1.4. IF the submitted phrase normalises to more than 12 tokens THEN the system SHALL reject it and display guidance that long phrases exceed the matching window.
 1.5. WHEN a phrase is accepted THEN the system SHALL persist it to the local phrase history, deduplicated by normalised form.
-1.6. WHEN a session starts THEN the system SHALL supply the target phrase tokens to Deepgram as `keyterm` parameters to bias recognition.
-1.7. WHEN voice capture is paused and resumed within the same counting session THEN the system SHALL keep the most recently selected phrase and prefill it on the resume screen.
+1.6. WHEN a session starts THEN the system SHALL supply every phrase in the set to the provider as a separate repeated `keyterm` parameter, so all of them are biased in the acoustic model rather than only the first.
+1.7. WHEN voice capture is paused and resumed within the same counting session THEN the system SHALL keep the most recently selected phrases and prefill them on the resume screen.
+1.8. WHEN the user chooses to add another phrase THEN the system SHALL accept up to five phrases for one session, and SHALL state that any of them counts towards the same total.
+1.9. IF two submitted phrases normalise identically THEN the system SHALL reject the later one, naming the row it duplicates. Identical targets cannot both win an utterance, so the second would remain at zero for the whole session and appear broken.
+1.10. IF one submitted phrase's tokens appear contiguously inside another's THEN the system SHALL warn without blocking, because the longer phrase will claim a shared utterance.
+1.11. WHERE a phrase row is left blank, the system SHALL ignore it rather than treat it as invalid, so adding a row and reconsidering never prevents a session starting.
+1.12. WHEN a session starts THEN the system SHALL record the whole setup — one phrase or a set — as a single history entry, so a set can be restored in one action.
+1.13. IF a session fails to start THEN the system SHALL NOT record its setup in history.
 
 ### Requirement 2: Voice counting session
 
@@ -129,6 +137,8 @@ The system has no backend today. This feature introduces exactly one server-side
 6.2. WHEN the user taps the count control during a voice session THEN the system SHALL increment the session total and record the increment with source `manual`.
 6.3. WHEN the user performs the decrement gesture THEN the system SHALL decrement the session total by one, to a floor of zero.
 6.4. WHEN a session ends THEN the system SHALL display the total broken down by source (voice, manual) in the session summary.
+6.6. WHERE a session counted more than one phrase, the session total SHALL remain a single number, and the system SHALL additionally report the count per phrase — including any phrase that never matched, since a phrase at zero is the clearest signal that it is not being heard.
+6.7. WHEN a voice count is removed by the decrement gesture THEN the system SHALL remove it from the per-phrase breakdown as well, so the breakdown always sums to the voice count.
 6.5. The system SHALL maintain the session count locally as the authoritative display value, with detections acting as increments to it.
 
 ### Requirement 7: Session persistence and history
@@ -137,10 +147,11 @@ The system has no backend today. This feature introduces exactly one server-side
 
 #### Acceptance Criteria
 
-7.1. WHEN a session ends THEN the system SHALL persist a record containing the target phrase, start time, duration, voice count, manual count, and credits consumed.
+7.1. WHEN a session ends THEN the system SHALL persist a record containing every phrase counted, the count per phrase, start time, duration, voice count, manual count, and credits consumed.
 7.2. IF the app terminates unexpectedly during a session THEN the system SHALL recover the count from local storage on next launch and offer to save it as a completed session.
 7.3. WHILE a session is active THE system SHALL checkpoint the current count to local storage at least every 10 seconds.
-7.4. WHEN the user views history THEN the system SHALL list sessions in reverse chronological order with phrase, date, and total.
+7.4. WHEN the user views history THEN the system SHALL list sessions in reverse chronological order with phrase, date, and total. WHERE a session counted a set, the list SHALL name the first phrase and how many others there were.
+7.5. WHEN a record saved before multi-phrase sessions existed is read THEN the system SHALL present its single phrase unchanged, without migration.
 
 ### Requirement 8: Matching accuracy and tuning
 
@@ -154,6 +165,11 @@ The system has no backend today. This feature introduces exactly one server-side
 8.4. The matcher SHALL accept a candidate window when its token-level similarity to the target meets or exceeds the configured threshold, defaulting to 0.80.
 8.5. The matcher SHALL operate only on finalised transcript segments and SHALL NOT count from interim results.
 8.6. WHEN a window is accepted THEN the matcher SHALL consume the matched tokens so they cannot contribute to a subsequent match.
+8.7. WHERE a session counts several phrases, the matcher SHALL evaluate every phrase against one shared token window and accept at most one of them per candidate span. One utterance SHALL therefore count once however many phrases it resembles — which is why the matcher holds a set rather than the session holding a matcher per phrase.
+8.8. The refractory period SHALL be shared across a session's phrases, since the user cannot have spoken two different phrases in the same moment.
+8.9. Each phrase SHALL bound its own candidate window by its own token length, so a short phrase is never compared against a slice sized for a long one.
+8.10. WHEN candidates tie on similarity and on fit to their own phrase's length THEN the matcher SHALL accept the earliest, and SHALL NOT let any other preference outrank position. Accepting a candidate retires the tokens before it as well, so preferring a later candidate discards the earlier match without ever counting it. Where one phrase is contained in another the longer match begins at or before the shorter one, so position already prefers the longer, more specific claim.
+8.11. The corpus gate SHALL additionally verify that replaying a fixture with unrelated phrases listening alongside its own does not change the count of its own phrase.
 
 ### Requirement 9: Privacy and consent
 

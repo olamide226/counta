@@ -41,8 +41,8 @@ domain/models → data/repositories → state/providers → ui/screens
 
 - **domain/models/** — Business entities with `@HiveType` annotations for persistence. Immutable with `copyWith()`. Must never import Flutter. `buildSessionRecord()` (`session_record.dart`) is the one builder for a `CountSession`, used by both the checkpoint snapshot and the save sheet.
 - **domain/counting/** — Voice-counting domain: the `CountingEngine` and `SpeechSocket` ports, `PhraseMatcher`, `PhraseNormaliser`, `TranscriptSegment`. Pure Dart, no plugins — this is what the unit tests exercise.
-- **domain/validation/** — Input rules, e.g. `PhraseValidator` (2–12 normalised tokens).
-- **data/repositories/** — Hive persistence layer. `SettingsRepository` (single document) and `SessionsRepository` (collection).
+- **domain/validation/** — Input rules: `PhraseValidator` (2–12 normalised tokens per phrase, `validateSet` for a whole multi-row setup).
+- **data/repositories/** — Hive persistence layer. `SettingsRepository` (single document), `SessionsRepository` (collection) and `PhraseHistoryRepository` (recent phrase setups, one entry per setup so a whole set is restored in one tap).
 - **data/hive/** — Hive initialization, adapter registration, box opening.
 - **state/providers/** — Riverpod providers plus `SessionController` (the `ChangeNotifier` that owns the authoritative session count). This is where business logic lives.
 - **core/config/** — `BuildConfig`: the single source of truth for dev-vs-release behaviour (app name, whether debug tools are reachable).
@@ -58,11 +58,13 @@ domain/models → data/repositories → state/providers → ui/screens
 
 ## Voice counting
 
-Two engines implement `CountingEngine`: `TapCountingEngine` (default) and `CloudCountingEngine` (streaming STT). `SessionController` owns the whole voice lifecycle — screens call `startVoiceSession(phrase)` / `stopVoiceSession()` and never swap engines themselves. `startVoiceSession` consults the disclosure gate, installs the voice engine from the injected factory, and on any terminal status (`permissionDenied`, `error`, `exhausted`) disposes the failed engine, rolls the phrase and start time back, and falls back to tap counting. It returns the status the attempt ended at, which is what the screen reacts to. `setEngine()` disposes the engine it replaces.
+Two engines implement `CountingEngine`: `TapCountingEngine` (default) and `CloudCountingEngine` (streaming STT). `SessionController` owns the whole voice lifecycle — screens call `startVoiceSession(phrases)` / `stopVoiceSession()` and never swap engines themselves. `startVoiceSession` consults the disclosure gate, installs the voice engine from the injected factory, and on any terminal status (`permissionDenied`, `error`, `exhausted`) disposes the failed engine, rolls the phrase and start time back, and falls back to tap counting. It returns the status the attempt ended at, which is what the screen reacts to. `setEngine()` disposes the engine it replaces.
 
 The third-party audio disclosure is gated on the voice-start flow, not on a screen: `SessionController.disclosureGate` is supplied by the app shell (`app.dart`), which owns the navigator the sheet needs. This keeps the UI dependency pointing inward.
 
 The interface carries `counts`, `status`, `diagnostics`, `incrementManual()` and `decrementManual()` — add capabilities here rather than type-checking for a concrete engine.
+
+**A session counts a `PhraseSet`, not a phrase.** One to five phrases, all advancing one shared total; `PhraseSet` is the single place anything asks what a session is counting, and owns the `label` ("first phrase +2 more") that the banner, notification, Live Activity, checkpoint and saved record all reuse. `PhraseMatcher` holds the whole set over **one shared token window and one shared refractory**, accepting at most one phrase per candidate span — a matcher per phrase would let two near-identical phrases count the same breath twice, which is exactly what a user adding a variant would hit. Each phrase bounds its candidate window by its own token length. **Nothing may outrank the earliest candidate**: accepting one retires the tokens before it too, so preferring a later candidate destroys the earlier match instead of reordering output — an explicit "longer phrase wins" rule lost a short phrase whenever it was spoken first. Position already prefers the longer phrase where one contains another, so no such rule is needed. Every phrase is sent as its own repeated `keyterm`, so all of them are biased upstream. `PhraseValidator.validateSet` owns the setup rules: blank rows are ignored rather than invalid, phrases that normalise identically are rejected (the normaliser already collapses contractions, so "I'm rich" and "I am rich" are one phrase), and containment only warns. The corpus gate additionally asserts that unrelated phrases listening alongside a fixture's own do not change its count.
 
 `CloudCountingEngine` retries dropped connections for `reconnectWindow` (default 5 min) with jittered backoff, because sessions run 1–2 hours. A socket drop reconnects without restarting the microphone; only a mic stall (`AudioSourceStalled`) restarts capture.
 
@@ -88,13 +90,14 @@ Every ending goes through `_teardown(status, [reason])` — the one place that s
 - `sessionStartupProvider` — `FutureProvider<CountSession?>`: takes the previous run's checkpoint, then attaches the checkpointer. Watched by `App`; must run before anything counts
 - `supabaseSessionProvider` — `FutureProvider<Session?>`: initialises Supabase from `SUPABASE_URL` / `SUPABASE_PUBLISHABLE_KEY` dart-defines and signs in anonymously; null when the build has no backend config
 - `blockServiceProvider` — `Provider<BlockService?>`: the `BlockClient`, or null when the build has no Supabase config. `deepgramTokenProviderProvider` is the fallback for that case only (dev key via `DevSecrets`, else `VoiceUnavailable`)
+- `phraseHistoryRepositoryProvider` — `Provider<PhraseHistoryRepository>`: recent phrase setups for the one-tap chips in phrase setup. Written only once a voice session really starts, so a setup that failed on permissions or credit is never suggested back
 - `appLifecycleProvider` — handles background/foreground transitions; shows an ongoing notification for a backgrounded voice session instead of a resume prompt
 
 ## Hive Persistence
 
-Three Hive boxes: `'settings'` (single `AppSettings` doc), `'sessions'` (collection of `CountSession` docs) and `'session_checkpoint'` (at most one `CountSession`: the session in progress). Type IDs: `AppSettings`=0, `CountSession`=1, `SoundMode`=10, `ThemeModeChoice`=11, `AppThemeId`=12.
+Four Hive boxes: `'settings'` (single `AppSettings` doc), `'sessions'` (collection of `CountSession` docs), `'session_checkpoint'` (at most one `CountSession`: the session in progress) and `'phrase_history'` (recent phrase setups, stored untyped as JSON strings so remembering a new shape of setup needs no type id or adapter). Type IDs: `AppSettings`=0, `CountSession`=1, `SoundMode`=10, `ThemeModeChoice`=11, `AppThemeId`=12.
 
-`CountSession` fields 12–14 (`phrase`, `voiceCount`, `manualCount`) are nullable so sessions saved before voice counting existed still load. Field 15 `completed` defaults to `true` for the same reason; it is `false` on a record recovered from a checkpoint. Field 16 `creditsConsumed` is nullable until block accounting exists.
+`CountSession` fields 12–14 (`phrase`, `voiceCount`, `manualCount`) are nullable so sessions saved before voice counting existed still load. Field 15 `completed` defaults to `true` for the same reason; it is `false` on a record recovered from a checkpoint. Field 16 `creditsConsumed` is nullable until block accounting exists. Fields 17–18 (`phrases`, `phraseCounts`) are nullable for records written before multi-phrase sessions; `phrase` still holds the first phrase, and readers use `allPhrases` / `phraseLabel` rather than either field directly.
 
 **Startup order matters.** `sessionStartupProvider` (`state/providers/session_recovery.dart`) is the app's first step, kicked off from `App`: it calls `SessionCheckpointStore.take()` — read *and* delete — and only then attaches `SessionCheckpointer`. Reading without deleting, or attaching the checkpointer first, lets the first count of the new launch overwrite the crashed run's record before the user has decided anything. The provider exposes the pending `CountSession?`; `CounterScreen` only reacts to it to show `RecoverSessionSheet`. Never read `sessionCheckpointerProvider` from a screen.
 

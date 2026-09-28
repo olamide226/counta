@@ -52,11 +52,11 @@ class SessionCheckpointer {
   Timer? _timer;
   String? _checkpointId;
 
-  /// The cached immutable frame of the record, and the phrase it was built
-  /// for. Rebuilt when the phrase changes, because a tap session can turn into
-  /// a voice session without ever going inactive.
+  /// The cached immutable frame of the record, and the phrases it was built
+  /// for. Rebuilt when they change, because a tap session can turn into a
+  /// voice session without ever going inactive.
   CountSession? _base;
-  PhraseSpec? _basePhrase;
+  PhraseSet? _basePhrases;
 
   /// Fingerprint of the content last handed to the store. A change here is the
   /// only thing that justifies another write.
@@ -93,9 +93,10 @@ class SessionCheckpointer {
 
   /// Everything that reaches the store, and nothing that does not.
   String _signature() {
-    final phrase = _controller.activePhrase?.raw ?? '';
+    final phrases = _controller.activePhrases?.rawPhrases.join('\u0000') ?? '';
+    final split = _controller.voiceCountsByPhrase.values.join(',');
     return '${_controller.total}|${_controller.voiceCount}'
-        '|${_controller.manualCount}|$phrase';
+        '|${_controller.manualCount}|$phrases|$split';
   }
 
   void _onControllerChanged() {
@@ -120,7 +121,7 @@ class SessionCheckpointer {
   void _startTracking() {
     _checkpointId = _newId();
     _base = null;
-    _basePhrase = null;
+    _basePhrases = null;
     _lastWritten = null;
     unawaited(_write());
   }
@@ -139,26 +140,28 @@ class SessionCheckpointer {
     _timer = null;
     _checkpointId = null;
     _base = null;
-    _basePhrase = null;
+    _basePhrases = null;
     _lastWritten = null;
     _dirty = false;
     unawaited(_store.clear());
   }
 
   CountSession _record(String id) {
-    final phrase = _controller.activePhrase;
-    if (_base == null || _basePhrase != phrase) {
+    final phrases = _controller.activePhrases;
+    if (_base == null || _basePhrases != phrases) {
       _base = _snapshot(_controller, id);
-      _basePhrase = phrase;
+      _basePhrases = phrases;
     }
 
+    final isVoice = phrases != null;
     return _base!.copyWith(
       endedAt: _now(),
       finalCount: _controller.total,
       // Null keeps whatever the base holds, which is itself null for a
       // tap-only session — that is the distinction the history screen reads.
-      voiceCount: phrase == null ? null : _controller.voiceCount,
-      manualCount: phrase == null ? null : _controller.manualCount,
+      voiceCount: isVoice ? _controller.voiceCount : null,
+      manualCount: isVoice ? _controller.manualCount : null,
+      phraseCounts: isVoice ? _controller.voiceCountsByPhrase : null,
     );
   }
 
@@ -206,17 +209,18 @@ final sessionCheckpointerProvider = Provider<SessionCheckpointer>((ref) {
     store: ref.watch(sessionCheckpointRepositoryProvider),
     snapshot: (controller, id) {
       final counter = ref.read(counterProvider);
-      final phrase = controller.activePhrase;
+      final phrases = controller.activePhrases;
       return buildSessionRecord(
         id: id,
         // The session's own label when it has one — a recovered session used
         // to come back as the literal string 'Recovered session'.
-        mantra: counter.mantra ?? phrase?.raw ?? 'Session in progress',
+        mantra: counter.mantra ?? phrases?.label ?? 'Session in progress',
         settings: ref.read(settingsProvider),
         counter: counter,
-        phrase: phrase,
+        phrases: phrases,
         voiceCount: controller.voiceCount,
         manualCount: controller.manualCount,
+        voiceCountsByPhrase: controller.voiceCountsByPhrase,
         endedAt: DateTime.now(),
         completed: false,
       );

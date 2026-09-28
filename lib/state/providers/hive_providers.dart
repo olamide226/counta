@@ -2,6 +2,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../data/hive/hive_init.dart';
 import '../../data/repositories/settings_repository.dart';
+import '../../data/repositories/phrase_history_repository.dart';
 import '../../data/repositories/session_checkpoint_repository.dart';
 import '../../data/repositories/sessions_repository.dart';
 
@@ -24,4 +25,12 @@ final sessionCheckpointRepositoryProvider = Provider<SessionCheckpointStore>((
 ) {
   ref.watch(hiveInitProvider);
   return createSessionCheckpointRepository();
+});
+
+/// Recent phrase setups, for the one-tap chips in phrase setup.
+final phraseHistoryRepositoryProvider = Provider<PhraseHistoryRepository>((
+  ref,
+) {
+  ref.watch(hiveInitProvider);
+  return createPhraseHistoryRepository();
 });

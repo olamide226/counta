@@ -146,7 +146,7 @@ void main() {
       expect(counter.mantra, 'hare krishna');
       expect(controller.voiceCount, 17);
       expect(controller.manualCount, 0);
-      expect(controller.activePhrase?.raw, 'hare krishna');
+      expect(controller.activePhrases?.primary.raw, 'hare krishna');
     });
 
     test('a resumed session checkpoints under its own name', () async {

@@ -47,10 +47,10 @@ class DeepgramSocket implements SpeechSocket {
   }
 
   /// Construct the WebSocket URI for Deepgram Nova-3 listen endpoint cleanly via Uri.parse.
-  static Uri buildUri({required PhraseSpec? phrase}) {
+  static Uri buildUri({required PhraseSet? phrases}) {
     final queryComponents = <String>[
       'model=nova-3',
-      'language=${Uri.encodeComponent(phrase?.languageCode ?? 'en')}',
+      'language=${Uri.encodeComponent(phrases?.languageCode ?? 'en')}',
       'encoding=linear16',
       'sample_rate=16000',
       'channels=1',
@@ -64,12 +64,19 @@ class DeepgramSocket implements SpeechSocket {
       'mip_opt_out=true',
     ];
 
-    if (phrase != null && phrase.keyterms.isNotEmpty) {
-      final cleanKeyterm = phrase.keyterms.first
-          .replaceAll(RegExp(r'[^\w\s]'), '')
-          .trim();
-      if (cleanKeyterm.isNotEmpty) {
-        queryComponents.add('keyterm=${Uri.encodeComponent(cleanKeyterm)}');
+    // Nova-3 boosts several terms by repeating the parameter —
+    // `keyterm=a&keyterm=b` — with a multi-word term kept whole by encoding
+    // its spaces. Commas or newlines would be read as part of one term, so
+    // each phrase gets its own parameter.
+    //
+    // This is where a multi-phrase session earns its accuracy: every phrase
+    // is biased in the acoustic model, not just the first one.
+    final seenKeyterms = <String>{};
+    for (final phrase in phrases?.phrases ?? const <PhraseSpec>[]) {
+      for (final keyterm in phrase.keyterms) {
+        final clean = keyterm.replaceAll(RegExp(r'[^\w\s]'), '').trim();
+        if (clean.isEmpty || !seenKeyterms.add(clean)) continue;
+        queryComponents.add('keyterm=${Uri.encodeComponent(clean)}');
       }
     }
 
@@ -82,7 +89,7 @@ class DeepgramSocket implements SpeechSocket {
   @override
   Future<void> connect({
     required String apiKeyOrToken,
-    PhraseSpec? phrase,
+    PhraseSet? phrases,
     WebSocketChannel Function(Uri uri, Map<String, dynamic> headers)?
     channelFactory,
   }) async {
@@ -93,7 +100,7 @@ class DeepgramSocket implements SpeechSocket {
     _closeDescription = null;
     _audioStartedAt = null;
     _setState(SocketState.connecting);
-    final uri = buildUri(phrase: phrase);
+    final uri = buildUri(phrases: phrases);
     final headers = {'Authorization': 'Token $apiKeyOrToken'};
 
     try {

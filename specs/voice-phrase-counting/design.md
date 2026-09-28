@@ -108,7 +108,7 @@ abstract class CountingEngine {
   Stream<CountEvent>   get counts;
   Stream<EngineStatus> get status;
 
-  Future<void> start(PhraseSpec phrase);
+  Future<void> start(PhraseSet phrases);
   Future<void> pause();
   Future<void> resume();
   Future<SessionSummary> stop();
@@ -126,6 +126,7 @@ class CountEvent {
   final double   confidence;  // 1.0 for manual
   final Duration audioOffset;
   final DateTime wallClock;
+  final String?  phrase;      // which phrase matched; null for manual
 }
 
 class PhraseSpec {
@@ -133,6 +134,22 @@ class PhraseSpec {
   final List<String> normalisedTokens;
   final List<String> keyterms;
   final String       languageCode;   // 'en' for this iteration
+}
+
+/// The one to five phrases a session counts, always non-empty.
+///
+/// A session keeps a single total however many phrases are active, so this is
+/// not a list of counters. It exists because the matcher, the socket, the
+/// banner, the notification, the checkpoint and the saved record all ask
+/// "what is this session counting", and each would otherwise reinvent
+/// `phrases.first` and its own way of writing "and two more".
+class PhraseSet {
+  final List<PhraseSpec> phrases;
+
+  PhraseSpec get primary;     // stands for the set where one line fits
+  bool   get isMultiple;
+  String get label;           // "I'm rich in wisdom +2 more"
+  List<String> get rawPhrases;
 }
 ```
 
@@ -185,7 +202,7 @@ Configuration: 16 kHz, mono, PCM16, which is the format Deepgram's `linear16` en
 
 ```dart
 class DeepgramSocket {
-  Future<void> connect(Block block, PhraseSpec phrase);
+  Future<void> connect(Block block, PhraseSet phrases);
   void send(Uint8List pcm);
   Stream<TranscriptSegment> get segments;
   Stream<SocketState> get state;
@@ -234,9 +251,12 @@ Pure Dart. No network, no audio, no platform channels. This is the component tha
 ```dart
 class PhraseMatcher {
   PhraseMatcher({
-    required PhraseSpec target,
+    required PhraseSet target,
     required MatcherConfig config,
   });
+
+  /// The single-phrase case, which is most sessions and every fixture replay.
+  PhraseMatcher.single(PhraseSpec phrase, {MatcherConfig config});
 
   /// Feeds one finalised segment. Returns zero or more detections.
   List<Detection> ingest(TranscriptSegment segment);
@@ -262,16 +282,57 @@ ingest(segment):
   window.addAll(tokens with their audio offsets)
   trim window to (target.length * windowSlack) tokens
 
-  candidates := every slice whose tokenSimilarity meets the threshold
-  best := highest score, then closest target length, then earliest occurrence
+  candidates := every (slice, phrase) pair whose tokenSimilarity meets that
+                phrase's threshold, skipping slices outside that phrase's own
+                length bounds
+  best := highest score, then closest to its own phrase's length, then
+          earliest occurrence — position is never overridden, because
+          accepting a candidate also retires everything before it
 
   if best overlaps the last accepted audio span:
       consume best as a duplicate
   else:
-      emit Detection(best.score, best.audioOffset)
+      emit Detection(best.score, best.audioOffset, best.phrase)
       consume best so it cannot match again
       record utterance duration for optional tuning statistics
 ```
+
+#### Why one matcher holds the whole set
+
+The obvious shape for counting several phrases — one matcher per phrase — is
+wrong, and wrong in the case users are most likely to create.
+
+Each matcher would keep its own token window, so one spoken utterance can
+satisfy two phrases and count twice. A user who adds "rich in wisdom"
+alongside "I'm rich in wisdom" would see two counts per breath. Sharing one
+window makes the acceptance decision single: the winning pair retires those
+tokens for every phrase, so an utterance counts once however many phrases
+resemble it. The refractory period is shared for the same reason — the user
+cannot have spoken two different phrases in the same moment.
+
+Two things fall out of sharing the scan and have to be handled deliberately:
+
+- **Slice bounds are per phrase.** The scan spans the union of what any
+  phrase would consider, but each phrase rejects lengths outside its own
+  bounds. Otherwise a three-token phrase gets compared against a slice sized
+  for a nine-token one, and a mixed-length set degrades both.
+- **Nothing outranks position.** Accepting a candidate retires the tokens
+  *before* it as well, so preferring a later candidate does not reorder the
+  output — it destroys the earlier match without emitting it. An explicit
+  "longer phrase wins" tie-break did exactly that: a set holding both "peace
+  be still" and a longer phrase lost the first whenever it was spoken first,
+  and counted both in the other order. The rule was removed rather than
+  reordered, because it was never needed: where one phrase is contained in
+  another the longer match starts at or before the shorter one, so position
+  already prefers it, and where both start on the same token the descending
+  slice loop sees the longer first.
+
+The cost is one extra token-level Levenshtein pass per slice per phrase, in a
+loop that already dominates. That is what caps the set at five: not
+performance, but accuracy. Every extra phrase is another chance for real
+speech to clear the threshold against something the user never said, which is
+why the corpus gate now also asserts that unrelated phrases listening
+alongside a fixture's own do not change its count.
 
 **Normalisation pipeline**, applied identically to target and to incoming text:
 
@@ -301,7 +362,7 @@ class SessionController extends ChangeNotifier {
   int get remainingCredits;
   EngineStatus get status;
 
-  Future<void> startVoiceSession(PhraseSpec phrase);
+  Future<void> startVoiceSession(PhraseSet phrases);
   void incrementManual();
   void decrementManual();
   Future<SessionSummary> stop();
@@ -782,6 +843,10 @@ Redemption reuses the credit machinery rather than paralleling it: the same JWT 
 - Partial phrase spanning two segments
 - Token consumption preventing double count
 - Adaptive refractory converging on observed median
+- Several phrases in one set: each counts and reports which it was; one
+  utterance counts once when two phrases both fit it; the refractory is
+  shared; a short phrase still matches beside a long one; a set of one
+  behaves exactly like a single phrase
 
 `BlockClient`: renewal timing, overlap window, 402 handling at start versus at renewal, refund eligibility.
 

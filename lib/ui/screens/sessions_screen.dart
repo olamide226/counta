@@ -42,9 +42,9 @@ class SessionsScreen extends ConsumerWidget {
                 // that true by construction rather than by matching two
                 // copies of the same condition.
                 final lines = [
-                  if (session.phrase != null &&
-                      session.phrase != session.mantra)
-                    '“${session.phrase}”',
+                  if (session.phraseLabel != null &&
+                      session.phraseLabel != session.mantra)
+                    '“${session.phraseLabel}”',
                   '${session.finalCount} counts • '
                       '${session.endedAt.asSessionTimestamp}',
                   if (!session.completed) 'Recovered after interruption',

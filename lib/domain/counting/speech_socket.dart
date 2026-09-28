@@ -34,7 +34,7 @@ abstract class SpeechSocket {
   String? get closeDescription;
 
   /// Connect to the provider's streaming endpoint with an API key/token and target phrase parameters.
-  Future<void> connect({required String apiKeyOrToken, PhraseSpec? phrase});
+  Future<void> connect({required String apiKeyOrToken, PhraseSet? phrases});
 
   /// Stream binary PCM16 audio frames to the socket.
   void sendAudio(Uint8List pcmFrames);

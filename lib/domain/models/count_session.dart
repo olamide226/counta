@@ -1,6 +1,7 @@
 import 'package:hive/hive.dart';
 import 'package:uuid/uuid.dart';
 
+import '../counting/counting_engine.dart';
 import 'enums.dart';
 
 part 'count_session.g.dart';
@@ -75,8 +76,30 @@ class CountSession {
   @HiveField(16)
   final int? creditsConsumed;
 
+  /// Every phrase the session counted, in the order they were set up.
+  ///
+  /// Null for records written before multi-phrase sessions existed, and for
+  /// tap-only sessions. [phrase] still holds the first one, so a record read
+  /// by an older build — or by a screen with room for only one — says
+  /// something sensible. Read [allPhrases] rather than this.
+  @HiveField(17)
+  final List<String>? phrases;
+
+  /// Voice detections split by the phrase that matched, keyed by raw text.
+  ///
+  /// Null under the same conditions as [phrases]. Sums to [voiceCount].
+  @HiveField(18)
+  final Map<String, int>? phraseCounts;
+
   /// Whether this session recorded any voice-counted repetitions.
   bool get isVoiceSession => (voiceCount ?? 0) > 0 || phrase != null;
+
+  /// The phrases counted, whichever era the record was written in.
+  List<String> get allPhrases => phrases ?? [if (phrase != null) phrase!];
+
+  /// One line naming what was counted, or null for a tap-only session.
+  String? get phraseLabel =>
+      allPhrases.isEmpty ? null : phraseSetLabel(allPhrases);
 
   Duration get duration => endedAt.difference(startedAt);
 
@@ -98,6 +121,8 @@ class CountSession {
     this.manualCount,
     this.completed = true,
     this.creditsConsumed,
+    this.phrases,
+    this.phraseCounts,
   }) : id = id ?? _uuid.v4();
 
   CountSession copyWith({
@@ -117,6 +142,8 @@ class CountSession {
     int? manualCount,
     bool? completed,
     int? creditsConsumed,
+    List<String>? phrases,
+    Map<String, int>? phraseCounts,
   }) {
     return CountSession(
       id: id,
@@ -136,6 +163,8 @@ class CountSession {
       manualCount: manualCount ?? this.manualCount,
       completed: completed ?? this.completed,
       creditsConsumed: creditsConsumed ?? this.creditsConsumed,
+      phrases: phrases ?? this.phrases,
+      phraseCounts: phraseCounts ?? this.phraseCounts,
     );
   }
 }

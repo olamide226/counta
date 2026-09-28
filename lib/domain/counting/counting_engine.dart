@@ -50,17 +50,25 @@ class CountEvent {
   final Duration audioOffset;
   final DateTime wallClock;
 
+  /// Raw text of the phrase this detection matched, when the session is
+  /// counting more than one and the split is worth reporting back.
+  ///
+  /// Null for manual taps, which belong to no phrase in particular, and for
+  /// engines that do not match phrases at all.
+  final String? phrase;
+
   const CountEvent({
     required this.seq,
     required this.source,
     this.confidence = 1.0,
     this.audioOffset = Duration.zero,
     required this.wallClock,
+    this.phrase,
   });
 
   @override
   String toString() {
-    return 'CountEvent(seq: $seq, source: $source, confidence: $confidence, audioOffset: $audioOffset, wallClock: $wallClock)';
+    return 'CountEvent(seq: $seq, source: $source, confidence: $confidence, audioOffset: $audioOffset, wallClock: $wallClock, phrase: $phrase)';
   }
 }
 
@@ -90,6 +98,71 @@ class PhraseSpec {
   int get hashCode => raw.hashCode ^ languageCode.hashCode;
 }
 
+/// How a set of phrases reads where only one line fits: the first phrase, and
+/// how many more there are.
+///
+/// A top-level function rather than a [PhraseSet] member because saved
+/// sessions and history entries only hold raw text, and they must read the
+/// same as the live session did.
+String phraseSetLabel(List<String> rawPhrases) {
+  if (rawPhrases.isEmpty) return '';
+  if (rawPhrases.length == 1) return rawPhrases.single;
+  return '${rawPhrases.first} +${rawPhrases.length - 1} more';
+}
+
+/// The phrases one session counts against.
+///
+/// A session keeps a single running total however many phrases are active —
+/// any of them advances it — so this is not a list of counters. It exists
+/// because "what is this session counting" is asked by the matcher, the
+/// socket, the banner, the notification, the checkpoint and the saved record,
+/// and every one of them would otherwise reinvent `phrases.first` and its own
+/// way of writing "and two more".
+///
+/// Always non-empty: a session with nothing to listen for is not a session,
+/// and letting the empty case exist pushes a null check into all six callers.
+class PhraseSet {
+  PhraseSet(List<PhraseSpec> phrases)
+    : assert(phrases.isNotEmpty, 'A phrase set needs at least one phrase'),
+      phrases = List.unmodifiable(phrases);
+
+  PhraseSet.single(PhraseSpec phrase) : phrases = List.unmodifiable([phrase]);
+
+  final List<PhraseSpec> phrases;
+
+  /// The phrase that stands for the set wherever only one will fit.
+  PhraseSpec get primary => phrases.first;
+
+  int get length => phrases.length;
+  bool get isMultiple => phrases.length > 1;
+
+  List<String> get rawPhrases => [for (final p in phrases) p.raw];
+
+  /// Every engine here is single-language, so the set speaks for its primary.
+  String get languageCode => primary.languageCode;
+
+  /// One-line rendering for a banner, notification or Live Activity.
+  String get label => phraseSetLabel(rawPhrases);
+
+  @override
+  bool operator ==(Object other) {
+    if (identical(this, other)) return true;
+    if (other is! PhraseSet || other.phrases.length != phrases.length) {
+      return false;
+    }
+    for (int i = 0; i < phrases.length; i++) {
+      if (phrases[i] != other.phrases[i]) return false;
+    }
+    return true;
+  }
+
+  @override
+  int get hashCode => Object.hashAll(phrases);
+
+  @override
+  String toString() => 'PhraseSet(${rawPhrases.join(" | ")})';
+}
+
 /// Summary presented at the end of a counting session.
 class SessionSummary {
   final int voiceCount;
@@ -97,16 +170,24 @@ class SessionSummary {
   final int totalCount;
   final Duration duration;
 
+  /// Voice detections split by the phrase that matched, keyed by raw text.
+  ///
+  /// Empty for a tap-only session. For a single-phrase voice session it holds
+  /// the one entry, so the summary screens need no special case for the count
+  /// of phrases.
+  final Map<String, int> voiceCountsByPhrase;
+
   const SessionSummary({
     required this.voiceCount,
     required this.manualCount,
     required this.totalCount,
     required this.duration,
+    this.voiceCountsByPhrase = const {},
   });
 
   @override
   String toString() {
-    return 'SessionSummary(voice: $voiceCount, manual: $manualCount, total: $totalCount, duration: $duration)';
+    return 'SessionSummary(voice: $voiceCount, manual: $manualCount, total: $totalCount, duration: $duration, byPhrase: $voiceCountsByPhrase)';
   }
 }
 
@@ -123,7 +204,7 @@ abstract class CountingEngine {
   /// Engines that never degrade return an empty stream.
   Stream<String> get diagnostics;
 
-  Future<void> start([PhraseSpec? phrase]);
+  Future<void> start([PhraseSet? phrases]);
   Future<SessionSummary> stop();
   Future<void> dispose();
 

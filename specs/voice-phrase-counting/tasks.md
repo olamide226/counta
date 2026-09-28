@@ -173,3 +173,18 @@ Each task is scoped to be completable in isolation and leaves the app in a worki
   - [ ] 16.5 Verify on a real iOS device that deleting and reinstalling the app does not yield a second trial, and record what the same test does on Android rather than assuming it matches
   - [ ] 16.6 Verify a voucher pays out once per user, refuses past its cap, and cannot be doubled by retrying the request
   - _Requirements: 3.12, 5.5, 5.6, 7.2, 4.6, 11.3, 11.6, 12.4, 12.5_
+
+## Phase E: Beyond one phrase
+
+- [x] **17. Count several phrases in one session**
+  - [x] 17.1 Introduce `PhraseSet` as the thing a session counts, so the matcher, socket, banner, notification, checkpoint and saved record all ask one place what is being counted
+  - [x] 17.2 Give `PhraseMatcher` a set of targets over one shared token window and one shared refractory, so an utterance counts once however many phrases resemble it
+  - [x] 17.3 Bound each phrase's candidate window by its own length, and prefer the longer phrase when two fit a span equally
+  - [x] 17.4 Send every phrase as its own repeated `keyterm`, so all of them are biased upstream rather than only the first
+  - [x] 17.5 Carry the matched phrase on `Detection` and `CountEvent`, and tally the split in `SessionController` so it survives undo
+  - [x] 17.6 Persist `phrases` and `phraseCounts` as new nullable Hive fields; older single-phrase records load unchanged
+  - [x] 17.7 Add opt-in phrase rows to setup, capped at five, with per-row errors, the duplicate and containment rules, and blank rows ignored
+  - [x] 17.8 Wire the phrase history that was never connected — open its box, add its provider, record a setup only once a session really starts — and make an entry a whole setup so a set returns in one tap
+  - [x] 17.9 Show the split where it helps: an expandable banner marking the phrase just heard, and per-phrase rows in the session summary
+  - [x] 17.10 Add the no-cross-talk corpus gate: replaying a fixture with unrelated phrases alongside its own must not change its count
+  - _Requirements: 1.1, 1.6, 1.7, 1.8, 1.9, 1.10, 1.11, 1.12, 1.13, 6.6, 6.7, 7.1, 7.4, 7.5, 8.7, 8.8, 8.9, 8.10, 8.11_

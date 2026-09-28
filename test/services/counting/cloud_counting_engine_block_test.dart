@@ -52,7 +52,7 @@ void main() {
         final engine = engineWith(blocks);
         addTearDown(engine.dispose);
 
-        await engine.start(testPhrase);
+        await engine.start(testPhraseSet);
         await pumpEventQueue();
 
         expect(blocks.acquiredSessionIds, hasLength(1));
@@ -72,7 +72,7 @@ void main() {
           final engine = engineWith(blocks);
           addTearDown(engine.dispose);
 
-          await engine.start(testPhrase);
+          await engine.start(testPhraseSet);
 
           expect(engine.sessionId, isNotNull);
           expect(
@@ -96,7 +96,7 @@ void main() {
         final engine = engineWith(blocks);
         addTearDown(engine.dispose);
 
-        await engine.start(testPhrase);
+        await engine.start(testPhraseSet);
         await pumpEventQueue();
 
         expect(engine.currentStatus, EngineStatus.permissionDenied);
@@ -114,7 +114,7 @@ void main() {
         final sub = engine.diagnostics.listen(diagnostics.add);
 
         await expectLater(
-          engine.start(testPhrase),
+          engine.start(testPhraseSet),
           throwsA(isA<BlockInsufficientCredit>()),
         );
         await pumpEventQueue();
@@ -145,7 +145,7 @@ void main() {
             final diagnostics = <String>[];
             final sub = engine.diagnostics.listen(diagnostics.add);
 
-            await expectLater(engine.start(testPhrase), throwsA(failure));
+            await expectLater(engine.start(testPhraseSet), throwsA(failure));
             await pumpEventQueue();
 
             expect(engine.currentStatus, EngineStatus.error);
@@ -174,7 +174,7 @@ void main() {
             transcriptionWatchdogInterval: const Duration(days: 1),
           );
 
-          engine.start(testPhrase).catchError((Object _) {});
+          engine.start(testPhraseSet).catchError((Object _) {});
           async.flushMicrotasks();
 
           expect(engine.currentStatus, EngineStatus.error);
@@ -201,11 +201,11 @@ void main() {
           final blocks = FakeBlockService(blockSeconds: 10);
           final engine = engineWith(blocks);
 
-          engine.start(testPhrase);
+          engine.start(testPhraseSet);
           async.flushMicrotasks();
 
           async.elapse(const Duration(seconds: 5));
-          engine.start(testPhrase);
+          engine.start(testPhraseSet);
           async.flushMicrotasks();
           expect(blocks.acquiredSessionIds, hasLength(2));
 
@@ -235,11 +235,11 @@ void main() {
           final blocks = FakeBlockService(blockSeconds: 300);
           final engine = engineWith(blocks);
 
-          engine.start(testPhrase);
+          engine.start(testPhraseSet);
           async.flushMicrotasks();
           async.elapse(const Duration(seconds: 5));
 
-          engine.start(testPhrase);
+          engine.start(testPhraseSet);
           async.flushMicrotasks();
 
           expect(blocks.acquiredSessionIds, hasLength(2));
@@ -269,7 +269,7 @@ void main() {
         );
         addTearDown(engine.dispose);
 
-        await engine.start(testPhrase);
+        await engine.start(testPhraseSet);
         await pumpEventQueue();
         final stopsBefore = audio.stopCount;
 
@@ -302,7 +302,7 @@ void main() {
         );
         addTearDown(engine.dispose);
 
-        engine.start(testPhrase).catchError((Object _) {});
+        engine.start(testPhraseSet).catchError((Object _) {});
         await pumpEventQueue();
         audio.emitStall();
 
@@ -319,7 +319,7 @@ void main() {
           final blocks = FakeBlockService(blockSeconds: 300);
           final engine = engineWith(blocks);
 
-          engine.start(testPhrase);
+          engine.start(testPhraseSet);
           async.flushMicrotasks();
           expect(blocks.acquiredSessionIds, hasLength(1));
 
@@ -355,7 +355,7 @@ void main() {
             renewalOverlap: const Duration(seconds: 3),
           );
 
-          engine.start(testPhrase);
+          engine.start(testPhraseSet);
           async.flushMicrotasks();
 
           async.elapse(const Duration(seconds: 270));
@@ -399,7 +399,7 @@ void main() {
             renewalOverlap: const Duration(seconds: 2),
           );
 
-          engine.start(testPhrase);
+          engine.start(testPhraseSet);
           async.flushMicrotasks();
 
           // The confirmation frame is 320 bytes; top the session up to exactly
@@ -459,7 +459,7 @@ void main() {
             renewalOverlap: const Duration(seconds: 2),
           );
 
-          engine.start(testPhrase);
+          engine.start(testPhraseSet);
           async.flushMicrotasks();
 
           audio.emitFrame(9 * audio.bytesPerSecond - 320);
@@ -514,7 +514,7 @@ void main() {
             transcriptionWatchdogInterval: const Duration(days: 1),
           );
 
-          engine.start(testPhrase);
+          engine.start(testPhraseSet);
           async.flushMicrotasks();
 
           async.elapse(const Duration(seconds: 270));
@@ -546,7 +546,7 @@ void main() {
           );
           final engine = engineWith(blocks);
 
-          engine.start(testPhrase);
+          engine.start(testPhraseSet);
           async.flushMicrotasks();
 
           async.elapse(const Duration(seconds: 179));
@@ -578,7 +578,7 @@ void main() {
             renewalRetryDelay: const Duration(seconds: 10),
           );
 
-          engine.start(testPhrase);
+          engine.start(testPhraseSet);
           async.flushMicrotasks();
           async.elapse(const Duration(seconds: 270));
           async.flushMicrotasks();
@@ -607,7 +607,7 @@ void main() {
             renewalOverlap: const Duration(seconds: 3),
           );
 
-          engine.start(testPhrase);
+          engine.start(testPhraseSet);
           async.flushMicrotasks();
           async.elapse(const Duration(seconds: 270));
           async.flushMicrotasks();
@@ -662,7 +662,7 @@ void main() {
             transcriptionWatchdogInterval: const Duration(days: 1),
           );
 
-          engine.start(testPhrase);
+          engine.start(testPhraseSet);
           async.flushMicrotasks();
 
           // The renewal at 270 s, then a retry every ten seconds inside the
@@ -701,7 +701,7 @@ void main() {
             transcriptionWatchdogInterval: const Duration(days: 1),
           );
 
-          engine.start(testPhrase);
+          engine.start(testPhraseSet);
           async.flushMicrotasks();
           async.elapse(const Duration(seconds: 270));
           async.flushMicrotasks();
@@ -740,7 +740,7 @@ void main() {
           final statuses = <EngineStatus>[];
           engine.status.listen(statuses.add);
 
-          engine.start(testPhrase);
+          engine.start(testPhraseSet);
           async.flushMicrotasks();
 
           sockets[0].emitSegment(
@@ -788,7 +788,7 @@ void main() {
           );
           final engine = engineWith(blocks);
 
-          engine.start(testPhrase);
+          engine.start(testPhraseSet);
           async.flushMicrotasks();
           async.elapse(const Duration(seconds: 10));
           async.flushMicrotasks();
@@ -817,7 +817,7 @@ void main() {
             renewalRetryDelay: const Duration(seconds: 30),
           );
 
-          engine.start(testPhrase);
+          engine.start(testPhraseSet);
           async.flushMicrotasks();
           async.elapse(const Duration(seconds: 10));
           async.flushMicrotasks();
@@ -838,7 +838,7 @@ void main() {
         final engine = engineWith(blocks);
         addTearDown(engine.dispose);
 
-        await engine.start(testPhrase);
+        await engine.start(testPhraseSet);
         await pumpEventQueue();
         expect(blocks.acquiredSessionIds, hasLength(1));
 
@@ -871,7 +871,7 @@ void main() {
         final engine = engineWith(blocks);
         addTearDown(engine.dispose);
 
-        await engine.start(testPhrase);
+        await engine.start(testPhraseSet);
         await pumpEventQueue();
 
         sockets.single.emitDrop(reason: 'server hung up');
@@ -901,7 +901,7 @@ void main() {
         final engine = engineWith(blocks);
         addTearDown(engine.dispose);
 
-        await engine.start(testPhrase);
+        await engine.start(testPhraseSet);
         await pumpEventQueue();
 
         sockets.single.emitDrop(reason: 'server hung up');
@@ -925,7 +925,7 @@ void main() {
         final engine = engineWith(blocks);
         addTearDown(engine.dispose);
 
-        await engine.start(testPhrase);
+        await engine.start(testPhraseSet);
         await pumpEventQueue();
 
         sockets.single.emitDrop(reason: 'server hung up');
@@ -946,7 +946,7 @@ void main() {
         final engine = engineWith(blocks);
         addTearDown(engine.dispose);
 
-        await engine.start(testPhrase);
+        await engine.start(testPhraseSet);
         await pumpEventQueue();
 
         sockets.single.emitDrop(reason: 'server hung up');
@@ -961,7 +961,7 @@ void main() {
         final engine = engineWith(blocks);
         addTearDown(engine.dispose);
 
-        await engine.start(testPhrase);
+        await engine.start(testPhraseSet);
         await pumpEventQueue();
 
         // Thirty-one seconds of audio have been streamed when the drop lands,
@@ -997,7 +997,7 @@ void main() {
         final blocks = FakeBlockService(blockSeconds: 300);
         final engine = engineWith(blocks);
 
-        await engine.start(testPhrase);
+        await engine.start(testPhraseSet);
         await pumpEventQueue();
         await engine.stop();
 
@@ -1016,7 +1016,7 @@ void main() {
         final blocks = FakeBlockService(blockSeconds: 300);
         final engine = engineWith(blocks);
 
-        await engine.start(testPhrase);
+        await engine.start(testPhraseSet);
         await pumpEventQueue();
         sockets.single.emitSegment(
           finalSegment("I'm rich in wisdom", start: 1.0, duration: 1.0),
@@ -1047,7 +1047,7 @@ void main() {
             renewalOverlap: const Duration(seconds: 1),
           );
 
-          engine.start(testPhrase);
+          engine.start(testPhraseSet);
           async.flushMicrotasks();
           async.elapse(const Duration(seconds: 9));
           async.flushMicrotasks();
@@ -1076,7 +1076,7 @@ void main() {
             socketFactory: makeSocket,
           );
 
-          await engine.start(testPhrase);
+          await engine.start(testPhraseSet);
           await pumpEventQueue();
           final summary = await engine.stop();
 
@@ -1098,7 +1098,7 @@ class _RefusingSocket extends FakeSpeechSocket {
   @override
   Future<void> connect({
     required String apiKeyOrToken,
-    PhraseSpec? phrase,
+    PhraseSet? phrases,
   }) async {
     throw StateError('cannot connect');
   }
@@ -1114,10 +1114,10 @@ class _RefusableSocket extends FakeSpeechSocket {
   @override
   Future<void> connect({
     required String apiKeyOrToken,
-    PhraseSpec? phrase,
+    PhraseSet? phrases,
   }) async {
     if (failConnects) throw StateError('cannot reconnect');
-    return super.connect(apiKeyOrToken: apiKeyOrToken, phrase: phrase);
+    return super.connect(apiKeyOrToken: apiKeyOrToken, phrases: phrases);
   }
 }
 

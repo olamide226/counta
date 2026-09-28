@@ -3,29 +3,59 @@ import 'dart:math' as math;
 import 'package:flutter/material.dart';
 
 import '../../domain/counting/counting_engine.dart';
+import 'session_summary_card.dart';
 
 /// The header shown while a voice counting session is running.
 ///
 /// Everything here is driven by the active [ColorScheme] so the banner matches
 /// whichever theme the user picked, and the stop control is a labelled button
 /// rather than a bare icon — ending a session should never be a guess.
-class VoiceSessionBanner extends StatelessWidget {
+class VoiceSessionBanner extends StatefulWidget {
   const VoiceSessionBanner({
     super.key,
     required this.status,
-    required this.phrase,
+    required this.phrases,
     required this.voiceCount,
     required this.manualCount,
     required this.onStop,
+    this.phraseCounts = const {},
+    this.lastMatchedPhrase,
     this.diagnostic,
   });
 
   final EngineStatus status;
-  final String phrase;
+
+  /// Every phrase this session is listening for, in setup order.
+  final List<String> phrases;
+
   final int voiceCount;
   final int manualCount;
   final VoidCallback onStop;
+
+  /// Voice counts keyed by phrase, for the expandable breakdown.
+  final Map<String, int> phraseCounts;
+
+  /// The phrase the most recent count landed on, marked in the breakdown so
+  /// the user can see which one the app just heard.
+  final String? lastMatchedPhrase;
+
   final String? diagnostic;
+
+  @override
+  State<VoiceSessionBanner> createState() => _VoiceSessionBannerState();
+}
+
+class _VoiceSessionBannerState extends State<VoiceSessionBanner> {
+  /// Collapsed by default: mid-session the total is what matters, and the
+  /// per-phrase split is for when something looks wrong.
+  bool _expanded = false;
+
+  EngineStatus get status => widget.status;
+  int get voiceCount => widget.voiceCount;
+  int get manualCount => widget.manualCount;
+  String? get diagnostic => widget.diagnostic;
+
+  bool get _isMultiple => widget.phrases.length > 1;
 
   bool get _isListening => status == EngineStatus.live;
 
@@ -89,14 +119,14 @@ class VoiceSessionBanner extends StatelessWidget {
                           ),
                         ),
                         const SizedBox(height: 1),
-                        Text(
-                          '“$phrase”',
-                          maxLines: 1,
-                          overflow: TextOverflow.ellipsis,
-                          style: theme.textTheme.titleSmall?.copyWith(
-                            color: onContainer,
-                            fontWeight: FontWeight.w600,
-                          ),
+                        _PhraseHeading(
+                          label: phraseSetLabel(widget.phrases),
+                          onContainer: onContainer,
+                          // Only a set has anything to expand into.
+                          expanded: _isMultiple ? _expanded : null,
+                          onToggle: _isMultiple
+                              ? () => setState(() => _expanded = !_expanded)
+                              : null,
                         ),
                       ],
                     ),
@@ -104,7 +134,7 @@ class VoiceSessionBanner extends StatelessWidget {
                   const SizedBox(width: 8),
                   // A labelled button, so stopping is discoverable at a glance.
                   FilledButton.icon(
-                    onPressed: onStop,
+                    onPressed: widget.onStop,
                     icon: const Icon(Icons.stop_rounded, size: 18),
                     label: const Text('Stop'),
                     style: FilledButton.styleFrom(
@@ -135,6 +165,19 @@ class VoiceSessionBanner extends StatelessWidget {
                   ),
                 ],
               ),
+              if (_isMultiple && _expanded) ...[
+                const SizedBox(height: 10),
+                for (final entry in phraseBreakdown(
+                  widget.phrases,
+                  widget.phraseCounts,
+                ))
+                  _PhraseCountRow(
+                    phrase: entry.phrase,
+                    count: entry.count,
+                    onContainer: onContainer,
+                    isLatest: entry.phrase == widget.lastMatchedPhrase,
+                  ),
+              ],
               if (diagnostic != null) ...[
                 const SizedBox(height: 10),
                 Row(
@@ -310,4 +353,107 @@ class _VoiceBarsPainter extends CustomPainter {
       oldDelegate.color != color ||
       oldDelegate.active != active ||
       oldDelegate.progress != progress;
+}
+
+/// The phrase line in the banner: a plain label for one phrase, a tappable
+/// disclosure for a set.
+class _PhraseHeading extends StatelessWidget {
+  const _PhraseHeading({
+    required this.label,
+    required this.onContainer,
+    this.expanded,
+    this.onToggle,
+  });
+
+  final String label;
+  final Color onContainer;
+  final bool? expanded;
+  final VoidCallback? onToggle;
+
+  @override
+  Widget build(BuildContext context) {
+    final text = Text(
+      '\u201c$label\u201d',
+      maxLines: 1,
+      overflow: TextOverflow.ellipsis,
+      style: Theme.of(context).textTheme.titleSmall?.copyWith(
+        color: onContainer,
+        fontWeight: FontWeight.w600,
+      ),
+    );
+
+    final isExpanded = expanded;
+    if (isExpanded == null || onToggle == null) return text;
+
+    return InkWell(
+      onTap: onToggle,
+      child: Row(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          Flexible(child: text),
+          Icon(
+            isExpanded
+                ? Icons.keyboard_arrow_up_rounded
+                : Icons.keyboard_arrow_down_rounded,
+            size: 18,
+            color: onContainer.withValues(alpha: 0.8),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+/// One phrase and its running count, inside the expanded banner.
+class _PhraseCountRow extends StatelessWidget {
+  const _PhraseCountRow({
+    required this.phrase,
+    required this.count,
+    required this.onContainer,
+    required this.isLatest,
+  });
+
+  final String phrase;
+  final int count;
+  final Color onContainer;
+
+  /// Whether this is the phrase the last count landed on.
+  final bool isLatest;
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    return Padding(
+      padding: const EdgeInsets.symmetric(vertical: 2),
+      child: Row(
+        children: [
+          Icon(
+            isLatest ? Icons.graphic_eq_rounded : Icons.circle_outlined,
+            size: 12,
+            color: onContainer.withValues(alpha: isLatest ? 0.95 : 0.45),
+          ),
+          const SizedBox(width: 6),
+          Expanded(
+            child: Text(
+              phrase,
+              maxLines: 1,
+              overflow: TextOverflow.ellipsis,
+              style: theme.textTheme.bodySmall?.copyWith(
+                color: onContainer.withValues(alpha: isLatest ? 1.0 : 0.8),
+                fontWeight: isLatest ? FontWeight.w700 : FontWeight.w500,
+              ),
+            ),
+          ),
+          const SizedBox(width: 8),
+          Text(
+            '$count',
+            style: theme.textTheme.bodySmall?.copyWith(
+              color: onContainer,
+              fontWeight: FontWeight.w700,
+            ),
+          ),
+        ],
+      ),
+    );
+  }
 }

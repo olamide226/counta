@@ -36,7 +36,7 @@ class TapCountingEngine implements CountingEngine {
   }
 
   @override
-  Future<void> start([PhraseSpec? phrase]) async {
+  Future<void> start([PhraseSet? phrases]) async {
     _seq = 0;
     _manualCount = 0;
     _startTime = DateTime.now();

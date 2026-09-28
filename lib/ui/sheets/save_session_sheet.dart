@@ -28,8 +28,8 @@ class _SaveSessionSheetState extends ConsumerState<SaveSessionSheet> {
     // session already has one, and a voice session has the phrase you just
     // spent it chanting.
     final mantra = ref.read(counterProvider).mantra;
-    final phrase = ref.read(sessionControllerProvider).activePhrase;
-    _mantraController.text = mantra ?? phrase?.raw ?? '';
+    final phrases = ref.read(sessionControllerProvider).activePhrases;
+    _mantraController.text = mantra ?? phrases?.label ?? '';
   }
 
   @override
@@ -43,7 +43,7 @@ class _SaveSessionSheetState extends ConsumerState<SaveSessionSheet> {
   Widget build(BuildContext context) {
     final counter = ref.watch(counterProvider);
     final session = ref.watch(sessionControllerProvider);
-    final phrase = session.activePhrase;
+    final phrases = session.activePhrases;
     final theme = Theme.of(context);
 
     return CountaSheetBody(
@@ -51,14 +51,18 @@ class _SaveSessionSheetState extends ConsumerState<SaveSessionSheet> {
         Text('Save Session', style: Theme.of(context).textTheme.headlineSmall),
         const SizedBox(height: 8),
         Text('Count: ${counter.count}', style: theme.textTheme.titleMedium),
-        if (phrase != null) ...[
+        if (phrases != null) ...[
           const SizedBox(height: 12),
           SessionSummaryCard(
-            title: '“${phrase.raw}”',
+            title: '“${phrases.label}”',
             total: counter.count,
             voiceCount: session.voiceCount,
             manualCount: session.manualCount,
             isVoiceSession: true,
+            phraseCounts: phraseBreakdown(
+              phrases.rawPhrases,
+              session.voiceCountsByPhrase,
+            ),
             // The count is already printed above.
             showTotal: false,
           ),
@@ -127,7 +131,7 @@ class _SaveSessionSheetState extends ConsumerState<SaveSessionSheet> {
     final counter = ref.read(counterProvider);
     final settings = ref.read(settingsProvider);
     final controller = ref.read(sessionControllerProvider);
-    final phrase = controller.activePhrase;
+    final phrases = controller.activePhrases;
 
     final mantra = _mantraController.text.trim();
     if (mantra.isEmpty) {
@@ -146,9 +150,10 @@ class _SaveSessionSheetState extends ConsumerState<SaveSessionSheet> {
       mantra: mantra,
       settings: settings,
       counter: counter,
-      phrase: phrase,
+      phrases: phrases,
       voiceCount: controller.voiceCount,
       manualCount: controller.manualCount,
+      voiceCountsByPhrase: controller.voiceCountsByPhrase,
       endedAt: DateTime.now(),
       notes: notes.isNotEmpty ? notes : null,
     );

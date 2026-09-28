@@ -13,6 +13,8 @@ import 'fixture_replay_harness.dart';
 void main() {
   final dir = Directory('test/fixtures/transcripts');
 
+  _noCrossTalkGate(dir);
+
   test('fixture corpus meets the recall gate', () async {
     if (!dir.existsSync()) {
       markTestSkipped('No test/fixtures/transcripts directory yet (task 3.1)');
@@ -86,6 +88,70 @@ void main() {
             'Detected ${r.detectedCount} of ${r.transcribedRepetitions} '
             'transcribed repetitions '
             '(${(r.matcherRecall * 100).toStringAsFixed(1)}%).',
+      );
+    }
+  });
+}
+
+/// The one risk a multi-phrase session adds: every extra phrase is another
+/// chance for a stretch of real speech to clear the threshold against
+/// something the user never said.
+///
+/// Hand-written segments cannot show this — the interference only appears
+/// over hours of real, garbled transcript. So the corpus is replayed twice:
+/// once with the fixture's own phrase, and once with four unrelated phrases
+/// listening alongside it. The count must not move.
+void _noCrossTalkGate(Directory dir) {
+  test('unrelated phrases do not disturb the phrase being counted', () async {
+    if (!dir.existsSync()) {
+      markTestSkipped('No test/fixtures/transcripts directory yet (task 3.1)');
+      return;
+    }
+
+    final files =
+        dir
+            .listSync()
+            .whereType<File>()
+            .where((f) => f.path.endsWith('.json'))
+            .toList()
+          ..sort((a, b) => a.path.compareTo(b.path));
+
+    if (files.isEmpty) {
+      markTestSkipped('No fixtures recorded yet (task 3.1)');
+      return;
+    }
+
+    // Deliberately plausible for this corpus: devotional phrasing of a
+    // similar length and register, sharing function words with the target.
+    // Nonsense strings would prove nothing.
+    const distractors = [
+      'I walk in favour',
+      'My health is renewed',
+      'the peace of god is at work in me',
+      'I am full of power',
+    ];
+
+    final harness = FixtureReplayHarness();
+
+    for (final file in files) {
+      final json = await file.readAsString();
+      final name = file.uri.pathSegments.last;
+
+      final alone = harness.evaluateFixtureJson(json, fixtureName: name);
+      final crowded = harness.evaluateFixtureJson(
+        json,
+        fixtureName: name,
+        extraPhrases: distractors,
+      );
+
+      expect(
+        crowded.detectedCount,
+        alone.detectedCount,
+        reason:
+            '$name: counting ${distractors.length + 1} phrases changed the '
+            'count from ${alone.detectedCount} to ${crowded.detectedCount}. '
+            'One utterance must satisfy at most one phrase, and a phrase the '
+            'audio never contains must claim nothing.',
       );
     }
   });

@@ -13,14 +13,14 @@ import '../helpers/fake_counting_engine.dart';
 CountSession snapshot(SessionController controller, String id) {
   return CountSession(
     id: id,
-    mantra: controller.activePhrase?.raw ?? 'Recovered session',
+    mantra: controller.activePhrases?.primary.raw ?? 'Recovered session',
     startedAt: DateTime(2026, 1, 1),
     endedAt: DateTime(2026, 1, 1),
     finalCount: controller.total,
     soundMode: SoundMode.mute,
     themeModeChoice: ThemeModeChoice.system,
     themeId: AppThemeId.ocean,
-    phrase: controller.activePhrase?.raw,
+    phrase: controller.activePhrases?.primary.raw,
     voiceCount: controller.voiceCount,
     manualCount: controller.manualCount,
     completed: false,
@@ -154,7 +154,7 @@ void main() {
         expect(store.writes, 1);
         expect(store.current?.phrase, isNull);
 
-        controller.startSession(phrase);
+        controller.startSession(PhraseSet.single(phrase));
         async.elapse(const Duration(seconds: 10));
 
         expect(store.writes, 2);
@@ -180,7 +180,7 @@ void main() {
     test('tracks a voice session even before the first detection', () {
       fakeAsync((async) {
         build();
-        controller.startSession(phrase);
+        controller.startSession(PhraseSet.single(phrase));
         async.flushMicrotasks();
 
         expect(checkpointer.isTracking, isTrue);
