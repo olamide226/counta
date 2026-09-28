@@ -263,12 +263,17 @@ class SessionDetailScreen extends ConsumerWidget {
           children: [
             Icon(icon, color: Theme.of(context).colorScheme.primary),
             const SizedBox(width: 16),
-            Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Text(label, style: Theme.of(context).textTheme.bodySmall),
-                Text(value, style: Theme.of(context).textTheme.titleLarge),
-              ],
+            // Expanded so a value can wrap: a phrase can be twelve words
+            // long, and a set of them is several lines. Unconstrained, the
+            // row simply overflowed off the side of the card.
+            Expanded(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(label, style: Theme.of(context).textTheme.bodySmall),
+                  Text(value, style: Theme.of(context).textTheme.titleLarge),
+                ],
+              ),
             ),
           ],
         ),
