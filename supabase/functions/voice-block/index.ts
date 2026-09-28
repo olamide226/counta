@@ -130,8 +130,11 @@ Deno.serve(async (req) => {
   try {
     return await handleVoiceBlock(req, deps());
   } catch (error) {
-    // A missing secret throws here on every request until it is set; no cached
-    // failure, so fixing the secret and redeploying is enough to recover.
+    // A missing secret throws here on every request until it is set. The
+    // failure is never cached, so setting the secret is enough to recover: the
+    // next request builds again, no redeploy needed. The reverse is not true —
+    // a successful build IS cached (`cachedDeps`), so *rotating* a secret
+    // needs a redeploy to reach warm workers.
     log("boot_failed", { message: String(error) });
     return json(500, { error: "misconfigured" });
   }

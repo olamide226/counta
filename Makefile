@@ -1,4 +1,4 @@
-.PHONY: help setup format lint analyze test test-corpus test-coverage build-runner clean build-ios build-ios-ipa build-android build-appbundle release-preflight build-macos build-web run run-ios run-android run-web doctor icons pull-fixtures supabase-start supabase-stop supabase-test supabase-serve
+.PHONY: help setup format lint analyze test test-corpus test-coverage build-runner clean build-ios build-ios-ipa build-android build-appbundle release-preflight build-macos build-web run run-ios run-android run-web doctor icons pull-fixtures supabase-start supabase-stop supabase-test supabase-serve supabase-linked supabase-status supabase-preflight supabase-deploy supabase-secrets supabase-smoke
 
 # Environment Configuration
 # Automatically loads variables from .env file if present, or CLI overrides.
@@ -73,6 +73,10 @@ help:
 	@echo "  make supabase-stop  - Stop the local Supabase stack"
 	@echo "  make supabase-test  - Run the Edge Function Deno tests"
 	@echo "  make supabase-serve - Serve Edge Functions locally (uses supabase/.env)"
+	@echo "  make supabase-status  - Linked project: migrations, functions, secret names"
+	@echo "  make supabase-deploy  - Preflight, apply migrations, deploy voice-block, smoke test"
+	@echo "  make supabase-secrets - Push supabase/remote.env to the linked project's secrets"
+	@echo "  make supabase-smoke   - Check the deployed function answers an anonymous call with 401"
 	@echo ""
 	@echo "Release commands (see docs/RELEASING.md):"
 	@echo "  make release-preflight - Everything that must be green before a tag"
@@ -288,6 +292,96 @@ supabase-serve:
 	@echo "⚡ Serving Edge Functions locally..."
 	@test -f supabase/.env || (echo "supabase/.env missing: cp supabase/.env.example supabase/.env and fill it in" && exit 1)
 	supabase functions serve --env-file supabase/.env
+
+# --- Remote deploys ---------------------------------------------------------
+# Runbook: docs/DEPLOYING-BACKEND.md.
+#
+# The target project comes from `supabase link`, never from this file. The repo
+# is public, and the same targets have to work for anyone who links their own
+# project; the link lives in supabase/.temp, which is gitignored.
+SUPABASE_LINKED_REF = $(shell cat supabase/.temp/project-ref 2>/dev/null)
+
+# Remote secrets live apart from supabase/.env on purpose: the local file points
+# `make supabase-serve` at whatever you test with, and pushing it by accident
+# would put local values on a live project. The name matches the `*.env`
+# ignore rule; remote.env.local would not, which is why it is not that.
+SUPABASE_SECRETS_FILE ?= supabase/remote.env
+
+supabase-linked:
+	@test -n "$(SUPABASE_LINKED_REF)" || \
+		{ echo "❌ Not linked. Run: supabase link --project-ref <ref>"; exit 1; }
+	@echo "🔗 Linked project: $(SUPABASE_LINKED_REF)"
+
+# Read-only. What the linked project has, before and after any change.
+supabase-status: supabase-linked
+	@echo "--- migrations (local vs remote) ---"
+	@supabase migration list --linked
+	@echo "--- functions ---"
+	@supabase functions list --project-ref $(SUPABASE_LINKED_REF)
+	@echo "--- secrets (names and digests, never values) ---"
+	@supabase secrets list --project-ref $(SUPABASE_LINKED_REF)
+
+# Everything that must hold before code leaves this machine.
+#
+# The bundle check is the one the README asks for by hand: the test doubles in
+# voice-block/testing/ include an attestor that approves every device and a
+# balance that never runs out, and they must be unreachable from index.ts. The
+# `deno info` output is captured first so a failing `deno info` fails the
+# target, rather than reading as zero matches and passing.
+supabase-preflight: supabase-test
+	@cd supabase/functions && \
+		out=$$(deno info voice-block/index.ts) || { echo "❌ deno info failed"; exit 1; }; \
+		if echo "$$out" | grep -q "testing/"; then \
+			echo "❌ Test doubles are in the bundle graph. Nothing under testing/ may be imported by index.ts."; exit 1; \
+		fi
+	@echo "✅ No test doubles in the bundle"
+
+# The routine deploy. Safe to re-run: migrations already applied are skipped,
+# and a function deploy replaces the previous version.
+#
+# `db push` is deliberately left interactive. It lists the migrations it is
+# about to apply and waits, which is the last look anyone gets before a schema
+# change lands on a project other products share.
+#
+# There is no `supabase config push` here and there must never be one: it
+# overwrites the whole project's auth settings. See the runbook.
+supabase-deploy: supabase-linked supabase-preflight
+	supabase db push --linked
+	supabase functions deploy voice-block --project-ref $(SUPABASE_LINKED_REF)
+	@$(MAKE) --no-print-directory supabase-smoke
+
+# Secrets are project-wide, not per function: on a shared project they are
+# visible to every function any product deploys there. Set only what
+# voice-block reads (supabase/.env.example lists it all).
+#
+# Refuses a tracked file, because `*.env` being ignored is one rule away from
+# not being true.
+supabase-secrets: supabase-linked
+	@test -f "$(SUPABASE_SECRETS_FILE)" || \
+		{ echo "❌ $(SUPABASE_SECRETS_FILE) missing: cp supabase/.env.example $(SUPABASE_SECRETS_FILE) and fill it in"; exit 1; }
+	@if git ls-files --error-unmatch "$(SUPABASE_SECRETS_FILE)" >/dev/null 2>&1; then \
+		echo "❌ $(SUPABASE_SECRETS_FILE) is tracked by git. Untrack it before putting secrets in it."; exit 1; \
+	fi
+	supabase secrets set --env-file "$(SUPABASE_SECRETS_FILE)" --project-ref $(SUPABASE_LINKED_REF)
+	@echo "ℹ️  New secrets reach the function immediately. A *changed* secret may not:"
+	@echo "   a warm worker keeps what it booted with. Redeploy to evict it:"
+	@echo "   supabase functions deploy voice-block --project-ref $(SUPABASE_LINKED_REF)"
+
+# An anonymous call must be refused by the function itself with 401. That one
+# answer proves the function is deployed, verify_jwt=false took effect (the
+# gateway would answer differently), and every required secret is present —
+# a missing one fails the whole boot with 500 `misconfigured` before auth runs.
+supabase-smoke: supabase-linked
+	@code=$$(curl -s -o /dev/null -w "%{http_code}" -X POST \
+		"https://$(SUPABASE_LINKED_REF).supabase.co/functions/v1/voice-block" \
+		-H "Content-Type: application/json" -d '{}'); \
+	case $$code in \
+		401) echo "✅ voice-block is up, configured, and refusing anonymous calls (401)";; \
+		500) echo "❌ 500: deployed but misconfigured. A required secret is missing."; \
+		     echo "   Look for boot_failed in the function logs, then: make supabase-secrets"; exit 1;; \
+		404) echo "❌ 404: voice-block is not deployed on $(SUPABASE_LINKED_REF)"; exit 1;; \
+		*)   echo "❌ Unexpected HTTP $$code from voice-block"; exit 1;; \
+	esac
 
 # Prepare for commit
 pre-commit: format lint test
