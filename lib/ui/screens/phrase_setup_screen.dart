@@ -310,7 +310,20 @@ class _PhraseSetupScreenState extends State<PhraseSetupScreen> {
                             avatar: entry.isSet
                                 ? const Icon(Icons.layers_outlined, size: 16)
                                 : null,
-                            label: Text(entry.label),
+                            // A phrase can be twelve words, and a set label
+                            // adds "+2 more" on top. Unbounded, one chip is
+                            // wider than the screen and the wrap overflows.
+                            label: ConstrainedBox(
+                              constraints: BoxConstraints(
+                                maxWidth:
+                                    MediaQuery.sizeOf(context).width * 0.7,
+                              ),
+                              child: Text(
+                                entry.label,
+                                maxLines: 1,
+                                overflow: TextOverflow.ellipsis,
+                              ),
+                            ),
                             onPressed: () => _applyRecent(entry),
                           ),
                       ],

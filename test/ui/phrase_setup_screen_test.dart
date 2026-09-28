@@ -175,6 +175,32 @@ void main() {
     );
   });
 
+  testWidgets('a long remembered set does not overflow its chip', (
+    tester,
+  ) async {
+    tester.view.physicalSize = const Size(320 * 3, 640 * 3);
+    tester.view.devicePixelRatio = 3.0;
+    addTearDown(tester.view.reset);
+
+    await pumpSetup(
+      tester,
+      recentPhrases: [
+        PhraseHistoryEntry(
+          key: 'long',
+          phrases: const [
+            'the wisdom of god is at work in me right now today',
+            'I walk in favour and in the light of his countenance',
+          ],
+          lastUsedAt: DateTime(2026, 9, 1),
+          useCount: 2,
+        ),
+      ],
+    );
+    await tester.pump();
+
+    expect(tester.takeException(), isNull);
+  });
+
   testWidgets('a row can be removed again', (tester) async {
     await pumpSetup(tester);
     await tester.pumpAndSettle();
