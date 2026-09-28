@@ -47,7 +47,7 @@ class FakeSpeechSocket implements SpeechSocket {
   @override
   Future<void> connect({
     required String apiKeyOrToken,
-    PhraseSpec? phrase,
+    PhraseSet? phrases,
   }) async {
     connectCount++;
     tokensSeen.add(apiKeyOrToken);

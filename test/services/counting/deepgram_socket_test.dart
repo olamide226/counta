@@ -18,7 +18,7 @@ void main() {
         keyterms: ['rich in wisdom'],
       );
 
-      final uri = DeepgramSocket.buildUri(phrase: phrase);
+      final uri = DeepgramSocket.buildUri(phrases: PhraseSet.single(phrase));
 
       expect(uri.scheme, 'wss');
       expect(uri.host, 'api.deepgram.com');
@@ -36,6 +36,58 @@ void main() {
       expect(uri.queryParameters['numerals'], 'false');
       expect(uri.queryParameters['mip_opt_out'], 'true');
       expect(uri.queryParameters['keyterm'], 'rich in wisdom');
+    });
+
+    test('every phrase gets its own keyterm parameter', () {
+      // Nova-3 boosts several terms by repeating the parameter. Joining them
+      // with a comma would ask it to recognise one absurd term instead of
+      // three, so `queryParametersAll` is what has to hold them.
+      final uri = DeepgramSocket.buildUri(
+        phrases: PhraseSet([
+          const PhraseSpec(
+            raw: "I'm rich in wisdom",
+            normalisedTokens: ['i', 'am', 'rich', 'in', 'wisdom'],
+            keyterms: ["I'm rich in wisdom"],
+          ),
+          const PhraseSpec(
+            raw: 'I walk in favour',
+            normalisedTokens: ['i', 'walk', 'in', 'favour'],
+            keyterms: ['I walk in favour'],
+          ),
+        ]),
+      );
+
+      expect(uri.queryParametersAll['keyterm'], [
+        // Punctuation stripped, spaces kept: a multi-word term stays one term.
+        'Im rich in wisdom',
+        'I walk in favour',
+      ]);
+    });
+
+    test('a keyterm repeated across phrases is only sent once', () {
+      final uri = DeepgramSocket.buildUri(
+        phrases: PhraseSet([
+          const PhraseSpec(
+            raw: 'I walk in favour',
+            normalisedTokens: ['i', 'walk', 'in', 'favour'],
+            keyterms: ['favour'],
+          ),
+          const PhraseSpec(
+            raw: 'favour is my portion',
+            normalisedTokens: ['favour', 'is', 'my', 'portion'],
+            keyterms: ['favour'],
+          ),
+        ]),
+      );
+
+      expect(uri.queryParametersAll['keyterm'], ['favour']);
+    });
+
+    test('no phrase means no keyterm at all', () {
+      final uri = DeepgramSocket.buildUri(phrases: null);
+
+      expect(uri.queryParametersAll.containsKey('keyterm'), isFalse);
+      expect(uri.queryParameters['language'], 'en');
     });
   });
 }

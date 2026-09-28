@@ -25,7 +25,7 @@ class FakeCountingEngine implements CountingEngine {
   int increments = 0;
   int decrements = 0;
   bool disposed = false;
-  PhraseSpec? lastPhrase;
+  PhraseSet? lastPhrases;
 
   @override
   Stream<CountEvent> get counts => _counts.stream;
@@ -37,9 +37,9 @@ class FakeCountingEngine implements CountingEngine {
   Stream<String> get diagnostics => _diagnostics.stream;
 
   @override
-  Future<void> start([PhraseSpec? phrase]) async {
+  Future<void> start([PhraseSet? phrases]) async {
     startCount++;
-    lastPhrase = phrase;
+    lastPhrases = phrases;
     if (startStatus == EngineStatus.permissionDenied) {
       emitDiagnostic('Microphone access is needed for voice counting.');
     }
@@ -79,13 +79,14 @@ class FakeCountingEngine implements CountingEngine {
   }
 
   /// Pushes a voice detection the way a real engine would mid-session.
-  void emitVoiceCount({int seq = 1}) {
+  void emitVoiceCount({int seq = 1, String? phrase}) {
     if (_counts.isClosed) return;
     _counts.add(
       CountEvent(
         seq: seq,
         source: CountSource.voice,
         wallClock: DateTime(2026, 3, 1),
+        phrase: phrase,
       ),
     );
   }

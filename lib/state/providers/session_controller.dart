@@ -37,7 +37,16 @@ class SessionController extends ChangeNotifier {
   int _voiceCount = 0;
   int _manualCount = 0;
   EngineStatus _status = EngineStatus.idle;
-  PhraseSpec? _activePhrase;
+  PhraseSet? _activePhrases;
+
+  /// [_voiceCount] split by the phrase that matched. Kept summing to
+  /// [_voiceCount] through every path that changes it, undo included, so the
+  /// breakdown a user sees afterwards never disagrees with their total.
+  final Map<String, int> _voiceCountsByPhrase = {};
+
+  /// Most recent phrase a voice count landed on, so undoing a voice count
+  /// takes it back off the phrase that earned it.
+  String? _lastVoicePhrase;
   DateTime? _sessionStart;
   String? _lastDiagnostic;
 
@@ -61,7 +70,14 @@ class SessionController extends ChangeNotifier {
   int get voiceCount => _voiceCount;
   int get manualCount => _manualCount;
   EngineStatus get status => _status;
-  PhraseSpec? get activePhrase => _activePhrase;
+  PhraseSet? get activePhrases => _activePhrases;
+
+  Map<String, int> get voiceCountsByPhrase =>
+      Map.unmodifiable(_voiceCountsByPhrase);
+
+  /// The phrase the latest voice count landed on, so the UI can show which
+  /// phrase was just heard.
+  String? get lastVoicePhrase => _lastVoicePhrase;
 
   /// The most recent explanation of why voice counting degraded, if any.
   ///
@@ -114,7 +130,7 @@ class SessionController extends ChangeNotifier {
   void _updateLiveActivity({bool force = false}) {
     if (!isVoiceActive) return;
     _liveActivityService?.updateActivity(
-      phrase: _activePhrase?.raw ?? '',
+      phrase: _activePhrases?.label ?? '',
       count: total,
       voiceCount: _voiceCount,
       manualCount: _manualCount,
@@ -128,6 +144,15 @@ class SessionController extends ChangeNotifier {
     // already counted them locally, so counting the echo would double up.
     if (event.source == CountSource.voice) {
       _voiceCount++;
+      final phrase = event.phrase ?? _activePhrases?.primary.raw;
+      if (phrase != null) {
+        _voiceCountsByPhrase.update(
+          phrase,
+          (count) => count + 1,
+          ifAbsent: () => 1,
+        );
+        _lastVoicePhrase = phrase;
+      }
     }
     _updateLiveActivity();
     notifyListeners();
@@ -145,19 +170,19 @@ class SessionController extends ChangeNotifier {
   }
 
   /// Start or resume voice counting mid-session without wiping current count.
-  Future<void> startSession([PhraseSpec? phrase]) async {
-    final targetPhrase = phrase ?? _activePhrase;
-    _activePhrase = targetPhrase;
+  Future<void> startSession([PhraseSet? phrases]) async {
+    final targetPhrases = phrases ?? _activePhrases;
+    _activePhrases = targetPhrases;
     _lastDiagnostic = null;
     _sessionStart ??= DateTime.now();
-    await _engine.start(targetPhrase);
+    await _engine.start(targetPhrases);
 
     // Only mirror a session that is actually running. Checking one failure
     // status missed the rest — an errored or exhausted start left a Live
     // Activity on the lock screen for a session that was never counting.
     if (isVoiceActive) {
       await _liveActivityService?.startActivity(
-        phrase: targetPhrase?.raw ?? '',
+        phrase: targetPhrases?.label ?? '',
         count: total,
         voiceCount: _voiceCount,
         manualCount: _manualCount,
@@ -177,17 +202,17 @@ class SessionController extends ChangeNotifier {
   /// terminal status that stopped it. The screen reads that instead of asking
   /// the controller afterwards, because by then the failed session has already
   /// been rolled back.
-  Future<EngineStatus> startVoiceSession(PhraseSpec phrase) async {
+  Future<EngineStatus> startVoiceSession(PhraseSet phrases) async {
     // Before the engine exists, not after: declining must not leave a
     // microphone stack built and a phrase marked active.
     final gate = disclosureGate;
     if (gate != null && !await gate()) return EngineStatus.idle;
 
-    final previousPhrase = _activePhrase;
+    final previousPhrases = _activePhrases;
     final previousStart = _sessionStart;
 
     setEngine(_voiceEngineFactory());
-    await startSession(phrase);
+    await startSession(phrases);
 
     final outcome = _status;
     if (!terminalStatuses.contains(outcome)) return outcome;
@@ -196,7 +221,7 @@ class SessionController extends ChangeNotifier {
     // Rolling the frame back matters: leaving the phrase set meant the next
     // tap-only session was saved as a voice session with a start time from
     // the failed attempt.
-    _activePhrase = previousPhrase;
+    _activePhrases = previousPhrases;
     _sessionStart = previousStart;
     setEngine(_tapEngineFactory());
     _status = EngineStatus.idle;
@@ -233,6 +258,7 @@ class SessionController extends ChangeNotifier {
     } else if (_voiceCount > 0) {
       // Floor of total is enforced, if manual is 0 we decrement total via voice count adjustment
       _voiceCount--;
+      _takeBackVoiceCount();
     }
     _updateLiveActivity();
     notifyListeners();
@@ -244,8 +270,9 @@ class SessionController extends ChangeNotifier {
   /// count, and the next tap snaps the display back down to 1.
   void seed(int count, {DateTime? startedAt}) {
     _voiceCount = 0;
+    _clearPhraseCounts();
     _manualCount = count < 0 ? 0 : count;
-    _activePhrase = null;
+    _activePhrases = null;
     _lastDiagnostic = null;
     _sessionStart = startedAt ?? DateTime.now();
     _updateLiveActivity();
@@ -259,16 +286,33 @@ class SessionController extends ChangeNotifier {
   /// so continuing a recovered voice session does not silently turn it into a
   /// tap session that started just now.
   void restore(CountSession session) {
-    final phrase = session.phrase;
+    final phrases = session.allPhrases;
     _voiceCount = (session.voiceCount ?? 0).clamp(0, session.finalCount);
     _manualCount = session.manualCount ?? (session.finalCount - _voiceCount);
     if (_manualCount < 0) _manualCount = 0;
 
-    // A stored phrase is just the raw text; re-normalising it here is what
+    // Stored phrases are just raw text; re-normalising them here is what
     // makes the resumed session countable again rather than decorative.
-    _activePhrase = phrase == null
-        ? null
-        : PhraseValidator().validate(phrase).phraseSpec;
+    //
+    // Taken one at a time rather than through `validateSet`: recovering a
+    // crashed session should salvage what it can, and that returns nothing at
+    // all if a single stored phrase no longer passes the current rules.
+    final validator = PhraseValidator();
+    final specs = [
+      for (final phrase in phrases)
+        if (validator.validate(phrase).phraseSpec case final spec?) spec,
+    ];
+    _activePhrases = specs.isEmpty ? null : PhraseSet(specs);
+
+    _clearPhraseCounts();
+    final stored = session.phraseCounts;
+    if (stored != null) {
+      _voiceCountsByPhrase.addAll(stored);
+    } else if (_voiceCount > 0 && phrases.length == 1) {
+      // A record from before the split was stored: with one phrase there is
+      // only one place its voice counts can have come from.
+      _voiceCountsByPhrase[phrases.single] = _voiceCount;
+    }
     _lastDiagnostic = null;
     _sessionStart = session.startedAt;
     _updateLiveActivity();
@@ -278,6 +322,7 @@ class SessionController extends ChangeNotifier {
   /// Reset the session counters.
   void reset({bool keepSessionStart = false}) {
     _voiceCount = 0;
+    _clearPhraseCounts();
     _manualCount = 0;
     if (!keepSessionStart) {
       _sessionStart = DateTime.now();
@@ -297,6 +342,7 @@ class SessionController extends ChangeNotifier {
       manualCount: _manualCount,
       totalCount: total,
       duration: summary.duration,
+      voiceCountsByPhrase: voiceCountsByPhrase,
     );
   }
 
@@ -307,5 +353,39 @@ class SessionController extends ChangeNotifier {
     _diagnosticsSubscription?.cancel();
     _engine.dispose();
     super.dispose();
+  }
+
+  void _clearPhraseCounts() {
+    _voiceCountsByPhrase.clear();
+    _lastVoicePhrase = null;
+  }
+
+  /// Removes one voice count from the per-phrase split, matching the one just
+  /// taken off [_voiceCount].
+  ///
+  /// The phrase that earned the latest count gives it back; once that is
+  /// spent, the largest remaining one does. Either way the split keeps
+  /// summing to the total.
+  void _takeBackVoiceCount() {
+    var phrase = _lastVoicePhrase;
+    if (phrase == null || (_voiceCountsByPhrase[phrase] ?? 0) <= 0) {
+      phrase = null;
+      var largest = 0;
+      for (final entry in _voiceCountsByPhrase.entries) {
+        if (entry.value > largest) {
+          largest = entry.value;
+          phrase = entry.key;
+        }
+      }
+    }
+    if (phrase == null) return;
+
+    final remaining = _voiceCountsByPhrase[phrase]! - 1;
+    if (remaining > 0) {
+      _voiceCountsByPhrase[phrase] = remaining;
+    } else {
+      _voiceCountsByPhrase.remove(phrase);
+      if (_lastVoicePhrase == phrase) _lastVoicePhrase = null;
+    }
   }
 }

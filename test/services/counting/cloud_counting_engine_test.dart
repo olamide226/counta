@@ -138,23 +138,13 @@ void main() {
     });
 
     test('start transitions status to connecting then live', () async {
-      await engine.start(
-        const PhraseSpec(
-          raw: "I'm rich in wisdom",
-          normalisedTokens: ['i', 'am', 'rich', 'in', 'wisdom'],
-        ),
-      );
+      await engine.start(testPhraseSet);
 
       expect(engine.currentStatus, EngineStatus.live);
     });
 
     test('connects the socket with the token from the provider', () async {
-      await engine.start(
-        const PhraseSpec(
-          raw: "I'm rich in wisdom",
-          normalisedTokens: ['i', 'am', 'rich', 'in', 'wisdom'],
-        ),
-      );
+      await engine.start(testPhraseSet);
 
       expect(fakeSocket.tokensSeen, [testToken]);
     });
@@ -174,12 +164,7 @@ void main() {
         final sub = localEngine.diagnostics.listen(diagnostics.add);
 
         await expectLater(
-          localEngine.start(
-            const PhraseSpec(
-              raw: "I'm rich in wisdom",
-              normalisedTokens: ['i', 'am', 'rich', 'in', 'wisdom'],
-            ),
-          ),
+          localEngine.start(testPhraseSet),
           throwsA(isA<VoiceUnavailable>()),
         );
         await pumpEventQueue();
@@ -205,15 +190,7 @@ void main() {
         final diagnostics = <String>[];
         final sub = localEngine.diagnostics.listen(diagnostics.add);
 
-        await expectLater(
-          localEngine.start(
-            const PhraseSpec(
-              raw: "I'm rich in wisdom",
-              normalisedTokens: ['i', 'am', 'rich', 'in', 'wisdom'],
-            ),
-          ),
-          throwsStateError,
-        );
+        await expectLater(localEngine.start(testPhraseSet), throwsStateError);
         await pumpEventQueue();
 
         expect(localEngine.currentStatus, EngineStatus.error);
@@ -229,12 +206,7 @@ void main() {
         final events = <CountEvent>[];
         final sub = engine.counts.listen(events.add);
 
-        await engine.start(
-          const PhraseSpec(
-            raw: "I'm rich in wisdom",
-            normalisedTokens: ['i', 'am', 'rich', 'in', 'wisdom'],
-          ),
-        );
+        await engine.start(testPhraseSet);
 
         // Emit matching segment
         fakeSocket.emitSegment(
@@ -498,13 +470,13 @@ class _FailingReconnectSocket extends FakeSpeechSocket {
   @override
   Future<void> connect({
     required String apiKeyOrToken,
-    PhraseSpec? phrase,
+    PhraseSet? phrases,
   }) async {
     connectAttempts++;
     if (failConnects) {
       throw const SocketException('network unreachable');
     }
-    return super.connect(apiKeyOrToken: apiKeyOrToken, phrase: phrase);
+    return super.connect(apiKeyOrToken: apiKeyOrToken, phrases: phrases);
   }
 
   @override

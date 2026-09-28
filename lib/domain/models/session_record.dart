@@ -16,14 +16,15 @@ CountSession buildSessionRecord({
   required String mantra,
   required AppSettings settings,
   required CounterState counter,
-  required PhraseSpec? phrase,
+  required PhraseSet? phrases,
   required int voiceCount,
   required int manualCount,
+  Map<String, int> voiceCountsByPhrase = const {},
   required DateTime endedAt,
   String? notes,
   bool completed = true,
 }) {
-  final isVoiceSession = phrase != null;
+  final isVoiceSession = phrases != null;
 
   return CountSession(
     id: id,
@@ -39,7 +40,9 @@ CountSession buildSessionRecord({
     themeModeChoice: settings.themeModeChoice,
     themeId: settings.themeId,
     notes: notes,
-    phrase: phrase?.raw,
+    phrase: phrases?.primary.raw,
+    phrases: phrases?.rawPhrases,
+    phraseCounts: isVoiceSession ? Map.of(voiceCountsByPhrase) : null,
     voiceCount: isVoiceSession ? voiceCount : null,
     manualCount: isVoiceSession ? manualCount : null,
     completed: completed,

@@ -126,9 +126,9 @@ void main() {
       controller.incrementManual();
       expect(controller.total, 1);
 
-      await controller.startSession(phrase);
+      await controller.startSession(PhraseSet.single(phrase));
 
-      expect(controller.activePhrase, phrase);
+      expect(controller.activePhrases, PhraseSet.single(phrase));
       expect(controller.total, 1);
       expect(controller.voiceCount, 0);
       expect(controller.manualCount, 1);
@@ -155,15 +155,15 @@ void main() {
       final firstEngine = FakeCountingEngine();
       controller.setEngine(firstEngine);
 
-      await controller.startSession(phrase);
+      await controller.startSession(PhraseSet.single(phrase));
       await controller.stop();
 
       final resumedEngine = FakeCountingEngine();
       controller.setEngine(resumedEngine);
       await controller.startSession();
 
-      expect(controller.activePhrase, phrase);
-      expect(resumedEngine.lastPhrase, phrase);
+      expect(controller.activePhrases, PhraseSet.single(phrase));
+      expect(resumedEngine.lastPhrases, PhraseSet.single(phrase));
     });
 
     test('manual taps reach whichever engine is active', () async {

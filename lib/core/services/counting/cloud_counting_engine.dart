@@ -311,10 +311,13 @@ class CloudCountingEngine implements CountingEngine {
   final Set<SpeechSocket> _ownedSockets = {};
 
   PhraseMatcher? _matcher;
-  PhraseSpec? _phrase;
+  PhraseSet? _phrases;
   EngineStatus _status = EngineStatus.idle;
   int _seq = 0;
   int _voiceCount = 0;
+
+  /// [_voiceCount] split by the phrase that matched, for the summary.
+  final Map<String, int> _voiceCountsByPhrase = {};
   int _manualCount = 0;
   DateTime? _startTime;
 
@@ -442,7 +445,7 @@ class CloudCountingEngine implements CountingEngine {
   Stream<String> get diagnostics => _diagnosticsController.stream;
 
   EngineStatus get currentStatus => _status;
-  PhraseSpec? get phrase => _phrase;
+  PhraseSet? get phrases => _phrases;
   int get voiceCount => _voiceCount;
   int get manualCount => _manualCount;
   int get totalCount => _voiceCount + _manualCount;
@@ -461,12 +464,14 @@ class CloudCountingEngine implements CountingEngine {
   }
 
   @override
-  Future<void> start([PhraseSpec? phrase]) async {
-    final targetPhrase =
-        phrase ??
-        const PhraseSpec(
-          raw: "I'm rich in wisdom",
-          normalisedTokens: ['i', 'am', 'rich', 'in', 'wisdom'],
+  Future<void> start([PhraseSet? phrases]) async {
+    final targetPhrases =
+        phrases ??
+        PhraseSet.single(
+          const PhraseSpec(
+            raw: "I'm rich in wisdom",
+            normalisedTokens: ['i', 'am', 'rich', 'in', 'wisdom'],
+          ),
         );
 
     // `startSession` can restart a live engine, and everything below belongs
@@ -481,6 +486,7 @@ class CloudCountingEngine implements CountingEngine {
 
     _seq = 0;
     _voiceCount = 0;
+    _voiceCountsByPhrase.clear();
     _manualCount = 0;
     _stopped = false;
     _reconnectAttempts = 0;
@@ -500,8 +506,8 @@ class CloudCountingEngine implements CountingEngine {
     _renewalInFlight = false;
     _sessionId = const Uuid().v4();
     _startTime = DateTime.now();
-    _phrase = targetPhrase;
-    _matcher = PhraseMatcher(target: targetPhrase, config: matcherConfig);
+    _phrases = targetPhrases;
+    _matcher = PhraseMatcher(target: targetPhrases, config: matcherConfig);
 
     _setStatus(EngineStatus.connecting);
 
@@ -625,7 +631,7 @@ class CloudCountingEngine implements CountingEngine {
     }
 
     try {
-      await socket.connect(apiKeyOrToken: token, phrase: _phrase);
+      await socket.connect(apiKeyOrToken: token, phrases: _phrases);
     } catch (e) {
       if (asPrimary) {
         _primary = null;
@@ -1267,7 +1273,7 @@ class CloudCountingEngine implements CountingEngine {
         await primary.socket.closeGracefully(drainTimeoutMs: 0);
         await primary.socket.connect(
           apiKeyOrToken: await _reconnectCredential(),
-          phrase: _phrase,
+          phrases: _phrases,
         );
         _rebaseAfterReconnect(primary);
 
@@ -1354,6 +1360,11 @@ class CloudCountingEngine implements CountingEngine {
 
   void _handleDetection(Detection detection) {
     _voiceCount++;
+    _voiceCountsByPhrase.update(
+      detection.phrase.raw,
+      (count) => count + 1,
+      ifAbsent: () => 1,
+    );
     _seq++;
     final active = _active;
     if (active != null) active.detections++;
@@ -1364,6 +1375,7 @@ class CloudCountingEngine implements CountingEngine {
       confidence: detection.score,
       audioOffset: detection.audioOffset,
       wallClock: DateTime.now(),
+      phrase: detection.phrase.raw,
     );
 
     if (!_countsController.isClosed) {
@@ -1415,6 +1427,7 @@ class CloudCountingEngine implements CountingEngine {
       manualCount: _manualCount,
       totalCount: totalCount,
       duration: duration,
+      voiceCountsByPhrase: Map.unmodifiable(_voiceCountsByPhrase),
     );
   }
 

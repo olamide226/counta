@@ -32,7 +32,7 @@ class AppLifecycleNotifier extends StateNotifier<AppLifecycleState> {
           .read(notificationServiceProvider)
           .showVoiceSessionNotification(
             currentCount: session.total,
-            phrase: session.activePhrase?.raw ?? 'your phrase',
+            phrase: session.activePhrases?.label ?? 'your phrase',
           );
 
       // Drop the wakelock once we are in the background. The audio background
