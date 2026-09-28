@@ -101,6 +101,29 @@ void main() {
     });
   });
 
+  test('unparseable values cannot stop the box being trimmed', () async {
+    // Regression: the gate counted raw box values while the deletion was
+    // derived from entries that parse, so a box whose surplus was corrupt
+    // never shrank and getRecent kept returning fewer than asked.
+    await withTempHive(() async {
+      final box = await Hive.openBox(HivePhraseHistoryRepository.boxName);
+      final repo = HivePhraseHistoryRepository(box);
+      for (var i = 0; i < HivePhraseHistoryRepository.maxEntries; i++) {
+        await box.put('junk-$i', 'not json at all');
+      }
+
+      for (var i = 0; i < 5; i++) {
+        await repo.record(setOf(['phrase number $i']));
+      }
+
+      expect(
+        box.length,
+        lessThanOrEqualTo(HivePhraseHistoryRepository.maxEntries),
+      );
+      expect(repo.getRecent(limit: 100), hasLength(5));
+    });
+  });
+
   test('a corrupt entry costs one chip, not the whole list', () async {
     await withTempHive(() async {
       final box = await Hive.openBox(HivePhraseHistoryRepository.boxName);

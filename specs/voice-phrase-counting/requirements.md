@@ -168,7 +168,7 @@ The system has no backend today. This feature introduces exactly one server-side
 8.7. WHERE a session counts several phrases, the matcher SHALL evaluate every phrase against one shared token window and accept at most one of them per candidate span. One utterance SHALL therefore count once however many phrases it resembles — which is why the matcher holds a set rather than the session holding a matcher per phrase.
 8.8. The refractory period SHALL be shared across a session's phrases, since the user cannot have spoken two different phrases in the same moment.
 8.9. Each phrase SHALL bound its own candidate window by its own token length, so a short phrase is never compared against a slice sized for a long one.
-8.10. IF two phrases match a span equally well THEN the matcher SHALL prefer the longer phrase, as the more specific claim on the utterance.
+8.10. WHEN candidates tie on similarity and on fit to their own phrase's length THEN the matcher SHALL accept the earliest, and SHALL NOT let any other preference outrank position. Accepting a candidate retires the tokens before it as well, so preferring a later candidate discards the earlier match without ever counting it. Where one phrase is contained in another the longer match begins at or before the shorter one, so position already prefers the longer, more specific claim.
 8.11. The corpus gate SHALL additionally verify that replaying a fixture with unrelated phrases listening alongside its own does not change the count of its own phrase.
 
 ### Requirement 9: Privacy and consent

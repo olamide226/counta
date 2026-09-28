@@ -52,6 +52,18 @@ class PhraseValidator {
 
   PhraseValidator({this.matcherConfig = const MatcherConfig()});
 
+  late final PhraseNormaliser _normaliser = PhraseNormaliser(
+    homophones: matcherConfig.homophones,
+    contractions: matcherConfig.contractions,
+  );
+
+  /// What two phrases share when they are the same target.
+  ///
+  /// Public because the duplicate rule is not only enforced at submit: the
+  /// setup screen hides a suggestion already among the rows, and comparing
+  /// raw text there offered a chip that then failed this very check.
+  String identityOf(String rawPhrase) => _normaliser(rawPhrase).join(' ');
+
   /// Most phrases anyone can hold in their head mid-session, and the point
   /// past which extra targets cost accuracy: every phrase is another chance
   /// for an unrelated stretch of speech to clear the threshold.
@@ -66,10 +78,7 @@ class PhraseValidator {
       );
     }
 
-    final tokens = PhraseNormaliser(
-      homophones: matcherConfig.homophones,
-      contractions: matcherConfig.contractions,
-    )(trimmed);
+    final tokens = _normaliser(trimmed);
 
     if (tokens.length < 2) {
       return PhraseValidationResult.error(

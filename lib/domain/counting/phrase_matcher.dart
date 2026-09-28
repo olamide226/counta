@@ -565,19 +565,19 @@ class PhraseMatcher {
       return candidateLengthDifference < currentLengthDifference;
     }
 
-    // Two *different* phrases fitting equally well means one is contained in
-    // the other — "rich in wisdom" inside "I'm rich in wisdom" — and both
-    // score 1.0 on the same breath. The longer claim is the more specific
-    // one, so it wins and takes the whole utterance with it.
+    // Earliest wins, and nothing is allowed to outrank position.
     //
-    // Deliberately gated on the phrases differing: within one phrase this
-    // would reorder candidates the single-phrase corpus is tuned against,
-    // for no gain.
-    if (!identical(candidate.target, current.target) &&
-        candidate.length != current.length) {
-      return candidate.length > current.length;
-    }
-
+    // Accepting a candidate retires every token before it too, so preferring
+    // a later candidate does not merely reorder the output — it destroys the
+    // earlier match without ever emitting it. A set containing both "peace be
+    // still" and a longer phrase lost the first of them whenever the user
+    // said it first, and counted both when they said it in the other order.
+    //
+    // Preferring the longer phrase needs no rule of its own: where one phrase
+    // is contained in another, the longer match starts at or before the
+    // shorter one, so position already picks it. Where they start at the same
+    // token the slice loop runs longest-first, so the longer is seen first and
+    // kept.
     return candidate.startIndex < current.startIndex;
   }
 

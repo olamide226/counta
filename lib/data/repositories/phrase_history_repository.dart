@@ -91,13 +91,24 @@ class HivePhraseHistoryRepository implements PhraseHistoryRepository {
     await _trim();
   }
 
+  /// Keeps the box to [maxEntries], counted in box keys rather than in
+  /// entries that happen to parse.
+  ///
+  /// Deriving the deletions from parsed entries alone could never shrink a box
+  /// whose surplus was unparseable: the gate counted those values, the
+  /// deletion did not, so the box grew without bound and `getRecent` kept
+  /// returning fewer than asked. Anything not among the newest valid entries
+  /// goes, which retires corrupt values as a side effect.
   Future<void> _trim() async {
     if (_box.length <= maxEntries) return;
-    final stale =
+
+    final keep =
         (_readAll()..sort((a, b) => b.lastUsedAt.compareTo(a.lastUsedAt)))
-            .skip(maxEntries)
-            .map((entry) => entry.key);
-    await _box.deleteAll(stale);
+            .take(maxEntries)
+            .map((entry) => entry.key)
+            .toSet();
+
+    await _box.deleteAll(_box.keys.where((key) => !keep.contains(key)));
   }
 
   @override

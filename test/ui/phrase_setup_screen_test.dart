@@ -201,6 +201,35 @@ void main() {
     expect(tester.takeException(), isNull);
   });
 
+  testWidgets('a chip that would only duplicate a row is not offered', (
+    tester,
+  ) async {
+    // The first row holds "I'm rich in wisdom". A recent phrase that
+    // normalises to the same thing must not be offered, or tapping it would
+    // produce an immediate duplicate error.
+    await pumpSetup(
+      tester,
+      recentPhrases: [
+        PhraseHistoryEntry(
+          key: 'i am rich in wisdom',
+          phrases: const ['I am rich in wisdom'],
+          lastUsedAt: DateTime(2026, 9, 2),
+          useCount: 3,
+        ),
+        PhraseHistoryEntry(
+          key: 'i walk in favour',
+          phrases: const ['I walk in favour'],
+          lastUsedAt: DateTime(2026, 9, 1),
+          useCount: 1,
+        ),
+      ],
+    );
+    await tester.pumpAndSettle();
+
+    expect(find.text('I am rich in wisdom'), findsNothing);
+    expect(find.text('I walk in favour'), findsOneWidget);
+  });
+
   testWidgets('a row can be removed again', (tester) async {
     await pumpSetup(tester);
     await tester.pumpAndSettle();

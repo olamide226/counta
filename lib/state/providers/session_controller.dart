@@ -18,6 +18,20 @@ class SessionController extends ChangeNotifier {
     EngineStatus.exhausted,
   };
 
+  /// Statuses of a session that is running, or on its way to running.
+  ///
+  /// Named because callers kept asking the question the other way round —
+  /// "not terminal and not idle" — which silently counted
+  /// [EngineStatus.notConfigured] as a success. Ask what a session *is*, not
+  /// what it is not, and a status added later cannot land on the wrong side.
+  static const runningStatuses = {
+    EngineStatus.connecting,
+    EngineStatus.live,
+    EngineStatus.reconnecting,
+    EngineStatus.degraded,
+    EngineStatus.requestingBlock,
+  };
+
   CountingEngine _engine;
   final LiveActivityService? _liveActivityService;
   final CountingEngine Function() _voiceEngineFactory;
@@ -86,13 +100,7 @@ class SessionController extends ChangeNotifier {
   String? get lastDiagnostic => _lastDiagnostic;
 
   /// Whether a voice session is currently running or trying to run.
-  bool get isVoiceActive => const {
-    EngineStatus.connecting,
-    EngineStatus.live,
-    EngineStatus.reconnecting,
-    EngineStatus.degraded,
-    EngineStatus.requestingBlock,
-  }.contains(_status);
+  bool get isVoiceActive => runningStatuses.contains(_status);
 
   Duration get elapsed {
     if (_sessionStart == null) return Duration.zero;

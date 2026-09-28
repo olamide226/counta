@@ -137,15 +137,21 @@ class _PhraseSetupScreenState extends State<PhraseSetupScreen> {
 
   /// Recent setups still worth offering: a single phrase already in the rows
   /// would only earn a duplicate error, so it is not shown.
+  ///
+  /// Compared by the validator's own notion of phrase identity, not by raw
+  /// text. Matching on text offered "I'm rich in wisdom" next to a row
+  /// reading "Im rich in wisdom", and tapping it produced an immediate
+  /// duplicate error with nothing to say which chips were safe.
   List<PhraseHistoryEntry> get _offerableRecents {
     final present = {
       for (final row in _rows)
         if (row.controller.text.trim().isNotEmpty)
-          row.controller.text.trim().toLowerCase(),
+          _validator.identityOf(row.controller.text),
     };
     return [
       for (final entry in widget.recentPhrases)
-        if (entry.isSet || !present.contains(entry.phrases.first.toLowerCase()))
+        if (entry.isSet ||
+            !present.contains(_validator.identityOf(entry.phrases.first)))
           entry,
     ];
   }

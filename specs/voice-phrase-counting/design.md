@@ -285,8 +285,9 @@ ingest(segment):
   candidates := every (slice, phrase) pair whose tokenSimilarity meets that
                 phrase's threshold, skipping slices outside that phrase's own
                 length bounds
-  best := highest score, then closest to its own phrase's length, then the
-          longer phrase when the phrases differ, then earliest occurrence
+  best := highest score, then closest to its own phrase's length, then
+          earliest occurrence — position is never overridden, because
+          accepting a candidate also retires everything before it
 
   if best overlaps the last accepted audio span:
       consume best as a duplicate
@@ -315,11 +316,16 @@ Two things fall out of sharing the scan and have to be handled deliberately:
   phrase would consider, but each phrase rejects lengths outside its own
   bounds. Otherwise a three-token phrase gets compared against a slice sized
   for a nine-token one, and a mixed-length set degrades both.
-- **Ties go to the longer phrase.** When one phrase's tokens sit inside
-  another's, both score 1.0 on the same span. The longer is the more specific
-  claim, so it wins and takes the whole utterance. This tie-break is gated on
-  the phrases differing, so single-phrase candidate ordering — which the
-  corpus is tuned against — is untouched.
+- **Nothing outranks position.** Accepting a candidate retires the tokens
+  *before* it as well, so preferring a later candidate does not reorder the
+  output — it destroys the earlier match without emitting it. An explicit
+  "longer phrase wins" tie-break did exactly that: a set holding both "peace
+  be still" and a longer phrase lost the first whenever it was spoken first,
+  and counted both in the other order. The rule was removed rather than
+  reordered, because it was never needed: where one phrase is contained in
+  another the longer match starts at or before the shorter one, so position
+  already prefers it, and where both start on the same token the descending
+  slice loop sees the longer first.
 
 The cost is one extra token-level Levenshtein pass per slice per phrase, in a
 loop that already dominates. That is what caps the set at five: not

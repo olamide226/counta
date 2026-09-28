@@ -115,12 +115,18 @@ class _CounterScreenState extends ConsumerState<CounterScreen>
             if (outcome == EngineStatus.permissionDenied) {
               await _handleMicrophoneDenied();
             }
-            // Remembered only once a session really started, so a setup that
-            // failed on permissions or credit does not come back as a
-            // suggestion.
-            if (!SessionController.terminalStatuses.contains(outcome) &&
-                outcome != EngineStatus.idle) {
-              await history.record(phrases);
+            // Remembered only once a session really started, so a setup
+            // that failed on permissions, credit or configuration does not
+            // come back as a suggestion. Asked positively: the exclusion
+            // form counted `notConfigured` — a build that can never obtain a
+            // credential — as a successful start.
+            if (SessionController.runningStatuses.contains(outcome)) {
+              // Best effort. A suggestion that cannot be stored must not
+              // surface as "could not start voice counting" over a session
+              // that is running perfectly well.
+              try {
+                await history.record(phrases);
+              } catch (_) {}
             }
           },
         ),

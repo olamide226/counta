@@ -190,6 +190,43 @@ void main() {
     });
   });
 
+  group('status sets', () {
+    test('no status is both running and terminal', () {
+      expect(
+        SessionController.runningStatuses.intersection(
+          SessionController.terminalStatuses,
+        ),
+        isEmpty,
+      );
+    });
+
+    test('a session that cannot be configured is not a running one', () {
+      // The guard deciding whether a setup is worth remembering used to read
+      // "not terminal and not idle", which counted `notConfigured` — a build
+      // that can never obtain a credential — as a successful start.
+      expect(
+        SessionController.runningStatuses.contains(EngineStatus.notConfigured),
+        isFalse,
+      );
+    });
+
+    test('every status is classified, or listed here as deliberately not', () {
+      // `notConfigured` is in neither set today: it is not a running session,
+      // but it is not treated as terminal either, so `startVoiceSession`
+      // leaves the engine installed and the banner explains itself instead.
+      // That is worth revisiting rather than an oversight — and pinning it
+      // means a status added later has to be classified, instead of silently
+      // inheriting whichever branch it falls through to.
+      const unclassified = {EngineStatus.idle, EngineStatus.notConfigured};
+
+      expect({
+        ...SessionController.runningStatuses,
+        ...SessionController.terminalStatuses,
+        ...unclassified,
+      }, EngineStatus.values.toSet());
+    });
+  });
+
   group('the per-phrase split', () {
     /// Counts reach the controller through a broadcast stream, so the
     /// listener runs on a later microtask than the emit.

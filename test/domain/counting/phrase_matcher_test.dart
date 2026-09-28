@@ -536,6 +536,73 @@ void main() {
       );
     });
 
+    test('two different phrases in one segment both count', () {
+      // Regression: accepting a candidate retires every token before it, so
+      // a rule that preferred a later candidate destroyed the earlier match
+      // without emitting it. This counted 1 instead of 2, and counted 2 when
+      // the same two phrases were said in the other order.
+      const still = PhraseSpec(
+        raw: 'peace be still',
+        normalisedTokens: ['peace', 'be', 'still'],
+      );
+      const longer = PhraseSpec(
+        raw: 'i am rich in wisdom now',
+        normalisedTokens: ['i', 'am', 'rich', 'in', 'wisdom', 'now'],
+      );
+
+      List<String> countedIn(String text) =>
+          PhraseMatcher(target: PhraseSet([still, longer]))
+              .ingest(finalSegment(text, duration: 6.0))
+              .map((d) => d.phrase.raw)
+              .toList();
+
+      expect(countedIn('peace be still i am rich in wisdom now'), [
+        'peace be still',
+        'i am rich in wisdom now',
+      ]);
+      // Order of speaking must not decide whether something counts.
+      expect(countedIn('i am rich in wisdom now peace be still'), [
+        'i am rich in wisdom now',
+        'peace be still',
+      ]);
+    });
+
+    test('a contained phrase and its container both count when both said', () {
+      const short = PhraseSpec(
+        raw: 'rich in wisdom',
+        normalisedTokens: ['rich', 'in', 'wisdom'],
+      );
+      final m = PhraseMatcher(target: PhraseSet([short, wisdom]));
+
+      final detections = m.ingest(
+        said('rich in wisdom i am rich in wisdom', start: 1.0),
+      );
+
+      // The setup warning says the longer one wins a *shared* utterance. Two
+      // separate utterances are two counts.
+      expect(detections.map((d) => d.phrase.raw), [
+        'rich in wisdom',
+        "I'm rich in wisdom",
+      ]);
+    });
+
+    test('phrases sharing a first token prefer the longer match', () {
+      const plain = PhraseSpec(
+        raw: 'peace be still',
+        normalisedTokens: ['peace', 'be', 'still'],
+      );
+      const extended = PhraseSpec(
+        raw: 'peace be still now',
+        normalisedTokens: ['peace', 'be', 'still', 'now'],
+      );
+      final m = PhraseMatcher(target: PhraseSet([plain, extended]));
+
+      final detections = m.ingest(said('peace be still now'));
+
+      expect(detections, hasLength(1));
+      expect(detections.single.phrase, extended);
+    });
+
     test('the refractory period is shared across phrases', () {
       final m = PhraseMatcher(
         target: PhraseSet([wisdom, favour]),
