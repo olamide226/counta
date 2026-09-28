@@ -56,9 +56,17 @@ class FixtureReplayHarness {
   FixtureReplayHarness({this.config = const MatcherConfig()});
 
   /// Replays a JSON fixture through the PhraseMatcher and returns evaluation results.
+  /// Replays a fixture, optionally with [extraPhrases] listening alongside
+  /// the fixture's own phrase.
+  ///
+  /// The extra phrases exist to prove a negative: adding a phrase the audio
+  /// never contains must not change what the real phrase counts. That is the
+  /// whole risk of a multi-phrase session, and it cannot be shown on a
+  /// hand-written segment or two.
   FixtureResult evaluateFixtureJson(
     String jsonString, {
     String fixtureName = 'fixture',
+    List<String> extraPhrases = const [],
   }) {
     final Map<String, dynamic> jsonMap =
         jsonDecode(jsonString) as Map<String, dynamic>;
@@ -68,15 +76,32 @@ class FixtureReplayHarness {
     final List<dynamic> segmentsJson =
         jsonMap['segments'] as List<dynamic>? ?? [];
 
-    final tempMatcher = PhraseMatcher(
-      target: PhraseSpec(raw: phraseRaw, normalisedTokens: const []),
+    final tempMatcher = PhraseMatcher.single(
+      PhraseSpec(raw: phraseRaw, normalisedTokens: const []),
       config: config,
     );
     final phraseTokens = tempMatcher.normaliseText(phraseRaw);
 
     final phrase = PhraseSpec(raw: phraseRaw, normalisedTokens: phraseTokens);
 
-    final matcher = PhraseMatcher(target: phrase, config: config);
+    // An extra phrase that normalises to the fixture's own is not an extra
+    // phrase, and the app's validator refuses one — so the harness must not
+    // quietly build a set the app could never produce.
+    final extraSpecs =
+        [
+          for (final extra in extraPhrases)
+            PhraseSpec(
+              raw: extra,
+              normalisedTokens: tempMatcher.normaliseText(extra),
+            ),
+        ]..removeWhere(
+          (spec) => spec.normalisedTokens.join(' ') == phraseTokens.join(' '),
+        );
+
+    final matcher = PhraseMatcher(
+      target: PhraseSet([phrase, ...extraSpecs]),
+      config: config,
+    );
     int totalDetections = 0;
     int transcriptTokenCount = 0;
     int anchorOccurrences = 0;

@@ -10,16 +10,23 @@ class Detection {
   final String matchedText;
   final DateTime detectedAt;
 
+  /// Which of the session's phrases this detection was accepted against.
+  ///
+  /// A session counts one total whatever the phrase, so nothing downstream
+  /// has to branch on this — it exists so the summary can show the split.
+  final PhraseSpec phrase;
+
   Detection({
     required this.score,
     required this.audioOffset,
     required this.matchedText,
+    required this.phrase,
     DateTime? detectedAt,
   }) : detectedAt = detectedAt ?? DateTime.now();
 
   @override
   String toString() =>
-      'Detection(score: ${score.toStringAsFixed(2)}, offset: $audioOffset, text: "$matchedText")';
+      'Detection(score: ${score.toStringAsFixed(2)}, offset: $audioOffset, text: "$matchedText", phrase: "${phrase.raw}")';
 }
 
 class MatcherConfig {
@@ -65,12 +72,52 @@ class _MatchCandidate {
   final int startIndex;
   final int length;
   final double score;
+  final _Target target;
 
   const _MatchCandidate({
     required this.startIndex,
     required this.length,
     required this.score,
+    required this.target,
   });
+}
+
+/// One phrase the matcher is listening for, with everything derived from it
+/// that would otherwise be recomputed on every candidate slice.
+///
+/// Holding the derived bounds per phrase is what keeps a set of mixed lengths
+/// honest: a three-token phrase must not be compared against a fifteen-token
+/// slice just because some other phrase in the set is long enough to want one.
+class _Target {
+  _Target({
+    required this.spec,
+    required this.tokens,
+    required double windowSlack,
+  }) : minSliceLength = max(1, (tokens.length * 0.7).floor()),
+       maxSliceLength = (tokens.length * windowSlack).ceil(),
+       _headAnchorLength = max(2, tokens.length ~/ 3);
+
+  final PhraseSpec spec;
+  final List<String> tokens;
+  final int minSliceLength;
+  final int maxSliceLength;
+  final int _headAnchorLength;
+
+  int get length => tokens.length;
+
+  /// How many leading target tokens a candidate must reproduce exactly to
+  /// count as anchored. Anchoring needs at least four target tokens so that
+  /// the head and tail leave a middle for the relaxation to apply to.
+  static const int _minAnchoredTargetLength = 4;
+
+  bool isAnchored(List<String> candidate) {
+    if (tokens.length < _minAnchoredTargetLength) return false;
+    if (candidate.length <= _headAnchorLength) return false;
+    for (int i = 0; i < _headAnchorLength; i++) {
+      if (candidate[i] != tokens[i]) return false;
+    }
+    return candidate.last == tokens.last;
+  }
 }
 
 class MatcherStats {
@@ -106,7 +153,12 @@ class _StreamWindow {
 }
 
 class PhraseMatcher {
-  final PhraseSpec target;
+  /// Every phrase this session counts. All of them share one token window and
+  /// one refractory period, so a single utterance can satisfy at most one of
+  /// them — which is what stops two near-identical phrases counting the same
+  /// breath twice.
+  final PhraseSet target;
+
   final MatcherConfig config;
 
   /// The open streams. Offset and tokens travel together: as two maps keyed
@@ -123,6 +175,13 @@ class PhraseMatcher {
   PhraseMatcher({required this.target, this.config = const MatcherConfig()}) {
     openStream(defaultStreamId);
   }
+
+  /// Convenience for the single-phrase case, which is most sessions and every
+  /// fixture replay.
+  PhraseMatcher.single(
+    PhraseSpec phrase, {
+    MatcherConfig config = const MatcherConfig(),
+  }) : this(target: PhraseSet.single(phrase), config: config);
 
   /// Stream id used when a caller does not name one — a session with a single
   /// connection, and every fixture replay.
@@ -158,11 +217,31 @@ class PhraseMatcher {
     contractions: config.contractions,
   );
 
-  late final List<String> _normalisedTarget = List.unmodifiable(
-    target.normalisedTokens.isNotEmpty
-        ? target.normalisedTokens
-        : normaliseText(target.raw),
+  /// The phrases that can actually match. One that normalises to nothing is
+  /// dropped here rather than skipped on every candidate slice, which also
+  /// keeps the scan bounds below from being widened by a phrase that will
+  /// never claim anything.
+  late final List<_Target> _targets = [
+    for (final spec in target.phrases)
+      if (_normaliseSpec(spec) case final tokens when tokens.isNotEmpty)
+        _Target(spec: spec, tokens: tokens, windowSlack: config.windowSlack),
+  ];
+
+  List<String> _normaliseSpec(PhraseSpec spec) => List.unmodifiable(
+    spec.normalisedTokens.isNotEmpty
+        ? spec.normalisedTokens
+        : normaliseText(spec.raw),
   );
+
+  /// Slice lengths worth cutting at all: the union of what any one phrase
+  /// would consider. Each phrase still rejects the lengths outside its own
+  /// bounds, so the union only decides how wide the window scan goes.
+  late final int _scanMinSliceLength = _targets
+      .map((t) => t.minSliceLength)
+      .reduce(min);
+  late final int _scanMaxSliceLength = _targets
+      .map((t) => t.maxSliceLength)
+      .reduce(max);
 
   /// Normalises a string using the config contraction, homophone, punctuation, and lowercase rules.
   List<String> normaliseText(String text) => _normaliser(text);
@@ -245,24 +324,6 @@ class PhraseMatcher {
     return previous[n];
   }
 
-  /// How many leading target tokens a candidate must reproduce exactly to
-  /// count as anchored. Anchoring needs at least four target tokens so that
-  /// the head and tail leave a middle for the relaxation to apply to.
-  static const int _minAnchoredTargetLength = 4;
-
-  int get _headAnchorLength => max(2, _normalisedTarget.length ~/ 3);
-
-  bool _isAnchored(List<String> candidate) {
-    final target = _normalisedTarget;
-    if (target.length < _minAnchoredTargetLength) return false;
-    final head = _headAnchorLength;
-    if (candidate.length <= head) return false;
-    for (int i = 0; i < head; i++) {
-      if (candidate[i] != target[i]) return false;
-    }
-    return candidate.last == target.last;
-  }
-
   /// Calculates current adaptive refractory period in milliseconds.
   double get currentRefractoryMs {
     final floor = config.refractoryFloorMs.toDouble();
@@ -327,9 +388,8 @@ class PhraseMatcher {
     if (!segment.isFinal) return [];
 
     final detections = <Detection>[];
-    final normalisedTarget = _normalisedTarget;
-
-    if (normalisedTarget.isEmpty) return [];
+    final targets = _targets;
+    if (targets.isEmpty) return [];
 
     // One rule for every id, [defaultStreamId] included: a stream nobody
     // opened has no place on the session timeline, so nothing said on it can
@@ -377,17 +437,19 @@ class PhraseMatcher {
 
     // Evaluate candidate slices and choose the closest match. Searching by
     // length alone let a target plus one noise word beat an exact target.
-    final targetLen = normalisedTarget.length;
-    final minSliceLen = max(1, (targetLen * 0.7).floor());
-    final maxSliceLen = (targetLen * config.windowSlack).ceil();
-    final maxRetainedWindowLen = maxSliceLen + 3;
+    //
+    // Every phrase in the set is scored against the same slice, and the best
+    // (slice, phrase) pair wins outright. One shared scan is what makes the
+    // acceptance decision single: two phrases cannot each claim the same
+    // tokens, because the winner retires them for all of them.
+    final maxRetainedWindowLen = _scanMaxSliceLength + 3;
 
     while (window.isNotEmpty) {
       _MatchCandidate? best;
 
       for (
-        int sliceLen = min(maxSliceLen, window.length);
-        sliceLen >= minSliceLen;
+        int sliceLen = min(_scanMaxSliceLength, window.length);
+        sliceLen >= _scanMinSliceLength;
         sliceLen--
       ) {
         for (
@@ -395,29 +457,42 @@ class PhraseMatcher {
           startIdx <= window.length - sliceLen;
           startIdx++
         ) {
-          _windowsEvaluated++;
-          final candidateTokens = window.sublist(startIdx, startIdx + sliceLen);
-          final candidateStringList = candidateTokens
-              .map((t) => t.token)
-              .toList();
+          List<String>? candidateStringList;
 
-          final similarity = calculateTokenSimilarity(
-            candidateStringList,
-            normalisedTarget,
-          );
+          for (final target in targets) {
+            // A slice outside this phrase's own bounds is not a near miss,
+            // it is a different length of thing entirely.
+            if (sliceLen < target.minSliceLength ||
+                sliceLen > target.maxSliceLength) {
+              continue;
+            }
 
-          final threshold = _isAnchored(candidateStringList)
-              ? min(config.threshold, config.anchoredThreshold)
-              : config.threshold;
-          if (similarity < threshold) continue;
+            // Built once per slice, and only for a slice some phrase wants.
+            candidateStringList ??= [
+              for (int i = startIdx; i < startIdx + sliceLen; i++)
+                window[i].token,
+            ];
 
-          final candidate = _MatchCandidate(
-            startIndex: startIdx,
-            length: sliceLen,
-            score: similarity,
-          );
-          if (_isBetterCandidate(candidate, best, targetLen)) {
-            best = candidate;
+            _windowsEvaluated++;
+            final similarity = calculateTokenSimilarity(
+              candidateStringList,
+              target.tokens,
+            );
+
+            final threshold = target.isAnchored(candidateStringList)
+                ? min(config.threshold, config.anchoredThreshold)
+                : config.threshold;
+            if (similarity < threshold) continue;
+
+            final candidate = _MatchCandidate(
+              startIndex: startIdx,
+              length: sliceLen,
+              score: similarity,
+              target: target,
+            );
+            if (_isBetterCandidate(candidate, best)) {
+              best = candidate;
+            }
           }
         }
       }
@@ -444,7 +519,7 @@ class PhraseMatcher {
 
       _detectionsCount++;
       _lastMatchEndMs = candidateEndMs;
-      if (best.length == targetLen) {
+      if (best.length == best.target.length) {
         _observeUtterance(utteranceDurationMs);
       }
 
@@ -456,6 +531,7 @@ class PhraseMatcher {
           score: best.score,
           audioOffset: audioOffset,
           matchedText: matchedText,
+          phrase: best.target.spec,
         ),
       );
 
@@ -473,20 +549,33 @@ class PhraseMatcher {
     return detections;
   }
 
-  bool _isBetterCandidate(
-    _MatchCandidate candidate,
-    _MatchCandidate? current,
-    int targetLen,
-  ) {
+  bool _isBetterCandidate(_MatchCandidate candidate, _MatchCandidate? current) {
     if (current == null) return true;
     if (candidate.score != current.score) {
       return candidate.score > current.score;
     }
 
-    final candidateLengthDifference = (candidate.length - targetLen).abs();
-    final currentLengthDifference = (current.length - targetLen).abs();
+    // Each candidate is measured against the length of the phrase it matched,
+    // not against a single session-wide target length.
+    final candidateLengthDifference =
+        (candidate.length - candidate.target.length).abs();
+    final currentLengthDifference = (current.length - current.target.length)
+        .abs();
     if (candidateLengthDifference != currentLengthDifference) {
       return candidateLengthDifference < currentLengthDifference;
+    }
+
+    // Two *different* phrases fitting equally well means one is contained in
+    // the other — "rich in wisdom" inside "I'm rich in wisdom" — and both
+    // score 1.0 on the same breath. The longer claim is the more specific
+    // one, so it wins and takes the whole utterance with it.
+    //
+    // Deliberately gated on the phrases differing: within one phrase this
+    // would reorder candidates the single-phrase corpus is tuned against,
+    // for no gain.
+    if (!identical(candidate.target, current.target) &&
+        candidate.length != current.length) {
+      return candidate.length > current.length;
     }
 
     return candidate.startIndex < current.startIndex;

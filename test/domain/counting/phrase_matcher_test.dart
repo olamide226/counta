@@ -8,7 +8,7 @@ import '../../helpers/transcript_fixtures.dart';
 void main() {
   group('PhraseMatcher', () {
     late PhraseMatcher matcher;
-    setUp(() => matcher = PhraseMatcher(target: testPhrase));
+    setUp(() => matcher = PhraseMatcher.single(testPhrase));
 
     test('normaliseText expands contractions and strips punctuation', () {
       final tokens = matcher.normaliseText("I'm rich in wisdom!");
@@ -154,7 +154,7 @@ void main() {
 
       test('accepts a repetition whose middle is garbled', () {
         // Recorded in normal_426: scores 0.70, below the plain threshold.
-        final m = PhraseMatcher(target: long);
+        final m = PhraseMatcher.single(long);
         final detections = m.ingest(
           saidOnce('the wisdom of god is how to walk in me'),
         );
@@ -162,12 +162,12 @@ void main() {
       });
 
       test('does not relax when the head is missing', () {
-        final m = PhraseMatcher(target: long);
+        final m = PhraseMatcher.single(long);
         expect(m.ingest(saidOnce('gods wisdom is at work in me')), isEmpty);
       });
 
       test('does not relax when the tail is missing', () {
-        final m = PhraseMatcher(target: long);
+        final m = PhraseMatcher.single(long);
         expect(
           m.ingest(saidOnce('the wisdom of god is how to walk in')),
           isEmpty,
@@ -175,8 +175,8 @@ void main() {
       });
 
       test('can be disabled by matching the plain threshold', () {
-        final m = PhraseMatcher(
-          target: long,
+        final m = PhraseMatcher.single(
+          long,
           config: const MatcherConfig(anchoredThreshold: 0.80),
         );
         expect(
@@ -190,7 +190,7 @@ void main() {
           raw: 'I breakthrough',
           normalisedTokens: ['i', 'breakthrough'],
         );
-        final m = PhraseMatcher(target: short);
+        final m = PhraseMatcher.single(short);
         expect(m.ingest(saidOnce('i did breakthrough')), isEmpty);
       });
     });
@@ -245,7 +245,7 @@ void main() {
           'me',
         ],
       );
-      final longPhraseMatcher = PhraseMatcher(target: longPhrase);
+      final longPhraseMatcher = PhraseMatcher.single(longPhrase);
       final segment = finalSegment(
         'the wisdom of god is at work in me the wisdom of god is at work in me',
         duration: 6.0,
@@ -486,6 +486,107 @@ void main() {
       expect(result.detectedCount, 2);
       expect(result.recall, 1.0);
       expect(result.passedGate, true);
+    });
+  });
+
+  group('counting several phrases', () {
+    // Successive utterances have to sit at successive points on the audio
+    // timeline, or the second looks like a re-transcription of the first.
+    TranscriptSegment said(String text, {double start = 1.0}) =>
+        finalSegment(text, start: start, duration: 2.0, confidence: 0.9);
+
+    const wisdom = PhraseSpec(
+      raw: "I'm rich in wisdom",
+      normalisedTokens: ['i', 'am', 'rich', 'in', 'wisdom'],
+    );
+    const favour = PhraseSpec(
+      raw: 'I walk in favour',
+      normalisedTokens: ['i', 'walk', 'in', 'favour'],
+    );
+
+    test('every phrase in the set counts, and says which it was', () {
+      final m = PhraseMatcher(target: PhraseSet([wisdom, favour]));
+
+      final first = m.ingest(said('i am rich in wisdom'));
+      final second = m.ingest(said('i walk in favour', start: 10.0));
+
+      expect(first, hasLength(1));
+      expect(first.single.phrase, wisdom);
+      expect(second, hasLength(1));
+      expect(second.single.phrase, favour);
+    });
+
+    test('one utterance counts once when two phrases both fit it', () {
+      // The hazard that rules out one matcher per phrase: with separate
+      // token windows both of these claim the same breath, and the user
+      // sees two counts for saying one thing.
+      const short = PhraseSpec(
+        raw: 'rich in wisdom',
+        normalisedTokens: ['rich', 'in', 'wisdom'],
+      );
+      final m = PhraseMatcher(target: PhraseSet([wisdom, short]));
+
+      final detections = m.ingest(said('i am rich in wisdom'));
+
+      expect(detections, hasLength(1));
+      expect(
+        detections.single.phrase,
+        wisdom,
+        reason: 'the longer phrase is the more specific claim',
+      );
+    });
+
+    test('the refractory period is shared across phrases', () {
+      final m = PhraseMatcher(
+        target: PhraseSet([wisdom, favour]),
+        config: const MatcherConfig(refractoryFloorMs: 5000),
+      );
+
+      expect(m.ingest(said('i am rich in wisdom')), hasLength(1));
+      // Suppression is about the user's mouth, not about one phrase: they
+      // cannot have said a different phrase a second later either.
+      expect(m.ingest(said('i walk in favour', start: 4.0)), isEmpty);
+    });
+
+    test('a short phrase still matches beside a much longer one', () {
+      // Slice bounds are per phrase. Sharing one range across the set let
+      // the long phrase widen the scan and the short one never fit it.
+      const long = PhraseSpec(
+        raw: 'the wisdom of god is at work in me',
+        normalisedTokens: [
+          'the',
+          'wisdom',
+          'of',
+          'god',
+          'is',
+          'at',
+          'work',
+          'in',
+          'me',
+        ],
+      );
+      final m = PhraseMatcher(target: PhraseSet([long, favour]));
+
+      expect(m.ingest(said('i walk in favour')), hasLength(1));
+    });
+
+    test('a phrase that normalises to nothing is ignored, not fatal', () {
+      const empty = PhraseSpec(raw: '...', normalisedTokens: []);
+      final m = PhraseMatcher(target: PhraseSet([wisdom, empty]));
+
+      expect(m.ingest(said('i am rich in wisdom')), hasLength(1));
+    });
+
+    test('a set of one behaves exactly like a single phrase', () {
+      final set = PhraseMatcher(target: PhraseSet([wisdom]));
+      final single = PhraseMatcher.single(wisdom);
+
+      final fromSet = set.ingest(said('i am rich in wisdom'));
+      final fromSingle = single.ingest(said('i am rich in wisdom'));
+
+      expect(fromSet.length, fromSingle.length);
+      expect(fromSet.single.score, fromSingle.single.score);
+      expect(fromSet.single.matchedText, fromSingle.single.matchedText);
     });
   });
 }

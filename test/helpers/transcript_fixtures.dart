@@ -35,3 +35,12 @@ const testPhrase = PhraseSpec(
   raw: "I'm rich in wisdom",
   normalisedTokens: ['i', 'am', 'rich', 'in', 'wisdom'],
 );
+
+/// [testPhrase] as the single-phrase set most tests want to pass to an engine.
+final testPhraseSet = PhraseSet.single(testPhrase);
+
+/// A second, unrelated phrase, for the multi-phrase cases.
+const otherTestPhrase = PhraseSpec(
+  raw: 'I walk in favour',
+  normalisedTokens: ['i', 'walk', 'in', 'favour'],
+);
