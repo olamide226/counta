@@ -1,8 +1,5 @@
 {
-  "imports": {
-    "@supabase/supabase-js": "npm:@supabase/supabase-js@2.115.0",
-    "@std/assert": "jsr:@std/assert@1.0.19"
-  },
+  "workspace": ["./voice-block"],
   "tasks": {
     "test": "deno test --allow-env --allow-net=127.0.0.1 ."
   },

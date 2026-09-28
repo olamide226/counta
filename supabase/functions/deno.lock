@@ -70,9 +70,13 @@
     }
   },
   "workspace": {
-    "dependencies": [
-      "jsr:@std/assert@1.0.19",
-      "npm:@supabase/supabase-js@2.115.0"
-    ]
+    "members": {
+      "voice-block": {
+        "dependencies": [
+          "jsr:@std/assert@1.0.19",
+          "npm:@supabase/supabase-js@2.115.0"
+        ]
+      }
+    }
   }
 }
