@@ -26,6 +26,31 @@ const MAX_BACKOFF_MS = 2_000;
  */
 const MAX_BALANCE_PAGES = 5;
 
+/**
+ * RevenueCat has no record of this customer.
+ *
+ * Not a failure of the provider. A customer exists there only once something
+ * creates it — the SDK identifying a user, or this function — so every
+ * first-time user starts out unknown. Kept apart from ProviderError because
+ * the right answers are "zero credits" on a read and "create them" on a grant,
+ * neither of which is a 503.
+ */
+class CustomerMissing extends Error {}
+
+/**
+ * Whether a 404 body says the *customer* is what was not found.
+ *
+ * A 404 can also mean the project id is wrong. Reading that as an empty
+ * balance would answer every user with "insufficient credit" and hide a
+ * misconfiguration behind a plausible-looking 402, so only RevenueCat's own
+ * statement that the customer is missing counts.
+ */
+function isMissingCustomer(body: unknown): boolean {
+  const error = body as { type?: unknown; param?: unknown; message?: unknown };
+  return error?.type === "resource_missing" &&
+    (error.param === "customer_id" || /customer/i.test(String(error.message)));
+}
+
 export interface RevenueCatOptions {
   secretKey: string;
   projectId: string;
@@ -74,10 +99,22 @@ export class RevenueCatBalanceProvider implements BalanceProvider {
    * keeps the currency present even at zero, `limit` makes a second page
    * unlikely, and the cursor is followed for the case where it happens anyway.
    */
-  getBalance(userId: string): Promise<number> {
-    return this.readBalance(
-      `${this.customerPath(userId)}/virtual_currencies?include_empty_balances=true&limit=100`,
-    );
+  async getBalance(userId: string): Promise<number> {
+    try {
+      return await this.readBalance(
+        `${
+          this.customerPath(userId)
+        }/virtual_currencies?include_empty_balances=true&limit=100`,
+      );
+    } catch (error) {
+      // Someone RevenueCat has never seen holds no credits. Answering that as
+      // an outage told every first-time user the service was down, when the
+      // true answer — and the one the handler turns into a 402 — is zero.
+      // Reading must not create the customer: a balance check is not a reason
+      // to write to the ledger.
+      if (error instanceof CustomerMissing) return 0;
+      throw error;
+    }
   }
 
   spend(userId: string, blockId: string, credits: number): Promise<number> {
@@ -92,8 +129,49 @@ export class RevenueCatBalanceProvider implements BalanceProvider {
     );
   }
 
-  grant(userId: string, reference: string, credits: number): Promise<number> {
+  /**
+   * Credits a user who may be unknown to RevenueCat — which a trial or a
+   * voucher almost always is, being the first thing a new user does.
+   *
+   * RevenueCat refuses a transaction for a customer it has not seen, so the
+   * customer is created first. Done up front rather than as a retry after a
+   * 404: a retry would resend the same Idempotency-Key that the 404 was
+   * answered under, and whether that key replays the failure is not something
+   * to find out with a user's trial. Grants are once-per-user events, so the
+   * extra call costs nothing that matters.
+   */
+  async grant(
+    userId: string,
+    reference: string,
+    credits: number,
+  ): Promise<number> {
+    await this.ensureCustomer(userId);
     return this.adjust(userId, Math.abs(credits), reference);
+  }
+
+  /** Creates the customer if RevenueCat does not have them. Safe to repeat. */
+  private async ensureCustomer(userId: string): Promise<void> {
+    const path = `/projects/${
+      encodeURIComponent(this.opts.projectId)
+    }/customers`;
+    const response = await providerFetch(
+      "revenuecat",
+      this.fetchFn,
+      `${BASE_URL}${path}`,
+      {
+        method: "POST",
+        headers: {
+          Authorization: `Bearer ${this.opts.secretKey}`,
+          Accept: "application/json",
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({ id: userId }),
+      },
+      // 409 `resource_already_exists` is the answer for a customer who is
+      // already there, which is the outcome wanted.
+      [409],
+    );
+    await response.body?.cancel();
   }
 
   private async adjust(
@@ -101,15 +179,32 @@ export class RevenueCatBalanceProvider implements BalanceProvider {
     delta: number,
     reference: string,
   ): Promise<number> {
-    const list = await this.request<VirtualCurrencyList>(
-      "POST",
-      `${this.customerPath(userId)}/virtual_currencies/transactions?include_empty_balances=true&limit=100`,
-      {
-        body: { adjustments: { [this.opts.currencyCode]: delta }, reference },
-        idempotencyKey: reference,
-        retries: MAX_WRITE_RETRIES,
-      },
-    );
+    let list: VirtualCurrencyList;
+    try {
+      list = await this.request<VirtualCurrencyList>(
+        "POST",
+        `${
+          this.customerPath(userId)
+        }/virtual_currencies/transactions?include_empty_balances=true&limit=100`,
+        {
+          body: { adjustments: { [this.opts.currencyCode]: delta }, reference },
+          idempotencyKey: reference,
+          retries: MAX_WRITE_RETRIES,
+        },
+      );
+    } catch (error) {
+      // A grant creates the customer first, and a debit or refund only ever
+      // follows a balance that customer was found to have. Reaching here means
+      // the ledger disagrees with what was just read, which is a failure to
+      // report, not a zero to assume.
+      if (error instanceof CustomerMissing) {
+        throw new ProviderError(
+          "unavailable",
+          `revenuecat: customer missing for ${reference}`,
+        );
+      }
+      throw error;
+    }
     const balance = this.balanceFrom(list);
     // The currency this call just moved is normally on the first page of the
     // response. If it is not, re-read rather than guess how to page a POST.
@@ -175,7 +270,18 @@ export class RevenueCatBalanceProvider implements BalanceProvider {
               ? undefined
               : JSON.stringify(opts.body),
           },
+          [404],
         );
+        if (response.status === 404) {
+          const body = await response.json().catch(() => undefined);
+          if (isMissingCustomer(body)) throw new CustomerMissing();
+          // Any other 404 — a wrong project id, a path that moved — is ours
+          // to fix, and must not pass for an empty balance.
+          throw new ProviderError(
+            "unavailable",
+            `revenuecat: ${method} ${BASE_URL}${path} -> 404`,
+          );
+        }
         return (await response.json()) as T;
       } catch (error) {
         if (
