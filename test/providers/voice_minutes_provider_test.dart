@@ -251,6 +251,38 @@ void main() {
     );
   });
 
+  group('after a pack is bought', () {
+    test('reads until the purchase shows', () async {
+      final service = FakeBlockService(balance: 3);
+      var reads = 0;
+      final notifier = VoiceMinutesNotifier(
+        service,
+        pause: (_) async {
+          // The store's server credits it between the second and third read.
+          if (++reads == 2) service.balance += 200;
+        },
+      );
+      addTearDown(notifier.dispose);
+
+      final shown = await notifier.awaitPurchasedMinutes(before: 3);
+
+      expect(shown, isTrue);
+      expect(notifier.state.balance, 203);
+      expect(service.balanceReads, 3);
+    });
+
+    test('gives up after a few reads without calling it lost', () async {
+      final service = FakeBlockService(balance: 3);
+      final notifier = VoiceMinutesNotifier(service, pause: (_) async {});
+      addTearDown(notifier.dispose);
+
+      final shown = await notifier.awaitPurchasedMinutes(before: 3);
+
+      expect(shown, isFalse);
+      expect(service.balanceReads, 5);
+    });
+  });
+
   group('ObservedBlockService', () {
     test('tells a renewal from a new session by its session id', () async {
       final firsts = <bool>[];
