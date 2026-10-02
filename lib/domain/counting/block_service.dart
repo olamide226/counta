@@ -62,8 +62,17 @@ class BlockRelease {
 sealed class BlockFailure implements Exception {
   const BlockFailure(this.message);
 
-  /// Human-readable, and safe to show: the UI has no better wording for these
-  /// than the reason itself.
+  /// What to tell the person using the app.
+  ///
+  /// Written for them, not for us: it says what happened and what they can do
+  /// about it, in the app's own words. "Voice minutes", never "credit",
+  /// "balance" or "block" — those are how the code thinks, and a screen that
+  /// said "Block insufficient credit. Balance zero, required five" is what
+  /// this wording replaced. Nothing here may promise an action the app cannot
+  /// yet offer, such as buying minutes.
+  ///
+  /// [toString] is for logs and may be as technical as it likes. Screens show
+  /// this field, never the exception itself.
   final String message;
 
   @override
@@ -73,7 +82,9 @@ sealed class BlockFailure implements Exception {
 /// 401. No Supabase session, or one the function would not accept.
 class BlockUnauthenticated extends BlockFailure {
   const BlockUnauthenticated([
-    super.message = 'This device is not signed in to the voice service.',
+    super.message =
+        "Couldn't sign in to the voice service. Check your internet "
+        'connection and try again.',
   ]);
 }
 
@@ -81,7 +92,15 @@ class BlockUnauthenticated extends BlockFailure {
 /// the paywall can say how far short the user is rather than guessing.
 class BlockInsufficientCredit extends BlockFailure {
   const BlockInsufficientCredit({required this.balance, required this.required})
-    : super('Not enough voice minutes left.');
+    : super(
+        balance <= 0
+            ? 'You have no voice minutes left. You can still count by tapping.'
+            : balance == 1
+            ? 'You have 1 voice minute left, and a session needs $required. '
+                  'You can still count by tapping.'
+            : 'You have $balance voice minutes left, and a session needs '
+                  '$required. You can still count by tapping.',
+      );
 
   final int balance;
   final int required;
@@ -95,7 +114,13 @@ class BlockInsufficientCredit extends BlockFailure {
 /// by waiting: [expiresAt] says how long, when the server told us.
 class BlockInFlight extends BlockFailure {
   const BlockInFlight({this.expiresAt})
-    : super('Another voice session is still running on this account.');
+    : super(
+        // Nearly always this device's own last session: one that ended
+        // without saying so (a crash, a lost connection) holds its time until
+        // it runs out, a few minutes at most.
+        'Your last voice session is still closing. Try again in a few '
+        'minutes.',
+      );
 
   final DateTime? expiresAt;
 
@@ -106,7 +131,10 @@ class BlockInFlight extends BlockFailure {
 /// 429. Too many grants in the server's window.
 class BlockRateLimited extends BlockFailure {
   const BlockRateLimited({this.retryAfter})
-    : super('Too many voice sessions started just now. Try again shortly.');
+    : super(
+        "You've started voice counting several times in a row. Wait a "
+        'minute, then try again.',
+      );
 
   final Duration? retryAfter;
 
@@ -117,7 +145,9 @@ class BlockRateLimited extends BlockFailure {
 /// 503. RevenueCat or Deepgram would not answer. No credit was spent.
 class BlockProviderUnavailable extends BlockFailure {
   const BlockProviderUnavailable([
-    super.message = 'The voice service is temporarily unavailable.',
+    super.message =
+        'Voice counting is temporarily unavailable. Try again in a moment. '
+        'You can still count by tapping.',
   ]);
 }
 
@@ -128,14 +158,20 @@ class BlockProviderUnavailable extends BlockFailure {
 /// there is nothing here to retry, so a session holding this block has to
 /// end rather than keep asking.
 class BlockNotFound extends BlockFailure {
-  const BlockNotFound([super.message = 'This voice block is no longer live.']);
+  const BlockNotFound([
+    super.message =
+        'This voice session has ended. Start a new one to carry on.',
+  ]);
 }
 
 /// A request the server refused as malformed or unknown — 400, or any other
 /// status with no defined meaning. A client bug, not a user problem.
 class BlockRequestRejected extends BlockFailure {
   const BlockRequestRejected({required this.status, required this.reason})
-    : super('The voice service refused the request.');
+    : super(
+        'Something went wrong starting voice counting. Try again, and update '
+        'the app if it keeps happening.',
+      );
 
   final int status;
   final String reason;
@@ -148,7 +184,10 @@ class BlockRequestRejected extends BlockFailure {
 /// that was not the JSON the contract promises.
 class BlockUnreachable extends BlockFailure {
   const BlockUnreachable(this.cause)
-    : super('Could not reach the voice service.');
+    : super(
+        "Couldn't reach the voice service. Check your internet connection "
+        'and try again.',
+      );
 
   final Object cause;
 
