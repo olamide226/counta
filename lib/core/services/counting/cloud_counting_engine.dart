@@ -1021,7 +1021,7 @@ class CloudCountingEngine implements CountingEngine {
     required int detections,
   }) async {
     try {
-      final release = await service
+      await service
           .release(
             block.id,
             streamedSecs: streamedSecs,
@@ -1033,11 +1033,10 @@ class CloudCountingEngine implements CountingEngine {
                 detections == 0 && streamedSecs <= refundWindow.inSeconds,
           )
           .timeout(releaseTimeout);
-      if (release.refunded) {
-        _report(
-          'That block was too short to charge for; your minutes are back.',
-        );
-      }
+      // Nothing is reported from here. Every early stop now returns the
+      // unused minutes, so "that block was too short to charge for" was wrong
+      // for most refunds and noise on all of them. What a stop cost is shown
+      // from the release itself, by whoever observes the block service.
     } catch (_) {
       // Best effort by design (requirement 15.3): a block nobody reported on
       // is left unreconciled server-side. Ending a session must not wait on a

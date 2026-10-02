@@ -23,6 +23,7 @@ CountSession buildSessionRecord({
   required DateTime endedAt,
   String? notes,
   bool completed = true,
+  int voiceMinutesUsed = 0,
 }) {
   final isVoiceSession = phrases != null;
 
@@ -46,5 +47,8 @@ CountSession buildSessionRecord({
     voiceCount: isVoiceSession ? voiceCount : null,
     manualCount: isVoiceSession ? manualCount : null,
     completed: completed,
+    // Null rather than zero for a session that never spent any, so the
+    // history screen has nothing to show for a tap-only session.
+    creditsConsumed: voiceMinutesUsed > 0 ? voiceMinutesUsed : null,
   );
 }
