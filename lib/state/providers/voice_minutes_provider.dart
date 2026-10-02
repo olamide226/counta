@@ -22,6 +22,8 @@ class VoiceUsage {
   final int? left;
 }
 
+Future<void> _delay(Duration duration) => Future.delayed(duration);
+
 /// Everything the screens know about the user's voice minutes.
 ///
 /// One minute of voice counting is one credit on the server; the screens only
@@ -133,11 +135,14 @@ class VoiceMinutesNotifier extends StateNotifier<VoiceMinutes> {
     this._service, {
     DateTime Function() now = DateTime.now,
     this.tick = const Duration(seconds: 15),
+    Future<void> Function(Duration) pause = _delay,
   }) : _now = now,
+       _pause = pause,
        super(VoiceMinutes(available: _service != null));
 
   final BlockService? _service;
   final DateTime Function() _now;
+  final Future<void> Function(Duration) _pause;
 
   /// How often the countdown is refreshed while a block is running.
   final Duration tick;
@@ -252,6 +257,29 @@ class VoiceMinutesNotifier extends StateNotifier<VoiceMinutes> {
       unawaited(refresh());
     }
     return outcome;
+  }
+
+  /// After a pack is bought, reads the balance until it shows the purchase.
+  ///
+  /// The store's server credits the minutes, not the app, and the app only
+  /// learns of it by asking. Usually the first read has it. Returns false if
+  /// it still had not shown after [attempts], which is a delay, not a lost
+  /// purchase: the minutes land on the account either way.
+  Future<bool> awaitPurchasedMinutes({
+    required int? before,
+    int attempts = 5,
+    Duration gap = const Duration(milliseconds: 1500),
+  }) async {
+    for (var attempt = 0; attempt < attempts; attempt++) {
+      if (attempt > 0) await _pause(gap);
+      if (!mounted) return false;
+      await refresh();
+      final balance = state.balance;
+      if (balance != null && (before == null || balance > before)) {
+        return true;
+      }
+    }
+    return false;
   }
 
   void _stopTicker() {
