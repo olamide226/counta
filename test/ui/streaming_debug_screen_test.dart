@@ -50,9 +50,14 @@ void main() {
       expect(find.text('Fixture name'), findsOneWidget);
 
       // The empty-state row sits below the fold at this height, so the page
-      // must scroll rather than clip it.
-      await tester.drag(find.byType(CustomScrollView), const Offset(0, -300));
-      await tester.pump();
+      // must scroll rather than clip it. Scrolled until it shows rather than
+      // by a fixed distance: the header's height is not this test's subject,
+      // and a fixed drag broke the first time the header gained a line.
+      await tester.scrollUntilVisible(
+        find.text('No final transcripts yet'),
+        100,
+        scrollable: find.byType(Scrollable).first,
+      );
 
       expect(find.text('No final transcripts yet'), findsOneWidget);
       expect(tester.takeException(), isNull);

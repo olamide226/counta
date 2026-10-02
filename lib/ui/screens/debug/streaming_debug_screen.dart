@@ -52,6 +52,14 @@ class _StreamingDebugScreenState extends State<StreamingDebugScreen> {
   final List<TranscriptSegment> _interimSegments = [];
   String? _lastExportPath;
 
+  /// The phrases the current recording was actually streamed with.
+  ///
+  /// Exported in place of whatever the text field says by then: the field can
+  /// be edited after streaming stops, and a fixture that names different
+  /// phrases from the ones Deepgram was biased towards replays against a
+  /// transcript it did not produce.
+  PhraseSet? _streamedPhrases;
+
   /// The in-flight interim result, shown in place rather than appended. Every
   /// interim used to become another row, which buried new text below the fold
   /// and made a fast pipeline look slow.
@@ -113,6 +121,9 @@ class _StreamingDebugScreenState extends State<StreamingDebugScreen> {
     }
   }
 
+  /// The phrase field split into the rows the validator expects.
+  List<String> get _phraseLines => _phraseController.text.split('\n');
+
   @override
   void dispose() {
     // Not _stopStreaming(): that calls setState, which is illegal here.
@@ -167,21 +178,31 @@ class _StreamingDebugScreenState extends State<StreamingDebugScreen> {
     // Use the production validator, not a local copy of the tokeniser: this
     // screen exists to measure real matcher behaviour, so it must normalise
     // the phrase exactly the way a real session does.
-    final validation = PhraseValidator().validate(_phraseController.text);
-    final phrase = validation.phraseSpec;
-    if (phrase == null) {
+    //
+    // One phrase per line. The whole set goes to the socket, because every
+    // phrase is sent as its own keyterm and that changes what gets
+    // transcribed: a multi-phrase fixture recorded with only its first phrase
+    // biased would not be a recording of a real multi-phrase session.
+    final validation = PhraseValidator().validateSet(_phraseLines);
+    final phrases = validation.phraseSet;
+    if (phrases == null) {
+      final row = validation.errors.indexWhere((error) => error != null);
       ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text(validation.errorMessage ?? 'Invalid phrase')),
+        SnackBar(
+          content: Text(
+            row < 0
+                ? 'Invalid phrases'
+                : 'Phrase ${row + 1}: ${validation.errors[row]}',
+          ),
+        ),
       );
       await _stopStreaming();
       return;
     }
+    _streamedPhrases = phrases;
 
     try {
-      await _speechSocket!.connect(
-        apiKeyOrToken: apiKey,
-        phrases: PhraseSet.single(phrase),
-      );
+      await _speechSocket!.connect(apiKeyOrToken: apiKey, phrases: phrases);
 
       final audioStream = _audioSource!.start();
       _audioSubscription = audioStream.listen(
@@ -259,8 +280,44 @@ class _StreamingDebugScreenState extends State<StreamingDebugScreen> {
       return;
     }
 
-    final trueCount = int.tryParse(_trueCountController.text.trim());
-    if (trueCount == null || trueCount <= 0) {
+    // The set this recording was streamed with, not the field as it reads
+    // now. Falls back to the field only for a recording made before the set
+    // was remembered, which cannot happen within one screen session.
+    final phrases =
+        _streamedPhrases ??
+        PhraseValidator().validateSet(_phraseLines).phraseSet;
+    if (phrases == null) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text('Fix the target phrases before exporting'),
+        ),
+      );
+      return;
+    }
+
+    // "100" is a session total. "40, 38" is one count per phrase, in the
+    // order the phrases are listed, and is what lets the replay say which
+    // phrase is being missed rather than only that something is.
+    final counts = _trueCountController.text
+        .split(',')
+        .map((part) => int.tryParse(part.trim()))
+        .toList();
+    final countsValid =
+        counts.isNotEmpty && counts.every((c) => c != null && c >= 0);
+    final perPhrase = countsValid && counts.length == phrases.length;
+    if (!countsValid || (counts.length != 1 && !perPhrase)) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text(
+            'True count: one total, or ${phrases.length} comma-separated '
+            'counts in phrase order',
+          ),
+        ),
+      );
+      return;
+    }
+    final trueCount = counts.fold<int>(0, (sum, c) => sum + c!);
+    if (trueCount <= 0) {
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(
           content: Text('Enter the true count before exporting a fixture'),
@@ -282,10 +339,16 @@ class _StreamingDebugScreenState extends State<StreamingDebugScreen> {
       final jsonContent = const JsonEncoder.withIndent('  ').convert({
         'exported_at': DateTime.now().toIso8601String(),
         'fixture_name': name,
-        'phrase_raw': _phraseController.text,
+        // Still written for a single-phrase reader: the first phrase.
+        'phrase_raw': phrases.primary.raw,
+        'phrases_raw': phrases.rawPhrases,
         // Read by FixtureReplayHarness to compute recall. Recorded here so the
         // file is committable as-is, rather than hand-labelled afterwards.
         'true_count': trueCount,
+        // Aligned with `phrases_raw`. Only when a count was given per phrase;
+        // a lone total for a set says nothing about how it split.
+        if (perPhrase && phrases.isMultiple)
+          'true_counts': [for (final count in counts) count!],
         'segment_count': _segments.length,
         'interim_segment_count': _interimSegments.length,
         'latency': {
@@ -353,8 +416,12 @@ class _StreamingDebugScreenState extends State<StreamingDebugScreen> {
                   const SizedBox(height: 12),
                   TextField(
                     controller: _phraseController,
+                    minLines: 1,
+                    maxLines: PhraseValidator.maxPhrases,
+                    keyboardType: TextInputType.multiline,
                     decoration: const InputDecoration(
-                      labelText: 'Target Phrase',
+                      labelText: 'Target phrases',
+                      helperText: 'one per line, up to 5',
                       border: OutlineInputBorder(),
                     ),
                   ),
@@ -377,10 +444,13 @@ class _StreamingDebugScreenState extends State<StreamingDebugScreen> {
                       Expanded(
                         child: TextField(
                           controller: _trueCountController,
-                          keyboardType: TextInputType.number,
+                          // Not a number pad: a set takes "40, 38", and
+                          // the iOS number pad has no comma.
+                          keyboardType: TextInputType.text,
                           decoration: const InputDecoration(
                             labelText: 'True count',
-                            helperText: 'reps you chanted',
+                            helperText: 'total, or 40, 38 per phrase',
+                            helperMaxLines: 2,
                             border: OutlineInputBorder(),
                             isDense: true,
                           ),

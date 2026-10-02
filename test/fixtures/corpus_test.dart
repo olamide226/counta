@@ -58,8 +58,29 @@ void main() {
         '${(r.matcherRecall * 100).toStringAsFixed(1).padLeft(5)}%  '
         '${(r.transcriptTokenCoverage * 100).toStringAsFixed(1).padLeft(5)}%  '
         '${r.falsePositivesPer10Min.toStringAsFixed(1).padLeft(6)}  '
-        '${r.passedGate ? "PASS" : "FAIL"}',
+        // Too few repetitions to hold to a percentage: shown, not judged.
+        '${!r.isGateable ? "info" : (r.passedGate ? "PASS" : "FAIL")}',
       );
+      // A set gets one row per phrase beneath its total, which is where a
+      // phrase that is not being heard shows up: detections far below what
+      // the transcript holds for it.
+      if (r.isMultiPhrase) {
+        for (final phrase in r.phrases) {
+          final label = phrase.phrase.length > 20
+              ? '${phrase.phrase.substring(0, 19)}…'
+              : phrase.phrase;
+          // ignore: avoid_print
+          print(
+            '  ${label.padRight(20)}  '
+            '${(phrase.trueCount?.toString() ?? '-').padLeft(4)}  '
+            '${phrase.transcribedRepetitions.toString().padLeft(4)}  '
+            '${phrase.detectedCount.toString().padLeft(3)}  '
+            '${''.padLeft(7)}  '
+            '${(phrase.matcherRecall * 100).toStringAsFixed(1).padLeft(5)}%'
+            '${phrase.anchorShared ? '  ~ shares every word with another phrase' : ''}',
+          );
+        }
+      }
     }
     // ignore: avoid_print
     print('');
@@ -71,10 +92,17 @@ void main() {
     // (`m.rec`), not against `true_count`. The user pauses mid-session, so the
     // recording contains long silences that no matcher change can recover;
     // `recall` and `txcov` are printed so a bad recording is still visible.
-    final normal = results.where((r) => r.fixtureName.startsWith('normal'));
+    // Only fixtures with enough repetitions for a percentage to measure the
+    // matcher rather than one bad patch of transcription; see
+    // [FixtureReplayHarness.minGatedRepetitions].
+    final normal = results.where(
+      (r) => r.fixtureName.startsWith('normal') && r.isGateable,
+    );
     if (normal.isEmpty) {
       markTestSkipped(
-        'No `normal_*` fixture recorded yet — gate not evaluated',
+        'No `normal_*` fixture with at least '
+        '${FixtureReplayHarness.minGatedRepetitions} transcribed repetitions '
+        'yet — gate not evaluated',
       );
       return;
     }
@@ -100,7 +128,8 @@ void main() {
 /// Hand-written segments cannot show this — the interference only appears
 /// over hours of real, garbled transcript. So the corpus is replayed twice:
 /// once with the fixture's own phrase, and once with four unrelated phrases
-/// listening alongside it. The count must not move.
+/// listening alongside it. The fixture's own count must not move, and the
+/// unrelated phrases must count nothing.
 void _noCrossTalkGate(Directory dir) {
   test('unrelated phrases do not disturb the phrase being counted', () async {
     if (!dir.existsSync()) {
@@ -144,14 +173,23 @@ void _noCrossTalkGate(Directory dir) {
         extraPhrases: distractors,
       );
 
+      // Two separate claims, because a total alone cannot tell them apart: a
+      // distractor that *stole* one of the real phrase's repetitions leaves
+      // the total exactly where it was.
       expect(
-        crowded.detectedCount,
-        alone.detectedCount,
+        crowded.distractorDetections,
+        0,
         reason:
-            '$name: counting ${distractors.length + 1} phrases changed the '
-            'count from ${alone.detectedCount} to ${crowded.detectedCount}. '
-            'One utterance must satisfy at most one phrase, and a phrase the '
-            'audio never contains must claim nothing.',
+            '$name: phrases the speaker never said claimed '
+            '${crowded.distractorDetections} detection(s). A phrase the audio '
+            'does not contain must claim nothing.',
+      );
+      expect(
+        [for (final phrase in crowded.phrases) phrase.detectedCount],
+        [for (final phrase in alone.phrases) phrase.detectedCount],
+        reason:
+            '$name: counting ${distractors.length} unrelated phrases '
+            "alongside changed what the fixture's own phrase counted.",
       );
     }
   });
