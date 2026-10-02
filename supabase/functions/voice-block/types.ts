@@ -88,6 +88,8 @@ export interface VoiceBlockRow {
   reconciled: boolean;
   streamed_secs: number | null;
   detections: number | null;
+  /** Server time of the first release attempt; see BlockStore.markReleased. */
+  released_at?: string | null;
 }
 
 /** The block-grant budget's view of a user's window (BlockStore.grantsSince). */
@@ -129,6 +131,14 @@ export interface BlockStore {
     row: Omit<VoiceBlockRow, "reconciled" | "streamed_secs" | "detections">,
   ): Promise<VoiceBlockRow>;
   findById(blockId: string, userId: string): Promise<VoiceBlockRow | null>;
+  /**
+   * Stamps the moment a release was first asked for, and resolves to it.
+   *
+   * Idempotent: only the first call writes, and every call resolves to that
+   * first stamp. The refund for an early stop is worked out from it, so a
+   * retried release computes the same amount as the attempt that failed.
+   */
+  markReleased(blockId: string, at: Date): Promise<Date>;
   /**
    * Marks a block reconciled with its usage report. Resolves true only when
    * this call flipped `reconciled` from false to true, so concurrent releases
@@ -189,6 +199,11 @@ export interface Deps {
    * comment already names.
    */
   tokenLimiter: MemoryRateLimiter;
+  /**
+   * Budget for /balance. A read moves no money, but each one is a round trip
+   * to the ledger, and the ledger's own rate limit is shared by every user.
+   */
+  balanceLimiter: MemoryRateLimiter;
   trials: TrialStore;
   vouchers: VoucherStore;
   /**

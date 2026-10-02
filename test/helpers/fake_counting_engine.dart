@@ -12,9 +12,13 @@ import 'package:counta/domain/counting/counting_engine.dart';
 /// Statuses are added synchronously inside [start], exactly as the real engines
 /// do, so the microtask ordering callers depend on is the ordering under test.
 class FakeCountingEngine implements CountingEngine {
-  FakeCountingEngine({this.startStatus = EngineStatus.live});
+  FakeCountingEngine({this.startStatus = EngineStatus.live, this.startError});
 
   final EngineStatus startStatus;
+
+  /// Thrown from [start] after [startStatus] is reported, the way the cloud
+  /// engine both reports a refusal as a status and throws it for the caller.
+  final Object? startError;
 
   final _counts = StreamController<CountEvent>.broadcast();
   final _status = StreamController<EngineStatus>.broadcast();
@@ -44,6 +48,8 @@ class FakeCountingEngine implements CountingEngine {
       emitDiagnostic('Microphone access is needed for voice counting.');
     }
     emitStatus(startStatus);
+    final error = startError;
+    if (error != null) throw error;
   }
 
   @override

@@ -150,6 +150,49 @@ void main() {
       expect(token, fresh.accessToken);
     });
 
+    test('a sign-in that failed at launch is tried again', () async {
+      // Regression, found on a device: the launch sign-in was dropped when
+      // iOS suspended the app, and every later attempt to start voice
+      // re-raised that same stored error instead of signing in.
+      final fresh = _session(DateTime.now().add(const Duration(hours: 1)));
+      final failedAtLaunch = Future<Session?>.error(
+        AuthRetryableFetchException(
+          message: 'Connection closed before full header was received',
+        ),
+      );
+      // The provider's own listener has already seen this error.
+      failedAtLaunch.ignore();
+
+      final token = await resolveAccessToken(
+        startup: failedAtLaunch,
+        currentSession: () => null,
+        refresh: () async => fail('there is no session to refresh'),
+        signInAnonymously: () async => fresh,
+      );
+
+      expect(token, fresh.accessToken);
+    });
+
+    test(
+      'if it fails again, the error is the new one, not the stale one',
+      () async {
+        final failedAtLaunch = Future<Session?>.error(StateError('at launch'));
+        failedAtLaunch.ignore();
+
+        await expectLater(
+          resolveAccessToken(
+            startup: failedAtLaunch,
+            currentSession: () => null,
+            refresh: () async => fail('there is no session to refresh'),
+            signInAnonymously: () async => throw StateError('just now'),
+          ),
+          throwsA(
+            isA<StateError>().having((e) => e.message, 'message', 'just now'),
+          ),
+        );
+      },
+    );
+
     test('a build with no backend session has no credential', () async {
       final token = await resolveAccessToken(
         startup: Future<Session?>.value(),

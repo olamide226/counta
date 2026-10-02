@@ -12,19 +12,23 @@ import '../../state/providers/app_lifecycle_provider.dart';
 import '../../state/providers/counter_provider.dart';
 import '../../state/providers/services_provider.dart';
 import '../../core/services/microphone_settings.dart';
+import '../../domain/counting/block_service.dart';
 import '../../domain/counting/counting_engine.dart';
 import '../../domain/models/count_session.dart';
 import '../../state/providers/session_recovery.dart';
 import '../../state/providers/settings_provider.dart';
+import '../../state/providers/voice_minutes_provider.dart';
 import '../sheets/alert_config_sheet.dart';
 import '../sheets/recover_session_sheet.dart';
 import '../sheets/save_session_sheet.dart';
 import '../sheets/sound_mode_sheet.dart';
+import '../sheets/voice_minutes_sheet.dart';
 import '../widgets/count_display.dart';
 import '../widgets/microphone_denied_dialog.dart';
 import '../widgets/quick_controls_bar.dart';
 import '../widgets/resizable_tap_layout.dart';
 import '../widgets/tap_zone.dart';
+import '../widgets/voice_minutes_widgets.dart';
 import '../widgets/voice_session_banner.dart';
 import 'phrase_setup_screen.dart';
 import 'sessions_screen.dart';
@@ -154,13 +158,57 @@ class _CounterScreenState extends ConsumerState<CounterScreen>
 
     if (!mounted) return;
 
+    // A stop that reported what it cost says so in the banner's place, and
+    // that line already tells the user voice counting has stopped.
+    if (ref.read(voiceMinutesProvider).lastUsage != null) return;
+
+    _say('Voice capture paused');
+  }
+
+  void _say(String message) {
     ScaffoldMessenger.of(context).showSnackBar(
-      const SnackBar(
-        content: Text('Voice capture paused'),
+      SnackBar(
+        content: Text(message),
         behavior: SnackBarBehavior.floating,
-        duration: Duration(seconds: 2),
+        duration: const Duration(seconds: 3),
       ),
     );
+  }
+
+  void _dismissOutOfMinutes(SessionController sessionController) {
+    sessionController.dismissOutOfMinutes();
+    // Its receipt would otherwise appear in the same place a moment later,
+    // for a session the user has just waved away.
+    ref.read(voiceMinutesProvider.notifier).clearLastUsage();
+  }
+
+  /// Opens the minutes sheet from a session that ran out, and picks the
+  /// session back up if the user asks for that once they have minutes.
+  Future<void> _getMinutesAndResume(SessionController sessionController) async {
+    final resume = await showVoiceMinutesSheet(
+      context,
+      resumeLabel: 'Resume voice counting',
+      successNote: 'Your count is where you left it.',
+      dismissLabel: 'Keep counting by tapping',
+    );
+    if (resume != true || !mounted) return;
+
+    final phrases = sessionController.activePhrases;
+    if (phrases == null) {
+      _openPhraseSetup(context, sessionController);
+      return;
+    }
+
+    try {
+      final outcome = await sessionController.startVoiceSession(phrases);
+      if (outcome == EngineStatus.permissionDenied) {
+        await _handleMicrophoneDenied();
+      }
+    } on BlockFailure catch (failure) {
+      if (mounted) _say(failure.message);
+    } catch (_) {
+      if (mounted) _say("Couldn't start voice counting. Please try again.");
+    }
   }
 
   @override
@@ -168,6 +216,7 @@ class _CounterScreenState extends ConsumerState<CounterScreen>
     final counter = ref.watch(counterProvider);
     final settings = ref.watch(settingsProvider);
     final sessionController = ref.watch(sessionControllerProvider);
+    final minutes = ref.watch(voiceMinutesProvider);
 
     final isVoiceActive = sessionController.isVoiceActive;
     final scheme = Theme.of(context).colorScheme;
@@ -246,7 +295,26 @@ class _CounterScreenState extends ConsumerState<CounterScreen>
                 phraseCounts: sessionController.voiceCountsByPhrase,
                 lastMatchedPhrase: sessionController.lastVoicePhrase,
                 diagnostic: sessionController.lastDiagnostic,
+                minutesLeft: minutes.available ? minutes.left : null,
+                minutesLow: minutes.isLow,
                 onStop: () => _stopVoiceSession(sessionController),
+              )
+            else if (sessionController.outOfMinutes)
+              VoicePausedBanner(
+                voiceCount: sessionController.voiceCount,
+                manualCount: sessionController.manualCount,
+                onGetMinutes: () => _getMinutesAndResume(sessionController),
+                onDismiss: () => _dismissOutOfMinutes(sessionController),
+              )
+            else if (minutes.lastUsage case final usage?)
+              VoiceUsageStrip(
+                // Keyed by the figures so a second stop restarts its timer
+                // rather than inheriting what was left of the first one's.
+                key: ValueKey((usage.used, usage.returned, usage.left)),
+                usage: usage,
+                onDismiss: ref
+                    .read(voiceMinutesProvider.notifier)
+                    .clearLastUsage,
               ),
             Expanded(
               child: ResizableTapLayout(

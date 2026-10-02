@@ -87,7 +87,20 @@ Future<String?> resolveAccessToken({
   required Future<Session?> Function() refresh,
   required Future<Session?> Function() signInAnonymously,
 }) async {
-  if (await startup == null) return null;
+  try {
+    // Null means this build has no backend at all, which is the one thing
+    // the startup result decides for good.
+    if (await startup == null) return null;
+  } catch (error) {
+    // The sign-in made at launch failed: offline at the time, or a request
+    // iOS dropped when it suspended the app. That says nothing about now.
+    //
+    // `startup` is a future resolved once, so awaiting it re-raised the same
+    // stored error on every later call and the retry below was never
+    // reached: one dropped connection at launch broke voice until the app
+    // was restarted, and showed the user a stale error each time they tried.
+    debugPrint('Supabase startup sign-in had failed ($error); trying again.');
+  }
 
   final session = await resolveSupabaseSession(
     existing: currentSession(),

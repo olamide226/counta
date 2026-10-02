@@ -1,8 +1,16 @@
-import 'package:flutter/material.dart';
+import 'dart:async';
 
+import 'package:flutter/material.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
+
+import '../../core/config/build_config.dart';
+import '../../domain/counting/block_service.dart';
 import '../../domain/counting/counting_engine.dart';
 import '../../domain/models/phrase_history_entry.dart';
 import '../../domain/validation/phrase_validator.dart';
+import '../../state/providers/voice_minutes_provider.dart';
+import '../sheets/voice_minutes_sheet.dart';
+import '../widgets/voice_minutes_widgets.dart';
 
 /// Where the user says what this voice session should listen for.
 ///
@@ -11,7 +19,7 @@ import '../../domain/validation/phrase_validator.dart';
 /// as one field and a button, exactly as it did when only one phrase was
 /// possible. Extra rows are opt-in, and a row left blank is ignored rather
 /// than treated as a mistake.
-class PhraseSetupScreen extends StatefulWidget {
+class PhraseSetupScreen extends ConsumerStatefulWidget {
   final List<PhraseHistoryEntry> recentPhrases;
 
   /// Starts the session. Awaited: the sheet stays open, showing why, when
@@ -29,10 +37,10 @@ class PhraseSetupScreen extends StatefulWidget {
   });
 
   @override
-  State<PhraseSetupScreen> createState() => _PhraseSetupScreenState();
+  ConsumerState<PhraseSetupScreen> createState() => _PhraseSetupScreenState();
 }
 
-class _PhraseSetupScreenState extends State<PhraseSetupScreen> {
+class _PhraseSetupScreenState extends ConsumerState<PhraseSetupScreen> {
   /// Shown in the first row when there is nothing to resume, as an example of
   /// the kind of thing that counts well.
   static const String _exemplarPhrase = "I'm rich in wisdom";
@@ -42,6 +50,11 @@ class _PhraseSetupScreenState extends State<PhraseSetupScreen> {
 
   PhraseSetValidationResult? _validationResult;
   String? _startError;
+
+  /// Whether [_startError] is the server saying there are too few minutes.
+  /// The minutes notice says that better, with a way forward, so the error
+  /// box stands down when both would show.
+  bool _startErrorIsMinutes = false;
   bool _starting = false;
 
   bool get _isResuming => widget.initialPhrases?.isNotEmpty ?? false;
@@ -58,6 +71,24 @@ class _PhraseSetupScreenState extends State<PhraseSetupScreen> {
       _rows.add(_createRow(phrase));
     }
     _validateCurrentInput();
+    // The balance shown here decides whether Start is offered at all, and
+    // minutes can be added from outside the app.
+    unawaited(ref.read(voiceMinutesProvider.notifier).refresh());
+  }
+
+  /// Opens the minutes sheet. From the no-minutes state it offers to start
+  /// the session straight away once there are minutes to start it with.
+  Future<void> _openMinutes({bool offerStart = false}) async {
+    final start = await showVoiceMinutesSheet(
+      context,
+      resumeLabel: !offerStart
+          ? null
+          : _isResuming
+          ? 'Resume voice counting'
+          : 'Start voice counting',
+    );
+    if (start != true || !mounted) return;
+    await _handleSubmit();
   }
 
   _PhraseRow _createRow(String text) {
@@ -164,6 +195,7 @@ class _PhraseSetupScreenState extends State<PhraseSetupScreen> {
     setState(() {
       _starting = true;
       _startError = null;
+      _startErrorIsMinutes = false;
     });
 
     try {
@@ -177,11 +209,30 @@ class _PhraseSetupScreenState extends State<PhraseSetupScreen> {
         });
       }
       return;
+    } on BlockFailure catch (failure) {
+      // The voice service said no, and each refusal carries a sentence
+      // written for the person reading it. The exception itself must never be
+      // interpolated here: several of them print as debugging labels, which
+      // is how "Block insufficient credit. Balance zero, required five"
+      // reached a user's screen.
+      if (mounted) {
+        setState(() {
+          _starting = false;
+          _startError = failure.message;
+          _startErrorIsMinutes = failure is BlockInsufficientCredit;
+        });
+      }
+      return;
     } catch (error) {
       if (mounted) {
         setState(() {
           _starting = false;
-          _startError = 'Could not start voice counting: $error';
+          // Unknown failures get a plain sentence. The raw error is only
+          // useful to someone who can act on it, so it is shown in dev builds
+          // alone.
+          _startError = BuildConfig.showDebugTools
+              ? "Couldn't start voice counting. Please try again.\n\n$error"
+              : "Couldn't start voice counting. Please try again.";
         });
       }
       return;
@@ -200,6 +251,14 @@ class _PhraseSetupScreenState extends State<PhraseSetupScreen> {
     final warnings = result?.warnings ?? const <String>[];
     final recents = _offerableRecents;
     final isMultiple = _rows.length > 1;
+    final minutes = ref.watch(voiceMinutesProvider);
+    final balance = minutes.balance;
+    // Known to be short, so say so now rather than after a refused start.
+    final outOfMinutes =
+        minutes.available && balance != null && !minutes.canStart;
+    final startError = outOfMinutes && _startErrorIsMinutes
+        ? null
+        : _startError;
 
     return Scaffold(
       appBar: AppBar(title: const Text('Phrase Setup'), centerTitle: true),
@@ -343,24 +402,66 @@ class _PhraseSetupScreenState extends State<PhraseSetupScreen> {
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.stretch,
                 children: [
-                  if (_startError != null) ...[
-                    _NoticeBox(message: _startError!, isError: true),
+                  if (startError != null) ...[
+                    _NoticeBox(message: startError, isError: true),
                     const SizedBox(height: 12),
                   ],
-                  ElevatedButton.icon(
-                    onPressed: isValid && !_starting ? _handleSubmit : null,
-                    icon: const Icon(Icons.mic),
-                    label: Text(
-                      _isResuming
-                          ? 'Resume Voice Session'
-                          : 'Start Voice Session',
+                  if (outOfMinutes) ...[
+                    NoVoiceMinutesNotice(
+                      balance: balance,
+                      required: minutes.required,
                     ),
-                    style: ElevatedButton.styleFrom(
-                      padding: const EdgeInsets.symmetric(vertical: 16),
-                      backgroundColor: Colors.deepPurple,
-                      foregroundColor: Colors.white,
+                    const SizedBox(height: 12),
+                    ElevatedButton.icon(
+                      onPressed: () => _openMinutes(offerStart: true),
+                      icon: const Icon(Icons.add_rounded),
+                      label: const Text('Get minutes'),
+                      style: ElevatedButton.styleFrom(
+                        padding: const EdgeInsets.symmetric(vertical: 16),
+                        backgroundColor: Colors.deepPurple,
+                        foregroundColor: Colors.white,
+                      ),
                     ),
-                  ),
+                    const SizedBox(height: 4),
+                    TextButton(
+                      onPressed: () => Navigator.of(context).pop(),
+                      child: const Text('Count by tapping instead'),
+                    ),
+                  ] else ...[
+                    if (minutes.available && balance != null) ...[
+                      VoiceMinutesPanel(
+                        minutesLeft: minutes.left ?? balance,
+                        onGetMore: _openMinutes,
+                      ),
+                      const SizedBox(height: 12),
+                    ],
+                    ElevatedButton.icon(
+                      onPressed: isValid && !_starting ? _handleSubmit : null,
+                      // Starting takes a second or two — the microphone, a
+                      // block, the connection — and the sheet stays open for
+                      // it so a failure is explained here. A button that only
+                      // went grey looked like the tap had done nothing.
+                      icon: _starting
+                          ? const SizedBox(
+                              width: 18,
+                              height: 18,
+                              child: CircularProgressIndicator(strokeWidth: 2),
+                            )
+                          : const Icon(Icons.mic),
+                      label: Text(
+                        _starting
+                            ? 'Starting…'
+                            : _isResuming
+                            ? 'Resume Voice Session'
+                            : 'Start Voice Session',
+                      ),
+                      style: ElevatedButton.styleFrom(
+                        padding: const EdgeInsets.symmetric(vertical: 16),
+                        backgroundColor: Colors.deepPurple,
+                        foregroundColor: Colors.white,
+                      ),
+                    ),
+                  ],
                 ],
               ),
             ),

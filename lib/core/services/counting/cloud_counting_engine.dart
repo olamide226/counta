@@ -169,11 +169,13 @@ _CredentialAction _actionFor(BlockFailure failure, _CredentialPhase phase) {
   };
 
   switch (failure) {
-    case BlockInsufficientCredit(:final balance, :final required):
+    case BlockInsufficientCredit(:final balance):
       return switch (phase) {
+        // The failure's own sentence, so the status line and the setup screen
+        // cannot say two different things about the same refusal.
         _CredentialPhase.start => _EndSession(
           EngineStatus.exhausted,
-          'Out of voice minutes: $balance left, and a session needs $required.',
+          failure.message,
         ),
         _CredentialPhase.renewal => _RunOutTheBlock(
           'Voice minutes have run out ($balance left). Counting continues '
@@ -614,6 +616,15 @@ class CloudCountingEngine implements CountingEngine {
   /// Listeners are attached before [SpeechSocket.connect] so the `connected`
   /// transition — which flushes buffered audio and starts the watchdog — is
   /// never missed.
+  /// Says what kind of credential the engine is holding.
+  ///
+  /// Decided by where it came from, never by what it looks like: a block
+  /// service only ever hands out temporary tokens, and the dev fallback only
+  /// ever hands out an API key. Exactly one of the two is wired per build.
+  SpeechCredential _credential(String value) => blockService == null
+      ? SpeechCredential.apiKey(value)
+      : SpeechCredential.temporaryToken(value);
+
   Future<_Connection> _connect(String token, {required bool asPrimary}) async {
     final socket = asPrimary && _primary != null
         ? _primary!.socket
@@ -631,7 +642,7 @@ class CloudCountingEngine implements CountingEngine {
     }
 
     try {
-      await socket.connect(apiKeyOrToken: token, phrases: _phrases);
+      await socket.connect(credential: _credential(token), phrases: _phrases);
     } catch (e) {
       if (asPrimary) {
         _primary = null;
@@ -1010,7 +1021,7 @@ class CloudCountingEngine implements CountingEngine {
     required int detections,
   }) async {
     try {
-      final release = await service
+      await service
           .release(
             block.id,
             streamedSecs: streamedSecs,
@@ -1022,11 +1033,10 @@ class CloudCountingEngine implements CountingEngine {
                 detections == 0 && streamedSecs <= refundWindow.inSeconds,
           )
           .timeout(releaseTimeout);
-      if (release.refunded) {
-        _report(
-          'That block was too short to charge for; your minutes are back.',
-        );
-      }
+      // Nothing is reported from here. Every early stop now returns the
+      // unused minutes, so "that block was too short to charge for" was wrong
+      // for most refunds and noise on all of them. What a stop cost is shown
+      // from the release itself, by whoever observes the block service.
     } catch (_) {
       // Best effort by design (requirement 15.3): a block nobody reported on
       // is left unreconciled server-side. Ending a session must not wait on a
@@ -1272,7 +1282,7 @@ class CloudCountingEngine implements CountingEngine {
 
         await primary.socket.closeGracefully(drainTimeoutMs: 0);
         await primary.socket.connect(
-          apiKeyOrToken: await _reconnectCredential(),
+          credential: _credential(await _reconnectCredential()),
           phrases: _phrases,
         );
         _rebaseAfterReconnect(primary);

@@ -20,6 +20,11 @@ class FakeSpeechSocket implements SpeechSocket {
 
   /// Every credential the engine handed to [connect], in order.
   final List<String> tokensSeen = [];
+
+  /// Every credential this socket was asked to connect with, kind included.
+  /// A provider refuses a temporary token presented as an API key, so which
+  /// kind the engine sends is behaviour, not detail.
+  final List<SpeechCredential> credentialsSeen = [];
   final _segmentsController = StreamController<TranscriptSegment>.broadcast();
   final _stateController = StreamController<SocketState>.broadcast();
   final _activityController = StreamController<void>.broadcast();
@@ -46,11 +51,12 @@ class FakeSpeechSocket implements SpeechSocket {
 
   @override
   Future<void> connect({
-    required String apiKeyOrToken,
+    required SpeechCredential credential,
     PhraseSet? phrases,
   }) async {
     connectCount++;
-    tokensSeen.add(apiKeyOrToken);
+    tokensSeen.add(credential.value);
+    credentialsSeen.add(credential);
     _currentState = SocketState.connected;
     _stateController.add(_currentState);
   }
@@ -248,7 +254,61 @@ class FakeBlockService implements BlockService {
         eligibleForRefund: eligibleForRefund,
       ),
     );
+    final answer = releaseAnswer;
+    if (answer != null) {
+      final refunded = answer.refundedCredits ?? 0;
+      balance += refunded;
+      return BlockRelease(
+        refunded: refunded > 0,
+        balance: refunded > 0 ? balance : null,
+        usedCredits: answer.usedCredits,
+        refundedCredits: answer.refundedCredits,
+      );
+    }
     return const BlockRelease(refunded: false);
+  }
+
+  /// What a release reports as used and returned. Null keeps the old plain
+  /// "nothing refunded" answer the lifecycle tests were written against.
+  BlockRelease? releaseAnswer;
+
+  /// Credits a session needs to start.
+  int required = 5;
+
+  /// Failure for the next [readBalance], if any.
+  BlockFailure? balanceFailure;
+  int balanceReads = 0;
+
+  @override
+  Future<VoiceBalance> readBalance() async {
+    balanceReads++;
+    final failure = balanceFailure;
+    if (failure != null) throw failure;
+    return VoiceBalance(balance: balance, required: required);
+  }
+
+  /// Codes this service accepts, and what each is worth.
+  final Map<String, int> vouchers = {};
+  final Set<String> _redeemedCodes = {};
+  final List<String> redeemAttempts = [];
+
+  /// Failure for the next [redeem], if any.
+  BlockFailure? redeemFailure;
+
+  @override
+  Future<VoucherOutcome> redeem(String code) async {
+    final key = code.trim().toUpperCase();
+    redeemAttempts.add(key);
+    final failure = redeemFailure;
+    if (failure != null) throw failure;
+
+    final credits = vouchers[key];
+    if (credits == null) return const VoucherRefused(VoucherRefusal.invalid);
+    if (!_redeemedCodes.add(key)) {
+      return VoucherAlreadyRedeemed(balance: balance);
+    }
+    balance += credits;
+    return VoucherRedeemed(credits: credits, balance: balance);
   }
 
   @override

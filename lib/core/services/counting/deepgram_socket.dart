@@ -85,10 +85,41 @@ class DeepgramSocket implements SpeechSocket {
     return Uri.parse(fullUrl);
   }
 
+  /// The `Authorization` value Deepgram expects for each kind of credential.
+  ///
+  /// An API key is presented as `Token <key>`. A temporary token from
+  /// `/v1/auth/grant` is a JWT and must be presented as `Bearer <jwt>`; sent
+  /// as `Token` it is refused with 401 "Invalid credentials". Checked against
+  /// the live API on 2 Oct 2026, both ways round.
+  static String authorizationHeader(SpeechCredential credential) =>
+      '${credential.isTemporary ? 'Bearer' : 'Token'} ${credential.value}';
+
+  /// How long to wait for the channel to close before letting go of it.
+  ///
+  /// A channel whose handshake was refused never completes its close: there
+  /// is no connection to close, and the future simply stays pending. Waiting
+  /// on it unbounded froze the whole start — the engine was awaiting the
+  /// disposal of a socket that could not connect, so the failure was never
+  /// reported and the app sat on "Connecting…" for ever.
+  static const Duration _closeTimeout = Duration(seconds: 2);
+
+  /// Closes the channel and forgets it, whether or not it ever opened.
+  Future<void> _closeChannel() async {
+    final channel = _channel;
+    _channel = null;
+    if (channel == null) return;
+    try {
+      await channel.sink.close().timeout(_closeTimeout);
+    } catch (_) {
+      // Timed out or already broken: either way there is nothing left to
+      // wait for, and the caller is tearing down.
+    }
+  }
+
   /// Connect to Deepgram WebSocket.
   @override
   Future<void> connect({
-    required String apiKeyOrToken,
+    required SpeechCredential credential,
     PhraseSet? phrases,
     WebSocketChannel Function(Uri uri, Map<String, dynamic> headers)?
     channelFactory,
@@ -101,7 +132,7 @@ class DeepgramSocket implements SpeechSocket {
     _audioStartedAt = null;
     _setState(SocketState.connecting);
     final uri = buildUri(phrases: phrases);
-    final headers = {'Authorization': 'Token $apiKeyOrToken'};
+    final headers = {'Authorization': authorizationHeader(credential)};
 
     try {
       if (channelFactory != null) {
@@ -245,10 +276,7 @@ class DeepgramSocket implements SpeechSocket {
     await _socketSubscription?.cancel();
     _socketSubscription = null;
 
-    try {
-      await _channel?.sink.close();
-    } catch (_) {}
-    _channel = null;
+    await _closeChannel();
 
     _setState(SocketState.disconnected);
   }
@@ -259,10 +287,7 @@ class DeepgramSocket implements SpeechSocket {
     _keepAliveTimer?.cancel();
     await _socketSubscription?.cancel();
     _socketSubscription = null;
-    try {
-      await _channel?.sink.close();
-    } catch (_) {}
-    _channel = null;
+    await _closeChannel();
 
     if (!_segmentController.isClosed) await _segmentController.close();
     if (!_stateController.isClosed) await _stateController.close();

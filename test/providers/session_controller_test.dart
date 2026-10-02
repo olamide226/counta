@@ -3,7 +3,11 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:counta/domain/counting/counting_engine.dart';
 import 'package:counta/state/providers/session_controller.dart';
 
+import 'package:counta/core/services/live_activity_service.dart';
+import 'package:counta/domain/counting/block_service.dart';
+
 import '../helpers/fake_counting_engine.dart';
+import '../helpers/session_factory.dart';
 
 void main() {
   const phrase = PhraseSpec(
@@ -139,6 +143,151 @@ void main() {
       expect(asked, 1);
       expect(outcome, EngineStatus.live);
       expect(t.voice.startCount, 1);
+
+      t.controller.dispose();
+    });
+  });
+
+  group('a start that throws', () {
+    test('rolls back to tap counting and tells the caller why', () async {
+      final voice = FakeCountingEngine(
+        startStatus: EngineStatus.exhausted,
+        startError: const BlockInsufficientCredit(balance: 0, required: 5),
+      );
+      final taps = <FakeCountingEngine>[];
+      final controller = SessionController(
+        engine: FakeCountingEngine(),
+        voiceEngineFactory: () => voice,
+        tapEngineFactory: () {
+          final engine = FakeCountingEngine();
+          taps.add(engine);
+          return engine;
+        },
+      );
+
+      // Regression: the throw skipped the roll-back, leaving a dead voice
+      // engine installed with the phrase still marked active.
+      await expectLater(
+        controller.startVoiceSession(PhraseSet.single(phrase)),
+        throwsA(isA<BlockInsufficientCredit>()),
+      );
+
+      expect(controller.activePhrases, isNull);
+      expect(controller.isVoiceActive, isFalse);
+      expect(voice.disposed, isTrue);
+      expect(taps, hasLength(1));
+      // Refused at the door is explained on the setup screen, where the user
+      // is. The mid-session notice is for a session that was running.
+      expect(controller.outOfMinutes, isFalse);
+
+      controller.dispose();
+    });
+  });
+
+  group('running out of minutes', () {
+    test('a running session that runs out says so', () async {
+      final t = build();
+      await t.controller.startVoiceSession(PhraseSet.single(phrase));
+      await pumpEventQueue();
+
+      t.voice.emitStatus(EngineStatus.exhausted);
+      await pumpEventQueue();
+
+      expect(t.controller.outOfMinutes, isTrue);
+      expect(t.controller.isVoiceActive, isFalse);
+      // The phrase stays: this is still the same session, and picking it
+      // back up must not mean typing it again.
+      expect(t.controller.activePhrases, PhraseSet.single(phrase));
+
+      t.controller.dispose();
+    });
+
+    test('the notice goes when dismissed, resumed or reset', () async {
+      Future<SessionController> ranOut() async {
+        final t = build();
+        await t.controller.startVoiceSession(PhraseSet.single(phrase));
+        await pumpEventQueue();
+        t.voice.emitStatus(EngineStatus.exhausted);
+        await pumpEventQueue();
+        expect(t.controller.outOfMinutes, isTrue);
+        return t.controller;
+      }
+
+      final dismissed = await ranOut();
+      dismissed.dismissOutOfMinutes();
+      expect(dismissed.outOfMinutes, isFalse);
+      dismissed.dispose();
+
+      final reset = await ranOut();
+      reset.reset();
+      expect(reset.outOfMinutes, isFalse);
+      reset.dispose();
+    });
+
+    test('a session that ends by itself ends its Live Activity', () async {
+      final activity = _RecordingLiveActivity();
+      final voice = FakeCountingEngine();
+      final controller = SessionController(
+        engine: FakeCountingEngine(),
+        liveActivityService: activity,
+        voiceEngineFactory: () => voice,
+        tapEngineFactory: FakeCountingEngine.new,
+      );
+      await controller.startVoiceSession(PhraseSet.single(phrase));
+      await pumpEventQueue();
+      expect(activity.started, 1);
+
+      // Regression: only `stop()` ended it, and nothing calls `stop()` when
+      // the engine gives up, so the lock screen showed a session that was
+      // over.
+      voice.emitStatus(EngineStatus.exhausted);
+      await pumpEventQueue();
+
+      expect(activity.ended, 1);
+
+      controller.dispose();
+    });
+  });
+
+  group('voice minutes used', () {
+    test('counts what was charged since the count began', () {
+      final t = build();
+      // Earlier sessions since launch had already cost 7.
+      t.controller.reportVoiceMinutes(7);
+      t.controller.reset();
+
+      t.controller.reportVoiceMinutes(12);
+      expect(t.controller.voiceMinutesUsed, 5);
+
+      // Unused minutes coming back lower it again.
+      t.controller.reportVoiceMinutes(8);
+      expect(t.controller.voiceMinutesUsed, 1);
+
+      t.controller.dispose();
+    });
+
+    test('a new count starts from nothing', () {
+      final t = build();
+      t.controller.reportVoiceMinutes(5);
+      expect(t.controller.voiceMinutesUsed, 5);
+
+      t.controller.reset();
+
+      expect(t.controller.voiceMinutesUsed, 0);
+      t.controller.dispose();
+    });
+
+    test('a restored session keeps what it had already cost', () {
+      final t = build();
+      t.controller.reportVoiceMinutes(3);
+
+      t.controller.restore(
+        testSession(finalCount: 40).copyWith(creditsConsumed: 6),
+      );
+      expect(t.controller.voiceMinutesUsed, 6);
+
+      t.controller.reportVoiceMinutes(5);
+      expect(t.controller.voiceMinutesUsed, 8);
 
       t.controller.dispose();
     });
@@ -329,4 +478,36 @@ void main() {
       expect(t.controller.lastVoicePhrase, isNull);
     });
   });
+}
+
+/// Counts starts and ends without touching ActivityKit.
+class _RecordingLiveActivity extends LiveActivityService {
+  int started = 0;
+  int ended = 0;
+
+  @override
+  Future<void> startActivity({
+    required String phrase,
+    required int count,
+    required int voiceCount,
+    required int manualCount,
+    required String status,
+  }) async {
+    started++;
+  }
+
+  @override
+  void updateActivity({
+    required String phrase,
+    required int count,
+    required int voiceCount,
+    required int manualCount,
+    required String status,
+    bool force = false,
+  }) {}
+
+  @override
+  Future<void> endActivity() async {
+    ended++;
+  }
 }

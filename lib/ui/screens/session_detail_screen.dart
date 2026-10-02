@@ -75,8 +75,8 @@ class SessionDetailScreen extends ConsumerWidget {
               context,
               icon: Icons.graphic_eq_rounded,
               label: session.allPhrases.length > 1
-                  ? 'Phrases chanted'
-                  : 'Phrase chanted',
+                  ? 'Phrases counted'
+                  : 'Phrase counted',
               value: session.allPhrases.map((phrase) => '“$phrase”').join('\n'),
             ),
           ],
@@ -98,8 +98,8 @@ class SessionDetailScreen extends ConsumerWidget {
             const SizedBox(height: 16),
             _buildStatCard(
               context,
-              icon: Icons.toll_outlined,
-              label: 'Voice credits used',
+              icon: Icons.timer_outlined,
+              label: 'Voice minutes used',
               value: session.creditsConsumed.toString(),
             ),
           ],

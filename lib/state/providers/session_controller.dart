@@ -1,4 +1,5 @@
 import 'dart:async';
+import 'dart:math';
 import 'package:flutter/foundation.dart';
 
 import '../../domain/counting/counting_engine.dart';
@@ -61,8 +62,22 @@ class SessionController extends ChangeNotifier {
   /// Most recent phrase a voice count landed on, so undoing a voice count
   /// takes it back off the phrase that earned it.
   String? _lastVoicePhrase;
+
+  /// Whether the voice session in hand ever got as far as listening.
+  bool _voiceRan = false;
+
+  /// Set when a session that was running ended because the minutes ran out.
+  bool _outOfMinutes = false;
   DateTime? _sessionStart;
   String? _lastDiagnostic;
+
+  /// Voice minutes charged since launch, as last reported, and the reading
+  /// taken when this counting session began. Their difference is this
+  /// session's share; [_minutesRestored] is what a resumed record already
+  /// carried.
+  int _minutesReported = 0;
+  int _minutesBaseline = 0;
+  int _minutesRestored = 0;
 
   SessionController({
     CountingEngine? engine,
@@ -92,6 +107,41 @@ class SessionController extends ChangeNotifier {
   /// The phrase the latest voice count landed on, so the UI can show which
   /// phrase was just heard.
   String? get lastVoicePhrase => _lastVoicePhrase;
+
+  /// Whether voice counting stopped mid-session for lack of minutes.
+  ///
+  /// The count is intact and tapping still works; this is what lets the
+  /// screen say so, and offer a way back, instead of the banner simply
+  /// vanishing. Only a session that was actually running sets it: being
+  /// refused at the start is explained on the setup sheet, where the user is.
+  bool get outOfMinutes => _outOfMinutes;
+
+  /// Voice minutes this counting session has been charged, across every
+  /// voice run in it. Saved with the record.
+  int get voiceMinutesUsed =>
+      max(0, _minutesRestored + _minutesReported - _minutesBaseline);
+
+  /// Takes the running total of minutes charged since launch. The controller
+  /// is told rather than asking, so it stays free of the voice service.
+  void reportVoiceMinutes(int chargedSinceLaunch) {
+    if (chargedSinceLaunch == _minutesReported) return;
+    _minutesReported = chargedSinceLaunch;
+    notifyListeners();
+  }
+
+  void _restartMinutes({int carried = 0}) {
+    _minutesBaseline = _minutesReported;
+    _minutesRestored = carried;
+    // A new count is a new page: the notice belonged to the old one.
+    _outOfMinutes = false;
+  }
+
+  /// The user has seen the out-of-minutes notice and moved on.
+  void dismissOutOfMinutes() {
+    if (!_outOfMinutes) return;
+    _outOfMinutes = false;
+    notifyListeners();
+  }
 
   /// The most recent explanation of why voice counting degraded, if any.
   ///
@@ -171,9 +221,23 @@ class SessionController extends ChangeNotifier {
     // stale error banner sitting over a healthy session.
     if (newStatus == EngineStatus.live) {
       _lastDiagnostic = null;
+      _voiceRan = true;
+      _outOfMinutes = false;
     }
+    if (newStatus == EngineStatus.exhausted && _voiceRan) {
+      _outOfMinutes = true;
+    }
+    final wasActive = isVoiceActive;
     _status = newStatus;
-    _updateLiveActivity();
+    if (wasActive && !isVoiceActive) {
+      // The engine ended the session itself: out of minutes, or it gave up
+      // reconnecting. `stop()` is what normally ends the Live Activity, and
+      // nothing calls it here, so the lock screen went on showing a session
+      // that was over.
+      unawaited(_liveActivityService?.endActivity());
+    } else {
+      _updateLiveActivity();
+    }
     notifyListeners();
   }
 
@@ -182,6 +246,8 @@ class SessionController extends ChangeNotifier {
     final targetPhrases = phrases ?? _activePhrases;
     _activePhrases = targetPhrases;
     _lastDiagnostic = null;
+    _voiceRan = false;
+    _outOfMinutes = false;
     _sessionStart ??= DateTime.now();
     await _engine.start(targetPhrases);
 
@@ -219,21 +285,34 @@ class SessionController extends ChangeNotifier {
     final previousPhrases = _activePhrases;
     final previousStart = _sessionStart;
 
-    setEngine(_voiceEngineFactory());
-    await startSession(phrases);
-
-    final outcome = _status;
-    if (!terminalStatuses.contains(outcome)) return outcome;
-
     // The engine will not deliver counts, so this session never started.
     // Rolling the frame back matters: leaving the phrase set meant the next
     // tap-only session was saved as a voice session with a start time from
     // the failed attempt.
-    _activePhrases = previousPhrases;
-    _sessionStart = previousStart;
-    setEngine(_tapEngineFactory());
-    _status = EngineStatus.idle;
-    notifyListeners();
+    void rollBack() {
+      _activePhrases = previousPhrases;
+      _sessionStart = previousStart;
+      setEngine(_tapEngineFactory());
+      _status = EngineStatus.idle;
+      notifyListeners();
+    }
+
+    setEngine(_voiceEngineFactory());
+    try {
+      await startSession(phrases);
+    } catch (_) {
+      // A start can also fail by throwing — no minutes, no connection — so
+      // the caller can show why. That path skipped the roll-back below and
+      // left a dead voice engine installed with the phrase still marked
+      // active.
+      rollBack();
+      rethrow;
+    }
+
+    final outcome = _status;
+    if (!terminalStatuses.contains(outcome)) return outcome;
+
+    rollBack();
     return outcome;
   }
 
@@ -282,6 +361,7 @@ class SessionController extends ChangeNotifier {
     _manualCount = count < 0 ? 0 : count;
     _activePhrases = null;
     _lastDiagnostic = null;
+    _restartMinutes();
     _sessionStart = startedAt ?? DateTime.now();
     _updateLiveActivity();
     notifyListeners();
@@ -322,6 +402,7 @@ class SessionController extends ChangeNotifier {
       _voiceCountsByPhrase[phrases.single] = _voiceCount;
     }
     _lastDiagnostic = null;
+    _restartMinutes(carried: session.creditsConsumed ?? 0);
     _sessionStart = session.startedAt;
     _updateLiveActivity();
     notifyListeners();
@@ -332,6 +413,7 @@ class SessionController extends ChangeNotifier {
     _voiceCount = 0;
     _clearPhraseCounts();
     _manualCount = 0;
+    _restartMinutes();
     if (!keepSessionStart) {
       _sessionStart = DateTime.now();
     }

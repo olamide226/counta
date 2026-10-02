@@ -124,7 +124,8 @@ void main() {
         // The microphone is handed straight back rather than held open behind
         // a paywall.
         expect(audio.stopCount, greaterThanOrEqualTo(1));
-        expect(diagnostics.first, contains('2 left'));
+        // The balance is reported, in the sentence a person is shown.
+        expect(diagnostics.first, contains('2 voice minutes left'));
         await sub.cancel();
       });
 
@@ -863,6 +864,28 @@ void main() {
         expect(engine.blocksUsed, 1);
       });
 
+      test('a block\'s token is always presented as a temporary one', () async {
+        // Regression. The engine handed the socket a bare string and the
+        // socket presented everything as an API key, so the provider refused
+        // every session that had paid for a token: found on the first real
+        // device run against the live service. Both the token a block comes
+        // with and the one minted for a reconnect are temporary.
+        final blocks = FakeBlockService(blockSeconds: 300);
+        final engine = engineWith(blocks);
+        addTearDown(engine.dispose);
+
+        await engine.start(testPhraseSet);
+        await pumpEventQueue();
+        sockets.single.emitDrop(reason: 'server hung up');
+        await Future<void>.delayed(const Duration(milliseconds: 200));
+
+        expect(sockets.single.tokensSeen, ['token-1', 'refresh-1']);
+        expect(sockets.single.credentialsSeen.map((c) => c.isTemporary), [
+          true,
+          true,
+        ]);
+      });
+
       test('a block the server no longer knows ends the session', () async {
         final blocks = FakeBlockService(
           blockSeconds: 300,
@@ -1097,7 +1120,7 @@ class _RefusingSocket extends FakeSpeechSocket {
 
   @override
   Future<void> connect({
-    required String apiKeyOrToken,
+    required SpeechCredential credential,
     PhraseSet? phrases,
   }) async {
     throw StateError('cannot connect');
@@ -1113,11 +1136,11 @@ class _RefusableSocket extends FakeSpeechSocket {
 
   @override
   Future<void> connect({
-    required String apiKeyOrToken,
+    required SpeechCredential credential,
     PhraseSet? phrases,
   }) async {
     if (failConnects) throw StateError('cannot reconnect');
-    return super.connect(apiKeyOrToken: apiKeyOrToken, phrases: phrases);
+    return super.connect(credential: credential, phrases: phrases);
   }
 }
 

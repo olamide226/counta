@@ -207,6 +207,13 @@ export class MemoryBlockStore implements BlockStore {
     );
   }
 
+  markReleased(blockId: string, at: Date): Promise<Date> {
+    const row = this.rows.find((r) => r.id === blockId);
+    if (!row) return Promise.resolve(at);
+    row.released_at ??= at.toISOString();
+    return Promise.resolve(new Date(row.released_at));
+  }
+
   reconcile(
     blockId: string,
     patch: { streamed_secs: number | null; detections: number | null },
@@ -236,6 +243,9 @@ export const CONFIG: HandlerConfig = {
  * to mint twenty tokens to reach the limit is a test nobody reads.
  */
 export const TOKEN_MINT = { max: 4, windowMinutes: 5 };
+
+/** Small on purpose, so a test can exhaust it. */
+export const BALANCE_READ = { max: 3, windowMinutes: 5 };
 
 export interface Harness {
   deps: Deps;
@@ -287,6 +297,10 @@ export function harness(
     tokenLimiter: new MemoryRateLimiter(
       TOKEN_MINT.max,
       TOKEN_MINT.windowMinutes * 60_000,
+    ),
+    balanceLimiter: new MemoryRateLimiter(
+      BALANCE_READ.max,
+      BALANCE_READ.windowMinutes * 60_000,
     ),
     trials,
     vouchers,
@@ -420,6 +434,9 @@ export const tokenReq = (
   body: unknown,
   token: string | null = GOOD_TOKEN,
 ) => req("/voice-block/token", body, token);
+
+export const balanceReq = (token: string | null = GOOD_TOKEN) =>
+  req("/voice-block/balance", {}, token);
 
 // ---------------------------------------------------------------------------
 // Trial (req 11) and vouchers (req 12)

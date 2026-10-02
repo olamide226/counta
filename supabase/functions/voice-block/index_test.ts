@@ -11,6 +11,8 @@ import {
   CONFIG,
   FakeTokenMinter,
   GOOD_TOKEN,
+  BALANCE_READ,
+  balanceReq,
   grantReq,
   harness,
   jsonResponse,
@@ -341,14 +343,22 @@ Deno.test("release: within 30 s with zero detections refunds", async () => {
   );
 
   assertEquals(status, 200);
-  assertEquals(body, { refunded: true, balance: 20 });
+  assertEquals(body, {
+    refunded: true,
+    balance: 20,
+    used_credits: 0,
+    refunded_credits: 5,
+  });
   const row = h.blocks.rows[0];
   assertEquals(row.reconciled, true);
   assertEquals(row.streamed_secs, 18);
   assertEquals(row.detections, 0);
 });
 
-Deno.test("release: client assertion is ignored when detections > 0", async () => {
+Deno.test("release: a session that counted is charged for the minute it ran", async () => {
+  // It was a real session, so the never-started refund does not apply, and
+  // the client asserting otherwise changes nothing. It ran ten seconds: one
+  // minute is charged and the other four come back.
   const h = harness();
   const granted = await call(h.deps, grantReq());
 
@@ -364,11 +374,16 @@ Deno.test("release: client assertion is ignored when detections > 0", async () =
   );
 
   assertEquals(status, 200);
-  assertEquals(body, { refunded: false });
+  assertEquals(body, {
+    refunded: true,
+    balance: 19,
+    used_credits: 1,
+    refunded_credits: 4,
+  });
   assertEquals(h.blocks.rows[0].reconciled, true);
 });
 
-Deno.test("release: after the 30 s window is not refunded even with zero detections", async () => {
+Deno.test("release: past the 30 s window a silent session still pays for its minute", async () => {
   const h = harness();
   const granted = await call(h.deps, grantReq());
 
@@ -382,10 +397,16 @@ Deno.test("release: after the 30 s window is not refunded even with zero detecti
       eligible_for_refund: true,
     }),
   );
-  assertEquals(body, { refunded: false });
+  // Not the full refund: that is only for a session that never started.
+  assertEquals(body, {
+    refunded: true,
+    balance: 19,
+    used_credits: 1,
+    refunded_credits: 4,
+  });
 });
 
-Deno.test("release: a missing detections count is not a refundable zero", async () => {
+Deno.test("release: a missing detections count does not earn the full refund", async () => {
   const h = harness();
   const granted = await call(h.deps, grantReq());
 
@@ -399,8 +420,10 @@ Deno.test("release: a missing detections count is not a refundable zero", async 
   );
 
   assertEquals(status, 200);
-  assertEquals(body.refunded, false);
-  assertEquals(h.balance.balances.get(USER), 15);
+  // Omitting the field must not be a way to be refunded in full: no report
+  // is not a report of zero. The minute that ran is still charged.
+  assertEquals(body.used_credits, 1);
+  assertEquals(h.balance.balances.get(USER), 19);
   assertEquals(h.blocks.rows[0].detections, null);
 });
 
@@ -428,7 +451,12 @@ Deno.test("release: is idempotent, a second release never refunds again", async 
   const req = () =>
     releaseReq({ block_id: granted.body.block_id, streamed_secs: 5, detections: 0 });
 
-  assertEquals((await call(h.deps, req())).body, { refunded: true, balance: 20 });
+  assertEquals((await call(h.deps, req())).body, {
+    refunded: true,
+    balance: 20,
+    used_credits: 0,
+    refunded_credits: 5,
+  });
   assertEquals((await call(h.deps, req())).body, { refunded: false });
 });
 
@@ -452,12 +480,134 @@ Deno.test("release: a failed refund leaves a retry able to finish it, exactly on
   assertEquals(h.balance.balances.get(USER), 15);
 
   const retried = await call(h.deps, release());
-  assertEquals(retried.body, { refunded: true, balance: 20 });
+  assertEquals(retried.body, {
+    refunded: true,
+    balance: 20,
+    used_credits: 0,
+    refunded_credits: 5,
+  });
   assertEquals(h.blocks.rows[0].reconciled, true);
 
   // And a third attempt does not credit a second time.
   assertEquals((await call(h.deps, release())).body, { refunded: false });
   assertEquals(h.balance.balances.get(USER), 20);
+});
+
+// --- Stopping early returns the minutes that were not used ---------------
+
+/** Grants a block at 12:00:00 and releases it `seconds` later. */
+async function releasedAfter(seconds: number, detections = 3) {
+  const h = harness();
+  const granted = await call(h.deps, grantReq());
+  h.clock.now = new Date(Date.parse("2026-09-07T12:00:00.000Z") + seconds * 1000);
+  const { body } = await call(
+    h.deps,
+    releaseReq({
+      block_id: granted.body.block_id,
+      streamed_secs: seconds,
+      detections,
+    }),
+  );
+  return { h, body };
+}
+
+Deno.test("release: 37 seconds costs one minute and returns four", async () => {
+  // The case that prompted this: a short session used to cost a whole
+  // five-minute block.
+  const { h, body } = await releasedAfter(37);
+  assertEquals(body, {
+    refunded: true,
+    balance: 19,
+    used_credits: 1,
+    refunded_credits: 4,
+  });
+  assertEquals(h.balance.balances.get(USER), 19);
+});
+
+Deno.test("release: a started minute is charged whole", async () => {
+  assertEquals((await releasedAfter(60)).body.used_credits, 1);
+  assertEquals((await releasedAfter(61)).body.used_credits, 2);
+  assertEquals((await releasedAfter(181)).body.used_credits, 4);
+});
+
+Deno.test("release: a block run to its end returns nothing", async () => {
+  const { h, body } = await releasedAfter(299);
+  assertEquals(body, { refunded: false, used_credits: 5, refunded_credits: 0 });
+  // Nothing moved, so the ledger was not asked.
+  assertEquals(h.balance.calls.map((c) => c.op), ["get", "spend"]);
+});
+
+Deno.test("release: a release after the block expired is never worth more than the block", async () => {
+  const { body } = await releasedAfter(900);
+  assertEquals(body.used_credits, 5);
+  assertEquals(body.refunded_credits, 0);
+});
+
+Deno.test("release: the client's own streamed_secs decides nothing", async () => {
+  // Two minutes ran on the server's clock. Claiming one second streamed must
+  // not buy a bigger refund.
+  const h = harness();
+  const granted = await call(h.deps, grantReq());
+  h.clock.now = new Date("2026-09-07T12:02:00.000Z");
+  const { body } = await call(
+    h.deps,
+    releaseReq({ block_id: granted.body.block_id, streamed_secs: 1, detections: 3 }),
+  );
+  assertEquals(body.used_credits, 2);
+});
+
+Deno.test("release: the amount is fixed by the first attempt, however late the retry", async () => {
+  // The refund is keyed on the block, so a retry that worked out a different
+  // amount would be asking the ledger to apply one key twice with two
+  // bodies. The first attempt's moment is stamped and read back instead.
+  const h = harness();
+  const granted = await call(h.deps, grantReq());
+  const release = () =>
+    releaseReq({ block_id: granted.body.block_id, streamed_secs: 50, detections: 3 });
+
+  h.clock.now = new Date("2026-09-07T12:00:50.000Z");
+  h.balance.failRefunds = 1;
+  assertEquals((await call(h.deps, release())).status, 503);
+  assertEquals(h.balance.balances.get(USER), 15);
+
+  // Well over a minute later: a naive recomputation would now charge three.
+  h.clock.now = new Date("2026-09-07T12:02:10.000Z");
+  const retried = await call(h.deps, release());
+  assertEquals(retried.body, {
+    refunded: true,
+    balance: 19,
+    used_credits: 1,
+    refunded_credits: 4,
+  });
+});
+
+// --- Balance ---------------------------------------------------------------
+
+Deno.test("balance: reports what the user has and what a session needs", async () => {
+  const h = harness({ initialBalance: 23 });
+  const { status, body } = await call(h.deps, balanceReq());
+  assertEquals(status, 200);
+  assertEquals(body, { balance: 23, required: 5 });
+  // A read moves nothing.
+  assertEquals(h.balance.calls.map((c) => c.op), ["get"]);
+});
+
+Deno.test("balance: needs a signed-in user", async () => {
+  const h = harness();
+  assertEquals((await call(h.deps, balanceReq(null))).status, 401);
+  assertEquals(h.balance.calls.length, 0);
+});
+
+Deno.test("balance: is metered, because every read is a ledger round trip", async () => {
+  const h = harness();
+  for (let i = 0; i < BALANCE_READ.max; i++) {
+    assertEquals((await call(h.deps, balanceReq())).status, 200);
+  }
+  const limited = await call(h.deps, balanceReq());
+  assertEquals(limited.status, 429);
+  assertEquals(limited.body.error, "rate_limited");
+  // The refused read never reached the ledger.
+  assertEquals(h.balance.calls.length, BALANCE_READ.max);
 });
 
 Deno.test("release: unknown or foreign block is 404, unauthenticated is 401", async () => {

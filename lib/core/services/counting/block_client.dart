@@ -96,8 +96,65 @@ class BlockClient implements BlockService {
     return BlockRelease(
       refunded: body.json['refunded'] == true,
       balance: _asInt(body.json['balance']),
+      usedCredits: _asInt(body.json['used_credits']),
+      refundedCredits: _asInt(body.json['refunded_credits']),
     );
   }
+
+  @override
+  Future<VoiceBalance> readBalance() async {
+    final body = await _post(_balanceUrl, const {});
+    if (body.status != 200) throw _commonFailure(body);
+
+    final balance = _asInt(body.json['balance']);
+    if (balance == null) {
+      throw BlockUnreachable(
+        FormatException('voice-block returned no balance: ${body.json}'),
+      );
+    }
+    return VoiceBalance(
+      balance: balance,
+      // An older server does not say; one block is five credits.
+      required: _asInt(body.json['required']) ?? 5,
+    );
+  }
+
+  @override
+  Future<VoucherOutcome> redeem(String code) async {
+    final body = await _post(_redeemUrl, {'code': code.trim()});
+    final balance = _asInt(body.json['balance']);
+
+    switch (body.status) {
+      case 200:
+        return body.json['redeemed'] == true
+            ? VoucherRedeemed(
+                credits: _asInt(body.json['credits']) ?? 0,
+                balance: balance,
+              )
+            : VoucherAlreadyRedeemed(balance: balance);
+      // A refused code is an answer. 404 here is "no such code", not the
+      // "block is gone" it means on the block routes, so it must not fall
+      // through to the shared mapping.
+      case 404:
+        return const VoucherRefused(VoucherRefusal.invalid);
+      case 409:
+        return VoucherRefused(
+          body.json['error'] == 'voucher_expired'
+              ? VoucherRefusal.expired
+              : VoucherRefusal.usedUp,
+        );
+      case 400:
+        return const VoucherRefused(VoucherRefusal.invalid);
+      default:
+        throw _commonFailure(body);
+    }
+  }
+
+  Uri get _balanceUrl =>
+      _functionUrl.replace(path: '${_functionUrl.path}/balance');
+
+  Uri get _redeemUrl =>
+      _functionUrl.replace(path: '${_functionUrl.path}/redeem');
 
   Uri get _releaseUrl =>
       _functionUrl.replace(path: '${_functionUrl.path}/release');
@@ -148,7 +205,18 @@ class BlockClient implements BlockService {
   }
 
   Future<_Body> _post(Uri url, Map<String, dynamic> payload) async {
-    final token = await _accessToken();
+    final String? token;
+    try {
+      // Getting a token can itself be a network call: signing in, or
+      // refreshing a session. It gets the same deadline and the same
+      // classification as the request it is for. Left outside both, a
+      // sign-in the network dropped reached the screen as a raw
+      // `AuthRetryableFetchException`, and one that never answered would
+      // have hung the start with nothing to end it.
+      token = await _accessToken().timeout(timeout);
+    } catch (error) {
+      throw BlockUnreachable(error);
+    }
     if (token == null || token.isEmpty) {
       // The function would answer 401 anyway; saying so without the round trip
       // keeps a signed-out build from hammering it.

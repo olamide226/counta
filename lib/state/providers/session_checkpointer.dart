@@ -96,7 +96,8 @@ class SessionCheckpointer {
     final phrases = _controller.activePhrases?.rawPhrases.join('\u0000') ?? '';
     final split = _controller.voiceCountsByPhrase.values.join(',');
     return '${_controller.total}|${_controller.voiceCount}'
-        '|${_controller.manualCount}|$phrases|$split';
+        '|${_controller.manualCount}|$phrases|$split'
+        '|${_controller.voiceMinutesUsed}';
   }
 
   void _onControllerChanged() {
@@ -162,6 +163,9 @@ class SessionCheckpointer {
       voiceCount: isVoice ? _controller.voiceCount : null,
       manualCount: isVoice ? _controller.manualCount : null,
       phraseCounts: isVoice ? _controller.voiceCountsByPhrase : null,
+      creditsConsumed: _controller.voiceMinutesUsed > 0
+          ? _controller.voiceMinutesUsed
+          : null,
     );
   }
 
@@ -223,6 +227,7 @@ final sessionCheckpointerProvider = Provider<SessionCheckpointer>((ref) {
         voiceCountsByPhrase: controller.voiceCountsByPhrase,
         endedAt: DateTime.now(),
         completed: false,
+        voiceMinutesUsed: controller.voiceMinutesUsed,
       );
     },
   );
