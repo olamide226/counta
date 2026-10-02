@@ -32,6 +32,7 @@ gear icon → Download Container. The JSON is inside `AppData/Documents/`.
 | `tv_background_100` | 100  | TV or podcast audible in background  |
 | `traffic_100`       | 100  | outdoors near traffic                |
 | `mixed_speech_50`   | 50   | phrase interleaved with other speech |
+| `multi_100`         | 100  | several phrases in one session       |
 
 ## Running the gate
 

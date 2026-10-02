@@ -1,0 +1,7575 @@
+{
+  "exported_at": "2026-10-02T16:23:15.149995",
+  "fixture_name": "multi_100",
+  "phrase_raw": "I'm rich in wisdom",
+  "phrases_raw": [
+    "I'm rich in wisdom",
+    "the wisdom of God is at work in me",
+    "God is with me",
+    "God is for me",
+    "I’m full of wisdom"
+  ],
+  "true_count": 100,
+  "segment_count": 71,
+  "interim_segment_count": 297,
+  "latency": {
+    "time_to_first_result_ms": 8765,
+    "interim": {
+      "count": 297,
+      "last_ms": 0,
+      "median_ms": 0,
+      "p95_ms": 0,
+      "worst_ms": 0
+    },
+    "final": {
+      "count": 71,
+      "last_ms": 0,
+      "median_ms": 467,
+      "p95_ms": 1688,
+      "worst_ms": 1858
+    }
+  },
+  "segments": [
+    {
+      "text": "i'm full of wisdom",
+      "start": 4.46,
+      "duration": 3.6999998,
+      "is_final": true,
+      "confidence": 1.0,
+      "speech_final": true,
+      "words": [
+        {
+          "word": "i'm",
+          "start": 6.3,
+          "end": 6.7,
+          "confidence": 0.95703125
+        },
+        {
+          "word": "full",
+          "start": 6.7,
+          "end": 6.94,
+          "confidence": 1.0
+        },
+        {
+          "word": "of",
+          "start": 6.94,
+          "end": 7.1,
+          "confidence": 1.0
+        },
+        {
+          "word": "wisdom",
+          "start": 7.1,
+          "end": 7.58,
+          "confidence": 0.8640137
+        }
+      ],
+      "received_at": "2026-10-02T16:18:02.147759",
+      "lag_ms": 0
+    },
+    {
+      "text": "i'm full of wisdom",
+      "start": 12.38,
+      "duration": 2.1099997,
+      "is_final": true,
+      "confidence": 0.9970703,
+      "speech_final": true,
+      "words": [
+        {
+          "word": "i'm",
+          "start": 12.78,
+          "end": 13.1,
+          "confidence": 0.64489746
+        },
+        {
+          "word": "full",
+          "start": 13.1,
+          "end": 13.34,
+          "confidence": 0.9970703
+        },
+        {
+          "word": "of",
+          "start": 13.34,
+          "end": 13.58,
+          "confidence": 1.0
+        },
+        {
+          "word": "wisdom",
+          "start": 13.58,
+          "end": 13.98,
+          "confidence": 0.94506836
+        }
+      ],
+      "received_at": "2026-10-02T16:18:08.558508",
+      "lag_ms": 0
+    },
+    {
+      "text": "i'm full of wisdom",
+      "start": 40.07,
+      "duration": 2.630001,
+      "is_final": true,
+      "confidence": 0.99902344,
+      "speech_final": true,
+      "words": [
+        {
+          "word": "i'm",
+          "start": 40.71,
+          "end": 41.03,
+          "confidence": 0.95703125
+        },
+        {
+          "word": "full",
+          "start": 41.03,
+          "end": 41.27,
+          "confidence": 0.99902344
+        },
+        {
+          "word": "of",
+          "start": 41.27,
+          "end": 41.43,
+          "confidence": 1.0
+        },
+        {
+          "word": "wisdom",
+          "start": 41.43,
+          "end": 41.829998,
+          "confidence": 0.83081055
+        }
+      ],
+      "received_at": "2026-10-02T16:18:36.747232",
+      "lag_ms": 0
+    },
+    {
+      "text": "god is for me",
+      "start": 42.7,
+      "duration": 1.8499985,
+      "is_final": true,
+      "confidence": 1.0,
+      "speech_final": true,
+      "words": [
+        {
+          "word": "god",
+          "start": 43.100002,
+          "end": 43.5,
+          "confidence": 1.0
+        },
+        {
+          "word": "is",
+          "start": 43.5,
+          "end": 43.74,
+          "confidence": 1.0
+        },
+        {
+          "word": "for",
+          "start": 43.74,
+          "end": 43.9,
+          "confidence": 1.0
+        },
+        {
+          "word": "me",
+          "start": 43.9,
+          "end": 44.14,
+          "confidence": 0.92626953
+        }
+      ],
+      "received_at": "2026-10-02T16:18:38.540130",
+      "lag_ms": 0
+    },
+    {
+      "text": "god is for me",
+      "start": 44.55,
+      "duration": 2.4799995,
+      "is_final": true,
+      "confidence": 1.0,
+      "speech_final": true,
+      "words": [
+        {
+          "word": "god",
+          "start": 45.35,
+          "end": 45.67,
+          "confidence": 1.0
+        },
+        {
+          "word": "is",
+          "start": 45.67,
+          "end": 45.989998,
+          "confidence": 1.0
+        },
+        {
+          "word": "for",
+          "start": 45.989998,
+          "end": 46.149998,
+          "confidence": 1.0
+        },
+        {
+          "word": "me",
+          "start": 46.149998,
+          "end": 46.39,
+          "confidence": 0.9604492
+        }
+      ],
+      "received_at": "2026-10-02T16:18:41.089179",
+      "lag_ms": 0
+    },
+    {
+      "text": "god is for me",
+      "start": 47.03,
+      "duration": 3.170002,
+      "is_final": true,
+      "confidence": 1.0,
+      "speech_final": false,
+      "words": [
+        {
+          "word": "god",
+          "start": 48.309998,
+          "end": 48.629997,
+          "confidence": 0.9941406
+        },
+        {
+          "word": "is",
+          "start": 48.629997,
+          "end": 48.87,
+          "confidence": 1.0
+        },
+        {
+          "word": "for",
+          "start": 48.87,
+          "end": 49.03,
+          "confidence": 1.0
+        },
+        {
+          "word": "me",
+          "start": 49.03,
+          "end": 49.27,
+          "confidence": 0.9980469
+        }
+      ],
+      "received_at": "2026-10-02T16:18:46.039395",
+      "lag_ms": 1688
+    },
+    {
+      "text": "god is for me god is with me",
+      "start": 50.2,
+      "duration": 4.549999,
+      "is_final": true,
+      "confidence": 1.0,
+      "speech_final": false,
+      "words": [
+        {
+          "word": "god",
+          "start": 50.52,
+          "end": 50.84,
+          "confidence": 1.0
+        },
+        {
+          "word": "is",
+          "start": 50.84,
+          "end": 51.24,
+          "confidence": 0.99609375
+        },
+        {
+          "word": "for",
+          "start": 51.24,
+          "end": 51.56,
+          "confidence": 1.0
+        },
+        {
+          "word": "me",
+          "start": 51.56,
+          "end": 52.12,
+          "confidence": 1.0
+        },
+        {
+          "word": "god",
+          "start": 53.08,
+          "end": 53.4,
+          "confidence": 0.99902344
+        },
+        {
+          "word": "is",
+          "start": 53.4,
+          "end": 53.72,
+          "confidence": 0.99902344
+        },
+        {
+          "word": "with",
+          "start": 53.72,
+          "end": 53.88,
+          "confidence": 1.0
+        },
+        {
+          "word": "me",
+          "start": 53.88,
+          "end": 54.12,
+          "confidence": 0.99560547
+        }
+      ],
+      "received_at": "2026-10-02T16:18:49.166381",
+      "lag_ms": 265
+    },
+    {
+      "text": "god is with me",
+      "start": 54.75,
+      "duration": 2.119999,
+      "is_final": true,
+      "confidence": 1.0,
+      "speech_final": true,
+      "words": [
+        {
+          "word": "god",
+          "start": 54.99,
+          "end": 55.39,
+          "confidence": 1.0
+        },
+        {
+          "word": "is",
+          "start": 55.39,
+          "end": 55.71,
+          "confidence": 1.0
+        },
+        {
+          "word": "with",
+          "start": 55.71,
+          "end": 55.87,
+          "confidence": 1.0
+        },
+        {
+          "word": "me",
+          "start": 55.87,
+          "end": 56.11,
+          "confidence": 0.9970703
+        }
+      ],
+      "received_at": "2026-10-02T16:18:50.842539",
+      "lag_ms": 0
+    },
+    {
+      "text": "god is with me god is with me",
+      "start": 56.87,
+      "duration": 3.630001,
+      "is_final": true,
+      "confidence": 1.0,
+      "speech_final": true,
+      "words": [
+        {
+          "word": "god",
+          "start": 56.95,
+          "end": 57.43,
+          "confidence": 0.9980469
+        },
+        {
+          "word": "is",
+          "start": 57.43,
+          "end": 57.67,
+          "confidence": 1.0
+        },
+        {
+          "word": "with",
+          "start": 57.67,
+          "end": 57.829998,
+          "confidence": 1.0
+        },
+        {
+          "word": "me",
+          "start": 57.829998,
+          "end": 58.39,
+          "confidence": 1.0
+        },
+        {
+          "word": "god",
+          "start": 58.949997,
+          "end": 59.27,
+          "confidence": 0.99609375
+        },
+        {
+          "word": "is",
+          "start": 59.27,
+          "end": 59.51,
+          "confidence": 1.0
+        },
+        {
+          "word": "with",
+          "start": 59.51,
+          "end": 59.75,
+          "confidence": 1.0
+        },
+        {
+          "word": "me",
+          "start": 59.75,
+          "end": 59.91,
+          "confidence": 0.99902344
+        }
+      ],
+      "received_at": "2026-10-02T16:18:54.554120",
+      "lag_ms": 0
+    },
+    {
+      "text": "the wisdom of god is at work in me the wisdom of god is at work in me",
+      "start": 60.5,
+      "duration": 4.6399994,
+      "is_final": true,
+      "confidence": 0.99902344,
+      "speech_final": false,
+      "words": [
+        {
+          "word": "the",
+          "start": 60.5,
+          "end": 60.9,
+          "confidence": 0.9921875
+        },
+        {
+          "word": "wisdom",
+          "start": 60.9,
+          "end": 61.22,
+          "confidence": 1.0
+        },
+        {
+          "word": "of",
+          "start": 61.22,
+          "end": 61.46,
+          "confidence": 1.0
+        },
+        {
+          "word": "god",
+          "start": 61.46,
+          "end": 61.62,
+          "confidence": 0.9902344
+        },
+        {
+          "word": "is",
+          "start": 61.62,
+          "end": 61.86,
+          "confidence": 0.9970703
+        },
+        {
+          "word": "at",
+          "start": 61.86,
+          "end": 62.02,
+          "confidence": 0.9980469
+        },
+        {
+          "word": "work",
+          "start": 62.02,
+          "end": 62.26,
+          "confidence": 1.0
+        },
+        {
+          "word": "in",
+          "start": 62.26,
+          "end": 62.42,
+          "confidence": 0.99902344
+        },
+        {
+          "word": "me",
+          "start": 62.42,
+          "end": 62.9,
+          "confidence": 0.9995117
+        },
+        {
+          "word": "the",
+          "start": 63.22,
+          "end": 63.46,
+          "confidence": 0.9902344
+        },
+        {
+          "word": "wisdom",
+          "start": 63.46,
+          "end": 63.86,
+          "confidence": 1.0
+        },
+        {
+          "word": "of",
+          "start": 63.86,
+          "end": 64.02,
+          "confidence": 1.0
+        },
+        {
+          "word": "god",
+          "start": 64.02,
+          "end": 64.18,
+          "confidence": 0.9970703
+        },
+        {
+          "word": "is",
+          "start": 64.18,
+          "end": 64.42,
+          "confidence": 0.99902344
+        },
+        {
+          "word": "at",
+          "start": 64.42,
+          "end": 64.58,
+          "confidence": 0.99902344
+        },
+        {
+          "word": "work",
+          "start": 64.58,
+          "end": 64.74,
+          "confidence": 1.0
+        },
+        {
+          "word": "in",
+          "start": 64.74,
+          "end": 64.9,
+          "confidence": 0.9980469
+        },
+        {
+          "word": "me",
+          "start": 64.9,
+          "end": 64.98,
+          "confidence": 0.9758301
+        }
+      ],
+      "received_at": "2026-10-02T16:18:59.467687",
+      "lag_ms": 177
+    },
+    {
+      "text": "the wisdom of god is at work in me",
+      "start": 65.14,
+      "duration": 3.0200043,
+      "is_final": true,
+      "confidence": 0.99902344,
+      "speech_final": false,
+      "words": [
+        {
+          "word": "the",
+          "start": 65.78,
+          "end": 66.1,
+          "confidence": 0.9980469
+        },
+        {
+          "word": "wisdom",
+          "start": 66.1,
+          "end": 66.42,
+          "confidence": 1.0
+        },
+        {
+          "word": "of",
+          "start": 66.42,
+          "end": 66.58,
+          "confidence": 1.0
+        },
+        {
+          "word": "god",
+          "start": 66.58,
+          "end": 66.82,
+          "confidence": 0.99902344
+        },
+        {
+          "word": "is",
+          "start": 66.82,
+          "end": 66.979996,
+          "confidence": 1.0
+        },
+        {
+          "word": "at",
+          "start": 66.979996,
+          "end": 67.14,
+          "confidence": 0.9980469
+        },
+        {
+          "word": "work",
+          "start": 67.14,
+          "end": 67.38,
+          "confidence": 1.0
+        },
+        {
+          "word": "in",
+          "start": 67.38,
+          "end": 67.54,
+          "confidence": 0.99902344
+        },
+        {
+          "word": "me",
+          "start": 67.54,
+          "end": 67.7,
+          "confidence": 0.98657227
+        }
+      ],
+      "received_at": "2026-10-02T16:19:04.169529",
+      "lag_ms": 1858
+    },
+    {
+      "text": "the wisdom of god is at work in me the wisdom of god is at work in me",
+      "start": 68.16,
+      "duration": 4.489998,
+      "is_final": true,
+      "confidence": 0.99902344,
+      "speech_final": false,
+      "words": [
+        {
+          "word": "the",
+          "start": 68.32001,
+          "end": 68.64001,
+          "confidence": 0.99902344
+        },
+        {
+          "word": "wisdom",
+          "start": 68.64001,
+          "end": 68.96001,
+          "confidence": 1.0
+        },
+        {
+          "word": "of",
+          "start": 68.96001,
+          "end": 69.12,
+          "confidence": 1.0
+        },
+        {
+          "word": "god",
+          "start": 69.12,
+          "end": 69.36,
+          "confidence": 0.99609375
+        },
+        {
+          "word": "is",
+          "start": 69.36,
+          "end": 69.520004,
+          "confidence": 0.99902344
+        },
+        {
+          "word": "at",
+          "start": 69.520004,
+          "end": 69.76,
+          "confidence": 0.9970703
+        },
+        {
+          "word": "work",
+          "start": 69.76,
+          "end": 69.920006,
+          "confidence": 1.0
+        },
+        {
+          "word": "in",
+          "start": 69.920006,
+          "end": 70.08,
+          "confidence": 0.99902344
+        },
+        {
+          "word": "me",
+          "start": 70.08,
+          "end": 70.560005,
+          "confidence": 0.99902344
+        },
+        {
+          "word": "the",
+          "start": 70.8,
+          "end": 71.12,
+          "confidence": 0.9970703
+        },
+        {
+          "word": "wisdom",
+          "start": 71.12,
+          "end": 71.44,
+          "confidence": 1.0
+        },
+        {
+          "word": "of",
+          "start": 71.44,
+          "end": 71.600006,
+          "confidence": 1.0
+        },
+        {
+          "word": "god",
+          "start": 71.600006,
+          "end": 71.76,
+          "confidence": 0.9970703
+        },
+        {
+          "word": "is",
+          "start": 71.76,
+          "end": 72.0,
+          "confidence": 0.9980469
+        },
+        {
+          "word": "at",
+          "start": 72.0,
+          "end": 72.16,
+          "confidence": 0.9970703
+        },
+        {
+          "word": "work",
+          "start": 72.16,
+          "end": 72.32001,
+          "confidence": 1.0
+        },
+        {
+          "word": "in",
+          "start": 72.32001,
+          "end": 72.4,
+          "confidence": 0.9970703
+        },
+        {
+          "word": "me",
+          "start": 72.4,
+          "end": 72.560005,
+          "confidence": 0.9086914
+        }
+      ],
+      "received_at": "2026-10-02T16:19:07.165913",
+      "lag_ms": 365
+    },
+    {
+      "text": "i'm rich in wisdom i'm rich in wisdom",
+      "start": 72.65,
+      "duration": 4.25,
+      "is_final": true,
+      "confidence": 0.9970703,
+      "speech_final": false,
+      "words": [
+        {
+          "word": "i'm",
+          "start": 72.65,
+          "end": 73.61,
+          "confidence": 0.9980469
+        },
+        {
+          "word": "rich",
+          "start": 73.61,
+          "end": 73.85,
+          "confidence": 0.79052734
+        },
+        {
+          "word": "in",
+          "start": 73.85,
+          "end": 74.01,
+          "confidence": 0.99121094
+        },
+        {
+          "word": "wisdom",
+          "start": 74.01,
+          "end": 74.73,
+          "confidence": 0.9904785
+        },
+        {
+          "word": "i'm",
+          "start": 75.130005,
+          "end": 75.37,
+          "confidence": 0.9995117
+        },
+        {
+          "word": "rich",
+          "start": 75.37,
+          "end": 75.61,
+          "confidence": 0.99902344
+        },
+        {
+          "word": "in",
+          "start": 75.61,
+          "end": 75.85,
+          "confidence": 0.9970703
+        },
+        {
+          "word": "wisdom",
+          "start": 75.85,
+          "end": 76.17,
+          "confidence": 0.9543457
+        }
+      ],
+      "received_at": "2026-10-02T16:19:11.640526",
+      "lag_ms": 589
+    },
+    {
+      "text": "i'm rich in wisdom i'm rich in wisdom i'm full of wisdom",
+      "start": 76.9,
+      "duration": 4.760002,
+      "is_final": true,
+      "confidence": 0.99902344,
+      "speech_final": false,
+      "words": [
+        {
+          "word": "i'm",
+          "start": 76.9,
+          "end": 77.22,
+          "confidence": 1.0
+        },
+        {
+          "word": "rich",
+          "start": 77.22,
+          "end": 77.46,
+          "confidence": 0.99902344
+        },
+        {
+          "word": "in",
+          "start": 77.46,
+          "end": 77.62,
+          "confidence": 0.9970703
+        },
+        {
+          "word": "wisdom",
+          "start": 77.62,
+          "end": 78.26,
+          "confidence": 0.9995117
+        },
+        {
+          "word": "i'm",
+          "start": 78.66,
+          "end": 78.98,
+          "confidence": 1.0
+        },
+        {
+          "word": "rich",
+          "start": 78.98,
+          "end": 79.22,
+          "confidence": 0.9980469
+        },
+        {
+          "word": "in",
+          "start": 79.22,
+          "end": 79.380005,
+          "confidence": 0.99902344
+        },
+        {
+          "word": "wisdom",
+          "start": 79.380005,
+          "end": 80.020004,
+          "confidence": 1.0
+        },
+        {
+          "word": "i'm",
+          "start": 80.340004,
+          "end": 80.66,
+          "confidence": 0.99902344
+        },
+        {
+          "word": "full",
+          "start": 80.66,
+          "end": 80.9,
+          "confidence": 0.9980469
+        },
+        {
+          "word": "of",
+          "start": 80.9,
+          "end": 81.14,
+          "confidence": 0.99121094
+        },
+        {
+          "word": "wisdom",
+          "start": 81.14,
+          "end": 81.46,
+          "confidence": 0.9880371
+        }
+      ],
+      "received_at": "2026-10-02T16:19:15.866014",
+      "lag_ms": 55
+    },
+    {
+      "text": "i'm full of wisdom",
+      "start": 81.66,
+      "duration": 3.0499954,
+      "is_final": true,
+      "confidence": 0.99902344,
+      "speech_final": false,
+      "words": [
+        {
+          "word": "i'm",
+          "start": 81.98,
+          "end": 82.380005,
+          "confidence": 0.99902344
+        },
+        {
+          "word": "full",
+          "start": 82.380005,
+          "end": 82.62,
+          "confidence": 1.0
+        },
+        {
+          "word": "of",
+          "start": 82.62,
+          "end": 82.86,
+          "confidence": 0.9951172
+        },
+        {
+          "word": "wisdom",
+          "start": 82.86,
+          "end": 83.26,
+          "confidence": 0.9970703
+        }
+      ],
+      "received_at": "2026-10-02T16:19:20.661367",
+      "lag_ms": 1800
+    },
+    {
+      "text": "the wisdom of god is at work in me",
+      "start": 84.71,
+      "duration": 3.3499985,
+      "is_final": true,
+      "confidence": 0.99902344,
+      "speech_final": true,
+      "words": [
+        {
+          "word": "the",
+          "start": 84.87,
+          "end": 85.19,
+          "confidence": 0.98535156
+        },
+        {
+          "word": "wisdom",
+          "start": 85.19,
+          "end": 85.75,
+          "confidence": 1.0
+        },
+        {
+          "word": "of",
+          "start": 85.75,
+          "end": 85.99,
+          "confidence": 1.0
+        },
+        {
+          "word": "god",
+          "start": 85.99,
+          "end": 86.229996,
+          "confidence": 0.9863281
+        },
+        {
+          "word": "is",
+          "start": 86.229996,
+          "end": 86.549995,
+          "confidence": 1.0
+        },
+        {
+          "word": "at",
+          "start": 86.549995,
+          "end": 86.71,
+          "confidence": 0.99902344
+        },
+        {
+          "word": "work",
+          "start": 86.71,
+          "end": 86.95,
+          "confidence": 0.99902344
+        },
+        {
+          "word": "in",
+          "start": 86.95,
+          "end": 87.19,
+          "confidence": 0.96435547
+        },
+        {
+          "word": "me",
+          "start": 87.19,
+          "end": 87.43,
+          "confidence": 0.91381836
+        }
+      ],
+      "received_at": "2026-10-02T16:19:22.032952",
+      "lag_ms": 0
+    },
+    {
+      "text": "the wisdom of god is at work in me",
+      "start": 88.06,
+      "duration": 3.350006,
+      "is_final": true,
+      "confidence": 1.0,
+      "speech_final": false,
+      "words": [
+        {
+          "word": "the",
+          "start": 88.38,
+          "end": 88.7,
+          "confidence": 0.99902344
+        },
+        {
+          "word": "wisdom",
+          "start": 88.7,
+          "end": 89.18,
+          "confidence": 1.0
+        },
+        {
+          "word": "of",
+          "start": 89.18,
+          "end": 89.34,
+          "confidence": 1.0
+        },
+        {
+          "word": "god",
+          "start": 89.34,
+          "end": 89.899994,
+          "confidence": 1.0
+        },
+        {
+          "word": "is",
+          "start": 89.899994,
+          "end": 90.22,
+          "confidence": 1.0
+        },
+        {
+          "word": "at",
+          "start": 90.22,
+          "end": 90.46,
+          "confidence": 0.99902344
+        },
+        {
+          "word": "work",
+          "start": 90.46,
+          "end": 90.7,
+          "confidence": 1.0
+        },
+        {
+          "word": "in",
+          "start": 90.7,
+          "end": 90.86,
+          "confidence": 0.99902344
+        },
+        {
+          "word": "me",
+          "start": 90.86,
+          "end": 91.1,
+          "confidence": 0.98583984
+        }
+      ],
+      "received_at": "2026-10-02T16:19:27.049340",
+      "lag_ms": 1488
+    },
+    {
+      "text": "the wisdom of god is at work in me",
+      "start": 91.41,
+      "duration": 3.2599945,
+      "is_final": true,
+      "confidence": 0.99902344,
+      "speech_final": false,
+      "words": [
+        {
+          "word": "the",
+          "start": 91.810005,
+          "end": 92.130005,
+          "confidence": 0.99902344
+        },
+        {
+          "word": "wisdom",
+          "start": 92.130005,
+          "end": 92.53001,
+          "confidence": 1.0
+        },
+        {
+          "word": "of",
+          "start": 92.53001,
+          "end": 92.69,
+          "confidence": 1.0
+        },
+        {
+          "word": "god",
+          "start": 92.69,
+          "end": 92.93,
+          "confidence": 0.99902344
+        },
+        {
+          "word": "is",
+          "start": 92.93,
+          "end": 93.170006,
+          "confidence": 1.0
+        },
+        {
+          "word": "at",
+          "start": 93.170006,
+          "end": 93.41,
+          "confidence": 0.9970703
+        },
+        {
+          "word": "work",
+          "start": 93.41,
+          "end": 93.65,
+          "confidence": 1.0
+        },
+        {
+          "word": "in",
+          "start": 93.65,
+          "end": 93.89001,
+          "confidence": 0.99902344
+        },
+        {
+          "word": "me",
+          "start": 93.89001,
+          "end": 94.05,
+          "confidence": 0.9741211
+        }
+      ],
+      "received_at": "2026-10-02T16:19:30.454030",
+      "lag_ms": 1633
+    },
+    {
+      "text": "god is with me god is with me",
+      "start": 94.67,
+      "duration": 3.6500015,
+      "is_final": true,
+      "confidence": 1.0,
+      "speech_final": false,
+      "words": [
+        {
+          "word": "god",
+          "start": 94.909996,
+          "end": 95.31,
+          "confidence": 1.0
+        },
+        {
+          "word": "is",
+          "start": 95.31,
+          "end": 95.549995,
+          "confidence": 1.0
+        },
+        {
+          "word": "with",
+          "start": 95.549995,
+          "end": 95.71,
+          "confidence": 1.0
+        },
+        {
+          "word": "me",
+          "start": 95.71,
+          "end": 96.27,
+          "confidence": 1.0
+        },
+        {
+          "word": "god",
+          "start": 96.909996,
+          "end": 97.229996,
+          "confidence": 1.0
+        },
+        {
+          "word": "is",
+          "start": 97.229996,
+          "end": 97.47,
+          "confidence": 1.0
+        },
+        {
+          "word": "with",
+          "start": 97.47,
+          "end": 97.71,
+          "confidence": 1.0
+        },
+        {
+          "word": "me",
+          "start": 97.71,
+          "end": 97.869995,
+          "confidence": 0.99853516
+        }
+      ],
+      "received_at": "2026-10-02T16:19:33.651541",
+      "lag_ms": 1180
+    },
+    {
+      "text": "god is for me god is for me",
+      "start": 98.32,
+      "duration": 3.290001,
+      "is_final": true,
+      "confidence": 1.0,
+      "speech_final": false,
+      "words": [
+        {
+          "word": "god",
+          "start": 98.56,
+          "end": 99.04,
+          "confidence": 1.0
+        },
+        {
+          "word": "is",
+          "start": 99.04,
+          "end": 99.28,
+          "confidence": 1.0
+        },
+        {
+          "word": "for",
+          "start": 99.28,
+          "end": 99.44,
+          "confidence": 1.0
+        },
+        {
+          "word": "me",
+          "start": 99.44,
+          "end": 100.0,
+          "confidence": 1.0
+        },
+        {
+          "word": "god",
+          "start": 100.4,
+          "end": 100.8,
+          "confidence": 0.99902344
+        },
+        {
+          "word": "is",
+          "start": 100.8,
+          "end": 100.96,
+          "confidence": 1.0
+        },
+        {
+          "word": "for",
+          "start": 100.96,
+          "end": 101.12,
+          "confidence": 1.0
+        },
+        {
+          "word": "me",
+          "start": 101.12,
+          "end": 101.28,
+          "confidence": 0.99853516
+        }
+      ],
+      "received_at": "2026-10-02T16:19:37.394144",
+      "lag_ms": 1633
+    },
+    {
+      "text": "i'm full of wisdom the wisdom of god is at work in me",
+      "start": 101.61,
+      "duration": 4.5199966,
+      "is_final": true,
+      "confidence": 0.9980469,
+      "speech_final": false,
+      "words": [
+        {
+          "word": "i'm",
+          "start": 102.01,
+          "end": 102.41,
+          "confidence": 0.99560547
+        },
+        {
+          "word": "full",
+          "start": 102.41,
+          "end": 102.65,
+          "confidence": 1.0
+        },
+        {
+          "word": "of",
+          "start": 102.65,
+          "end": 102.89,
+          "confidence": 1.0
+        },
+        {
+          "word": "wisdom",
+          "start": 102.89,
+          "end": 103.61,
+          "confidence": 0.9980469
+        },
+        {
+          "word": "the",
+          "start": 104.01,
+          "end": 104.25,
+          "confidence": 0.99902344
+        },
+        {
+          "word": "wisdom",
+          "start": 104.25,
+          "end": 104.65,
+          "confidence": 1.0
+        },
+        {
+          "word": "of",
+          "start": 104.65,
+          "end": 104.81,
+          "confidence": 1.0
+        },
+        {
+          "word": "god",
+          "start": 104.81,
+          "end": 105.05,
+          "confidence": 0.96972656
+        },
+        {
+          "word": "is",
+          "start": 105.05,
+          "end": 105.29,
+          "confidence": 0.9970703
+        },
+        {
+          "word": "at",
+          "start": 105.29,
+          "end": 105.45,
+          "confidence": 0.9941406
+        },
+        {
+          "word": "work",
+          "start": 105.45,
+          "end": 105.69,
+          "confidence": 0.9980469
+        },
+        {
+          "word": "in",
+          "start": 105.69,
+          "end": 105.85,
+          "confidence": 0.99902344
+        },
+        {
+          "word": "me",
+          "start": 105.85,
+          "end": 106.01,
+          "confidence": 0.953125
+        }
+      ],
+      "received_at": "2026-10-02T16:19:40.674829",
+      "lag_ms": 394
+    },
+    {
+      "text": "god is with me god is with me",
+      "start": 106.13,
+      "duration": 3.9800034,
+      "is_final": true,
+      "confidence": 1.0,
+      "speech_final": false,
+      "words": [
+        {
+          "word": "god",
+          "start": 106.689995,
+          "end": 107.09,
+          "confidence": 1.0
+        },
+        {
+          "word": "is",
+          "start": 107.09,
+          "end": 107.329994,
+          "confidence": 1.0
+        },
+        {
+          "word": "with",
+          "start": 107.329994,
+          "end": 107.57,
+          "confidence": 1.0
+        },
+        {
+          "word": "me",
+          "start": 107.57,
+          "end": 108.049995,
+          "confidence": 1.0
+        },
+        {
+          "word": "god",
+          "start": 108.689995,
+          "end": 109.009995,
+          "confidence": 0.99902344
+        },
+        {
+          "word": "is",
+          "start": 109.009995,
+          "end": 109.329994,
+          "confidence": 1.0
+        },
+        {
+          "word": "with",
+          "start": 109.329994,
+          "end": 109.49,
+          "confidence": 1.0
+        },
+        {
+          "word": "me",
+          "start": 109.49,
+          "end": 109.729996,
+          "confidence": 0.9975586
+        }
+      ],
+      "received_at": "2026-10-02T16:19:45.178897",
+      "lag_ms": 918
+    },
+    {
+      "text": "god is with me god is with me",
+      "start": 110.11,
+      "duration": 3.5899963,
+      "is_final": true,
+      "confidence": 1.0,
+      "speech_final": false,
+      "words": [
+        {
+          "word": "god",
+          "start": 110.43,
+          "end": 110.83,
+          "confidence": 0.99902344
+        },
+        {
+          "word": "is",
+          "start": 110.83,
+          "end": 111.15,
+          "confidence": 1.0
+        },
+        {
+          "word": "with",
+          "start": 111.15,
+          "end": 111.31,
+          "confidence": 1.0
+        },
+        {
+          "word": "me",
+          "start": 111.31,
+          "end": 111.87,
+          "confidence": 1.0
+        },
+        {
+          "word": "god",
+          "start": 112.590004,
+          "end": 112.83,
+          "confidence": 0.9951172
+        },
+        {
+          "word": "is",
+          "start": 112.83,
+          "end": 113.15,
+          "confidence": 1.0
+        },
+        {
+          "word": "with",
+          "start": 113.15,
+          "end": 113.31,
+          "confidence": 1.0
+        },
+        {
+          "word": "me",
+          "start": 113.31,
+          "end": 113.47,
+          "confidence": 0.99853516
+        }
+      ],
+      "received_at": "2026-10-02T16:19:49.309401",
+      "lag_ms": 1458
+    },
+    {
+      "text": "god is with me god is with me",
+      "start": 113.7,
+      "duration": 4.010002,
+      "is_final": true,
+      "confidence": 1.0,
+      "speech_final": false,
+      "words": [
+        {
+          "word": "god",
+          "start": 114.34,
+          "end": 114.82,
+          "confidence": 0.9970703
+        },
+        {
+          "word": "is",
+          "start": 114.82,
+          "end": 115.06,
+          "confidence": 1.0
+        },
+        {
+          "word": "with",
+          "start": 115.06,
+          "end": 115.299995,
+          "confidence": 1.0
+        },
+        {
+          "word": "me",
+          "start": 115.299995,
+          "end": 115.85999,
+          "confidence": 1.0
+        },
+        {
+          "word": "god",
+          "start": 116.259995,
+          "end": 116.659996,
+          "confidence": 0.9980469
+        },
+        {
+          "word": "is",
+          "start": 116.659996,
+          "end": 116.899994,
+          "confidence": 1.0
+        },
+        {
+          "word": "with",
+          "start": 116.899994,
+          "end": 117.06,
+          "confidence": 1.0
+        },
+        {
+          "word": "me",
+          "start": 117.06,
+          "end": 117.21999,
+          "confidence": 1.0
+        }
+      ],
+      "received_at": "2026-10-02T16:19:52.671057",
+      "lag_ms": 810
+    },
+    {
+      "text": "god is with me god is is with me",
+      "start": 117.71,
+      "duration": 3.8899994,
+      "is_final": true,
+      "confidence": 0.9980469,
+      "speech_final": false,
+      "words": [
+        {
+          "word": "god",
+          "start": 118.19,
+          "end": 118.59,
+          "confidence": 0.99609375
+        },
+        {
+          "word": "is",
+          "start": 118.59,
+          "end": 118.909996,
+          "confidence": 0.9980469
+        },
+        {
+          "word": "with",
+          "start": 118.909996,
+          "end": 119.15,
+          "confidence": 1.0
+        },
+        {
+          "word": "me",
+          "start": 119.15,
+          "end": 119.63,
+          "confidence": 1.0
+        },
+        {
+          "word": "god",
+          "start": 120.11,
+          "end": 120.35,
+          "confidence": 0.9902344
+        },
+        {
+          "word": "is",
+          "start": 120.35,
+          "end": 120.59,
+          "confidence": 0.9951172
+        },
+        {
+          "word": "is",
+          "start": 120.43,
+          "end": 120.67,
+          "confidence": 0.9941406
+        },
+        {
+          "word": "with",
+          "start": 120.67,
+          "end": 120.83,
+          "confidence": 0.99902344
+        },
+        {
+          "word": "me",
+          "start": 120.83,
+          "end": 120.99,
+          "confidence": 0.9980469
+        }
+      ],
+      "received_at": "2026-10-02T16:19:56.747212",
+      "lag_ms": 996
+    },
+    {
+      "text": "god is with me the wisdom of god is at work in me",
+      "start": 121.6,
+      "duration": 4.8499985,
+      "is_final": true,
+      "confidence": 0.99902344,
+      "speech_final": false,
+      "words": [
+        {
+          "word": "god",
+          "start": 121.84,
+          "end": 122.32,
+          "confidence": 0.99902344
+        },
+        {
+          "word": "is",
+          "start": 122.32,
+          "end": 122.56,
+          "confidence": 1.0
+        },
+        {
+          "word": "with",
+          "start": 122.56,
+          "end": 122.72,
+          "confidence": 1.0
+        },
+        {
+          "word": "me",
+          "start": 122.72,
+          "end": 123.2,
+          "confidence": 0.9995117
+        },
+        {
+          "word": "the",
+          "start": 123.759995,
+          "end": 124.0,
+          "confidence": 0.9980469
+        },
+        {
+          "word": "wisdom",
+          "start": 124.0,
+          "end": 124.4,
+          "confidence": 1.0
+        },
+        {
+          "word": "of",
+          "start": 124.4,
+          "end": 124.56,
+          "confidence": 1.0
+        },
+        {
+          "word": "god",
+          "start": 124.56,
+          "end": 124.799995,
+          "confidence": 0.97998047
+        },
+        {
+          "word": "is",
+          "start": 124.799995,
+          "end": 124.96,
+          "confidence": 0.9980469
+        },
+        {
+          "word": "at",
+          "start": 124.96,
+          "end": 125.2,
+          "confidence": 0.99609375
+        },
+        {
+          "word": "work",
+          "start": 125.2,
+          "end": 125.439995,
+          "confidence": 0.9980469
+        },
+        {
+          "word": "in",
+          "start": 125.439995,
+          "end": 125.6,
+          "confidence": 0.99902344
+        },
+        {
+          "word": "me",
+          "start": 125.6,
+          "end": 125.759995,
+          "confidence": 0.9658203
+        }
+      ],
+      "received_at": "2026-10-02T16:20:00.666582",
+      "lag_ms": 65
+    },
+    {
+      "text": "god is with me god is for me",
+      "start": 126.45,
+      "duration": 3.7100067,
+      "is_final": true,
+      "confidence": 0.99853516,
+      "speech_final": false,
+      "words": [
+        {
+          "word": "god",
+          "start": 126.61,
+          "end": 127.009995,
+          "confidence": 1.0
+        },
+        {
+          "word": "is",
+          "start": 127.009995,
+          "end": 127.25,
+          "confidence": 1.0
+        },
+        {
+          "word": "with",
+          "start": 127.25,
+          "end": 127.409996,
+          "confidence": 1.0
+        },
+        {
+          "word": "me",
+          "start": 127.409996,
+          "end": 127.89,
+          "confidence": 0.99853516
+        },
+        {
+          "word": "god",
+          "start": 128.37,
+          "end": 128.93,
+          "confidence": 0.98828125
+        },
+        {
+          "word": "is",
+          "start": 128.93,
+          "end": 129.25,
+          "confidence": 0.99609375
+        },
+        {
+          "word": "for",
+          "start": 129.25,
+          "end": 129.56999,
+          "confidence": 0.9970703
+        },
+        {
+          "word": "me",
+          "start": 129.56999,
+          "end": 129.73,
+          "confidence": 0.98217773
+        }
+      ],
+      "received_at": "2026-10-02T16:20:05.437153",
+      "lag_ms": 1126
+    },
+    {
+      "text": "god is for me god is for me",
+      "start": 130.16,
+      "duration": 3.7099915,
+      "is_final": true,
+      "confidence": 1.0,
+      "speech_final": false,
+      "words": [
+        {
+          "word": "god",
+          "start": 130.48001,
+          "end": 130.88,
+          "confidence": 1.0
+        },
+        {
+          "word": "is",
+          "start": 130.88,
+          "end": 131.2,
+          "confidence": 0.9980469
+        },
+        {
+          "word": "for",
+          "start": 131.2,
+          "end": 131.44,
+          "confidence": 1.0
+        },
+        {
+          "word": "me",
+          "start": 131.44,
+          "end": 131.92001,
+          "confidence": 1.0
+        },
+        {
+          "word": "god",
+          "start": 132.48001,
+          "end": 132.8,
+          "confidence": 0.99902344
+        },
+        {
+          "word": "is",
+          "start": 132.8,
+          "end": 133.04001,
+          "confidence": 1.0
+        },
+        {
+          "word": "for",
+          "start": 133.04001,
+          "end": 133.2,
+          "confidence": 1.0
+        },
+        {
+          "word": "me",
+          "start": 133.2,
+          "end": 133.44,
+          "confidence": 0.99853516
+        }
+      ],
+      "received_at": "2026-10-02T16:20:09.153800",
+      "lag_ms": 1133
+    },
+    {
+      "text": "god is for me i'm rich in wisdom",
+      "start": 133.87,
+      "duration": 3.7400055,
+      "is_final": true,
+      "confidence": 0.9995117,
+      "speech_final": false,
+      "words": [
+        {
+          "word": "god",
+          "start": 134.19,
+          "end": 134.59,
+          "confidence": 0.99902344
+        },
+        {
+          "word": "is",
+          "start": 134.59,
+          "end": 134.90999,
+          "confidence": 1.0
+        },
+        {
+          "word": "for",
+          "start": 134.90999,
+          "end": 135.06999,
+          "confidence": 1.0
+        },
+        {
+          "word": "me",
+          "start": 135.06999,
+          "end": 135.55,
+          "confidence": 1.0
+        },
+        {
+          "word": "i'm",
+          "start": 135.95,
+          "end": 136.26999,
+          "confidence": 0.9995117
+        },
+        {
+          "word": "rich",
+          "start": 136.26999,
+          "end": 136.59,
+          "confidence": 0.9316406
+        },
+        {
+          "word": "in",
+          "start": 136.59,
+          "end": 136.75,
+          "confidence": 0.99902344
+        },
+        {
+          "word": "wisdom",
+          "start": 136.75,
+          "end": 137.15,
+          "confidence": 0.96972656
+        }
+      ],
+      "received_at": "2026-10-02T16:20:12.849151",
+      "lag_ms": 1088
+    },
+    {
+      "text": "i'm full of wisdom i'm rich in wisdom",
+      "start": 137.61,
+      "duration": 3.649994,
+      "is_final": true,
+      "confidence": 0.99902344,
+      "speech_final": false,
+      "words": [
+        {
+          "word": "i'm",
+          "start": 137.85,
+          "end": 138.25,
+          "confidence": 0.99902344
+        },
+        {
+          "word": "full",
+          "start": 138.25,
+          "end": 138.57,
+          "confidence": 0.9980469
+        },
+        {
+          "word": "of",
+          "start": 138.57,
+          "end": 138.81,
+          "confidence": 0.9892578
+        },
+        {
+          "word": "wisdom",
+          "start": 138.81,
+          "end": 139.53001,
+          "confidence": 1.0
+        },
+        {
+          "word": "i'm",
+          "start": 139.85,
+          "end": 140.17,
+          "confidence": 1.0
+        },
+        {
+          "word": "rich",
+          "start": 140.17,
+          "end": 140.49,
+          "confidence": 0.9970703
+        },
+        {
+          "word": "in",
+          "start": 140.49,
+          "end": 140.65,
+          "confidence": 1.0
+        },
+        {
+          "word": "wisdom",
+          "start": 140.65,
+          "end": 140.97,
+          "confidence": 0.9770508
+        }
+      ],
+      "received_at": "2026-10-02T16:20:16.646573",
+      "lag_ms": 1235
+    },
+    {
+      "text": "i'm full of wisdom i'm rich in wisdom i'm",
+      "start": 141.26,
+      "duration": 4.970001,
+      "is_final": true,
+      "confidence": 0.99902344,
+      "speech_final": false,
+      "words": [
+        {
+          "word": "i'm",
+          "start": 141.65999,
+          "end": 142.06,
+          "confidence": 0.99902344
+        },
+        {
+          "word": "full",
+          "start": 142.06,
+          "end": 142.37999,
+          "confidence": 0.9892578
+        },
+        {
+          "word": "of",
+          "start": 142.37999,
+          "end": 142.62,
+          "confidence": 0.99902344
+        },
+        {
+          "word": "wisdom",
+          "start": 142.62,
+          "end": 143.26,
+          "confidence": 1.0
+        },
+        {
+          "word": "i'm",
+          "start": 143.73999,
+          "end": 144.06,
+          "confidence": 0.9995117
+        },
+        {
+          "word": "rich",
+          "start": 144.06,
+          "end": 144.29999,
+          "confidence": 0.98828125
+        },
+        {
+          "word": "in",
+          "start": 144.29999,
+          "end": 144.45999,
+          "confidence": 1.0
+        },
+        {
+          "word": "wisdom",
+          "start": 144.45999,
+          "end": 145.18001,
+          "confidence": 0.9995117
+        },
+        {
+          "word": "i'm",
+          "start": 145.65999,
+          "end": 145.98,
+          "confidence": 0.9980469
+        }
+      ],
+      "received_at": "2026-10-02T16:20:20.289371",
+      "lag_ms": 0
+    },
+    {
+      "text": "of wisdom",
+      "start": 146.23,
+      "duration": 1.230011,
+      "is_final": true,
+      "confidence": 0.9970703,
+      "speech_final": true,
+      "words": [
+        {
+          "word": "of",
+          "start": 146.39,
+          "end": 146.62999,
+          "confidence": 0.9970703
+        },
+        {
+          "word": "wisdom",
+          "start": 146.62999,
+          "end": 147.03,
+          "confidence": 0.99365234
+        }
+      ],
+      "received_at": "2026-10-02T16:20:21.447944",
+      "lag_ms": 0
+    },
+    {
+      "text": "god is with me god is for me",
+      "start": 147.46,
+      "duration": 3.4399872,
+      "is_final": true,
+      "confidence": 0.99902344,
+      "speech_final": false,
+      "words": [
+        {
+          "word": "god",
+          "start": 147.70001,
+          "end": 148.1,
+          "confidence": 1.0
+        },
+        {
+          "word": "is",
+          "start": 148.1,
+          "end": 148.34001,
+          "confidence": 0.9970703
+        },
+        {
+          "word": "with",
+          "start": 148.34001,
+          "end": 148.58,
+          "confidence": 0.99609375
+        },
+        {
+          "word": "me",
+          "start": 148.58,
+          "end": 149.14001,
+          "confidence": 0.99853516
+        },
+        {
+          "word": "god",
+          "start": 149.70001,
+          "end": 150.1,
+          "confidence": 0.99902344
+        },
+        {
+          "word": "is",
+          "start": 150.1,
+          "end": 150.26001,
+          "confidence": 1.0
+        },
+        {
+          "word": "for",
+          "start": 150.26001,
+          "end": 150.5,
+          "confidence": 1.0
+        },
+        {
+          "word": "me",
+          "start": 150.5,
+          "end": 150.66,
+          "confidence": 0.9807129
+        }
+      ],
+      "received_at": "2026-10-02T16:20:26.445743",
+      "lag_ms": 1395
+    },
+    {
+      "text": "god is with me god is for me",
+      "start": 150.9,
+      "duration": 3.7700043,
+      "is_final": true,
+      "confidence": 0.99902344,
+      "speech_final": false,
+      "words": [
+        {
+          "word": "god",
+          "start": 151.45999,
+          "end": 151.93999,
+          "confidence": 0.99902344
+        },
+        {
+          "word": "is",
+          "start": 151.93999,
+          "end": 152.18,
+          "confidence": 1.0
+        },
+        {
+          "word": "with",
+          "start": 152.18,
+          "end": 152.42,
+          "confidence": 0.99121094
+        },
+        {
+          "word": "me",
+          "start": 152.42,
+          "end": 152.98,
+          "confidence": 1.0
+        },
+        {
+          "word": "god",
+          "start": 153.45999,
+          "end": 153.86,
+          "confidence": 0.99902344
+        },
+        {
+          "word": "is",
+          "start": 153.86,
+          "end": 154.09999,
+          "confidence": 1.0
+        },
+        {
+          "word": "for",
+          "start": 154.09999,
+          "end": 154.26,
+          "confidence": 0.9970703
+        },
+        {
+          "word": "me",
+          "start": 154.26,
+          "end": 154.42,
+          "confidence": 0.9980469
+        }
+      ],
+      "received_at": "2026-10-02T16:20:29.876560",
+      "lag_ms": 1055
+    },
+    {
+      "text": "i'm full of wisdom i'm rich in wisdom",
+      "start": 154.67,
+      "duration": 4.2599945,
+      "is_final": true,
+      "confidence": 0.99902344,
+      "speech_final": true,
+      "words": [
+        {
+          "word": "i'm",
+          "start": 155.06999,
+          "end": 155.47,
+          "confidence": 0.99902344
+        },
+        {
+          "word": "full",
+          "start": 155.47,
+          "end": 155.79,
+          "confidence": 1.0
+        },
+        {
+          "word": "of",
+          "start": 155.79,
+          "end": 155.95,
+          "confidence": 1.0
+        },
+        {
+          "word": "wisdom",
+          "start": 155.95,
+          "end": 156.67,
+          "confidence": 0.99609375
+        },
+        {
+          "word": "i'm",
+          "start": 157.15,
+          "end": 157.39,
+          "confidence": 0.9975586
+        },
+        {
+          "word": "rich",
+          "start": 157.39,
+          "end": 157.70999,
+          "confidence": 0.77001953
+        },
+        {
+          "word": "in",
+          "start": 157.70999,
+          "end": 157.87,
+          "confidence": 1.0
+        },
+        {
+          "word": "wisdom",
+          "start": 157.87,
+          "end": 158.34999,
+          "confidence": 0.9343262
+        }
+      ],
+      "received_at": "2026-10-02T16:20:32.955303",
+      "lag_ms": 0
+    },
+    {
+      "text": "the wisdom of god is at work in me god is with me",
+      "start": 158.93,
+      "duration": 4.3700104,
+      "is_final": true,
+      "confidence": 0.99902344,
+      "speech_final": false,
+      "words": [
+        {
+          "word": "the",
+          "start": 159.01,
+          "end": 159.32999,
+          "confidence": 0.99902344
+        },
+        {
+          "word": "wisdom",
+          "start": 159.32999,
+          "end": 159.73,
+          "confidence": 1.0
+        },
+        {
+          "word": "of",
+          "start": 159.73,
+          "end": 159.89,
+          "confidence": 1.0
+        },
+        {
+          "word": "god",
+          "start": 159.89,
+          "end": 160.12999,
+          "confidence": 0.9838867
+        },
+        {
+          "word": "is",
+          "start": 160.12999,
+          "end": 160.37,
+          "confidence": 0.99902344
+        },
+        {
+          "word": "at",
+          "start": 160.37,
+          "end": 160.53,
+          "confidence": 0.9941406
+        },
+        {
+          "word": "work",
+          "start": 160.53,
+          "end": 160.76999,
+          "confidence": 0.9970703
+        },
+        {
+          "word": "in",
+          "start": 160.76999,
+          "end": 160.93,
+          "confidence": 0.99902344
+        },
+        {
+          "word": "me",
+          "start": 160.93,
+          "end": 161.49,
+          "confidence": 0.99902344
+        },
+        {
+          "word": "god",
+          "start": 161.81,
+          "end": 162.12999,
+          "confidence": 0.99902344
+        },
+        {
+          "word": "is",
+          "start": 162.12999,
+          "end": 162.45,
+          "confidence": 0.99902344
+        },
+        {
+          "word": "with",
+          "start": 162.45,
+          "end": 162.68999,
+          "confidence": 1.0
+        },
+        {
+          "word": "me",
+          "start": 162.68999,
+          "end": 162.84999,
+          "confidence": 0.9765625
+        }
+      ],
+      "received_at": "2026-10-02T16:20:37.971563",
+      "lag_ms": 520
+    },
+    {
+      "text": "god is for me",
+      "start": 163.3,
+      "duration": 4.25,
+      "is_final": true,
+      "confidence": 1.0,
+      "speech_final": false,
+      "words": [
+        {
+          "word": "god",
+          "start": 163.54001,
+          "end": 164.1,
+          "confidence": 0.9970703
+        },
+        {
+          "word": "is",
+          "start": 164.1,
+          "end": 164.34,
+          "confidence": 1.0
+        },
+        {
+          "word": "for",
+          "start": 164.34,
+          "end": 164.5,
+          "confidence": 1.0
+        },
+        {
+          "word": "me",
+          "start": 164.5,
+          "end": 164.74,
+          "confidence": 0.9941406
+        }
+      ],
+      "received_at": "2026-10-02T16:20:42.255242",
+      "lag_ms": 554
+    },
+    {
+      "text": "i'm full of wisdom",
+      "start": 167.55,
+      "duration": 2.3099976,
+      "is_final": true,
+      "confidence": 1.0,
+      "speech_final": true,
+      "words": [
+        {
+          "word": "i'm",
+          "start": 168.03,
+          "end": 168.43001,
+          "confidence": 0.9975586
+        },
+        {
+          "word": "full",
+          "start": 168.43001,
+          "end": 168.67,
+          "confidence": 1.0
+        },
+        {
+          "word": "of",
+          "start": 168.67,
+          "end": 168.91,
+          "confidence": 1.0
+        },
+        {
+          "word": "wisdom",
+          "start": 168.91,
+          "end": 169.31,
+          "confidence": 0.8952637
+        }
+      ],
+      "received_at": "2026-10-02T16:20:43.850713",
+      "lag_ms": 0
+    },
+    {
+      "text": "god is for me god is with me",
+      "start": 169.86,
+      "duration": 3.5599976,
+      "is_final": true,
+      "confidence": 0.9980469,
+      "speech_final": false,
+      "words": [
+        {
+          "word": "god",
+          "start": 170.18001,
+          "end": 170.5,
+          "confidence": 0.9941406
+        },
+        {
+          "word": "is",
+          "start": 170.5,
+          "end": 170.74,
+          "confidence": 0.9941406
+        },
+        {
+          "word": "for",
+          "start": 170.74,
+          "end": 170.9,
+          "confidence": 0.99902344
+        },
+        {
+          "word": "me",
+          "start": 170.9,
+          "end": 171.46,
+          "confidence": 0.9975586
+        },
+        {
+          "word": "god",
+          "start": 171.94,
+          "end": 172.26,
+          "confidence": 0.99902344
+        },
+        {
+          "word": "is",
+          "start": 172.26,
+          "end": 172.5,
+          "confidence": 0.9980469
+        },
+        {
+          "word": "with",
+          "start": 172.5,
+          "end": 172.74,
+          "confidence": 1.0
+        },
+        {
+          "word": "me",
+          "start": 172.74,
+          "end": 172.9,
+          "confidence": 0.9880371
+        }
+      ],
+      "received_at": "2026-10-02T16:20:48.842422",
+      "lag_ms": 1271
+    },
+    {
+      "text": "i'm rich in wisdom the wisdom of god is at work in me",
+      "start": 173.42,
+      "duration": 4.580002,
+      "is_final": true,
+      "confidence": 0.99902344,
+      "speech_final": false,
+      "words": [
+        {
+          "word": "i'm",
+          "start": 173.42,
+          "end": 174.06,
+          "confidence": 0.9995117
+        },
+        {
+          "word": "rich",
+          "start": 174.06,
+          "end": 174.3,
+          "confidence": 0.9770508
+        },
+        {
+          "word": "in",
+          "start": 174.3,
+          "end": 174.54,
+          "confidence": 0.9970703
+        },
+        {
+          "word": "wisdom",
+          "start": 174.54,
+          "end": 175.18001,
+          "confidence": 0.9995117
+        },
+        {
+          "word": "the",
+          "start": 175.66,
+          "end": 175.81999,
+          "confidence": 1.0
+        },
+        {
+          "word": "wisdom",
+          "start": 175.81999,
+          "end": 176.22,
+          "confidence": 1.0
+        },
+        {
+          "word": "of",
+          "start": 176.22,
+          "end": 176.38,
+          "confidence": 1.0
+        },
+        {
+          "word": "god",
+          "start": 176.38,
+          "end": 176.62,
+          "confidence": 0.9560547
+        },
+        {
+          "word": "is",
+          "start": 176.62,
+          "end": 176.78,
+          "confidence": 1.0
+        },
+        {
+          "word": "at",
+          "start": 176.78,
+          "end": 177.02,
+          "confidence": 0.9970703
+        },
+        {
+          "word": "work",
+          "start": 177.02,
+          "end": 177.18,
+          "confidence": 0.99902344
+        },
+        {
+          "word": "in",
+          "start": 177.18,
+          "end": 177.42,
+          "confidence": 0.99902344
+        },
+        {
+          "word": "me",
+          "start": 177.42,
+          "end": 177.58,
+          "confidence": 0.9770508
+        }
+      ],
+      "received_at": "2026-10-02T16:20:52.492016",
+      "lag_ms": 341
+    },
+    {
+      "text": "the wisdom of god is at work in me",
+      "start": 178.0,
+      "duration": 3.1699982,
+      "is_final": true,
+      "confidence": 1.0,
+      "speech_final": false,
+      "words": [
+        {
+          "word": "the",
+          "start": 178.32,
+          "end": 178.64,
+          "confidence": 1.0
+        },
+        {
+          "word": "wisdom",
+          "start": 178.64,
+          "end": 179.12,
+          "confidence": 1.0
+        },
+        {
+          "word": "of",
+          "start": 179.12,
+          "end": 179.36,
+          "confidence": 1.0
+        },
+        {
+          "word": "god",
+          "start": 179.36,
+          "end": 179.6,
+          "confidence": 0.9980469
+        },
+        {
+          "word": "is",
+          "start": 179.6,
+          "end": 179.84,
+          "confidence": 1.0
+        },
+        {
+          "word": "at",
+          "start": 179.84,
+          "end": 180.08,
+          "confidence": 0.9980469
+        },
+        {
+          "word": "work",
+          "start": 180.08,
+          "end": 180.32,
+          "confidence": 1.0
+        },
+        {
+          "word": "in",
+          "start": 180.32,
+          "end": 180.56,
+          "confidence": 0.99902344
+        },
+        {
+          "word": "me",
+          "start": 180.56,
+          "end": 180.72,
+          "confidence": 0.98339844
+        }
+      ],
+      "received_at": "2026-10-02T16:20:56.934360",
+      "lag_ms": 1613
+    },
+    {
+      "text": "the wisdom of god is at work in me",
+      "start": 181.17,
+      "duration": 3.5,
+      "is_final": true,
+      "confidence": 1.0,
+      "speech_final": false,
+      "words": [
+        {
+          "word": "the",
+          "start": 181.65,
+          "end": 181.97,
+          "confidence": 0.9941406
+        },
+        {
+          "word": "wisdom",
+          "start": 181.97,
+          "end": 182.53,
+          "confidence": 1.0
+        },
+        {
+          "word": "of",
+          "start": 182.53,
+          "end": 182.69,
+          "confidence": 1.0
+        },
+        {
+          "word": "god",
+          "start": 182.69,
+          "end": 183.01,
+          "confidence": 1.0
+        },
+        {
+          "word": "is",
+          "start": 183.01,
+          "end": 183.33,
+          "confidence": 1.0
+        },
+        {
+          "word": "at",
+          "start": 183.33,
+          "end": 183.49,
+          "confidence": 0.99902344
+        },
+        {
+          "word": "work",
+          "start": 183.49,
+          "end": 183.73,
+          "confidence": 1.0
+        },
+        {
+          "word": "in",
+          "start": 183.73,
+          "end": 183.97,
+          "confidence": 0.99902344
+        },
+        {
+          "word": "me",
+          "start": 183.97,
+          "end": 184.13,
+          "confidence": 0.9941406
+        }
+      ],
+      "received_at": "2026-10-02T16:21:00.169802",
+      "lag_ms": 1349
+    },
+    {
+      "text": "i'm rich in wisdom",
+      "start": 184.67,
+      "duration": 2.880005,
+      "is_final": true,
+      "confidence": 0.99902344,
+      "speech_final": true,
+      "words": [
+        {
+          "word": "i'm",
+          "start": 185.06999,
+          "end": 185.47,
+          "confidence": 0.99902344
+        },
+        {
+          "word": "rich",
+          "start": 185.47,
+          "end": 185.79,
+          "confidence": 0.87597656
+        },
+        {
+          "word": "in",
+          "start": 185.79,
+          "end": 185.95,
+          "confidence": 0.99902344
+        },
+        {
+          "word": "wisdom",
+          "start": 185.95,
+          "end": 186.43,
+          "confidence": 0.9460449
+        }
+      ],
+      "received_at": "2026-10-02T16:21:01.529018",
+      "lag_ms": 0
+    },
+    {
+      "text": "i declare that i'm rich in wisdom",
+      "start": 187.55,
+      "duration": 2.8399963,
+      "is_final": true,
+      "confidence": 0.99902344,
+      "speech_final": true,
+      "words": [
+        {
+          "word": "i",
+          "start": 187.79001,
+          "end": 188.03,
+          "confidence": 1.0
+        },
+        {
+          "word": "declare",
+          "start": 188.03,
+          "end": 188.67,
+          "confidence": 0.9970703
+        },
+        {
+          "word": "that",
+          "start": 188.67,
+          "end": 188.91,
+          "confidence": 1.0
+        },
+        {
+          "word": "i'm",
+          "start": 188.91,
+          "end": 189.07,
+          "confidence": 1.0
+        },
+        {
+          "word": "rich",
+          "start": 189.07,
+          "end": 189.39,
+          "confidence": 0.99609375
+        },
+        {
+          "word": "in",
+          "start": 189.39,
+          "end": 189.55,
+          "confidence": 0.99902344
+        },
+        {
+          "word": "wisdom",
+          "start": 189.55,
+          "end": 189.95,
+          "confidence": 0.9838867
+        }
+      ],
+      "received_at": "2026-10-02T16:21:04.365434",
+      "lag_ms": 0
+    },
+    {
+      "text": "i declare i'm rich in wisdom",
+      "start": 190.39,
+      "duration": 3.8300018,
+      "is_final": true,
+      "confidence": 0.99902344,
+      "speech_final": false,
+      "words": [
+        {
+          "word": "i",
+          "start": 191.11,
+          "end": 191.59,
+          "confidence": 1.0
+        },
+        {
+          "word": "declare",
+          "start": 191.59,
+          "end": 192.39,
+          "confidence": 1.0
+        },
+        {
+          "word": "i'm",
+          "start": 192.39,
+          "end": 192.79,
+          "confidence": 0.9975586
+        },
+        {
+          "word": "rich",
+          "start": 192.79,
+          "end": 193.11,
+          "confidence": 0.99902344
+        },
+        {
+          "word": "in",
+          "start": 193.11,
+          "end": 193.27,
+          "confidence": 0.9970703
+        },
+        {
+          "word": "wisdom",
+          "start": 193.27,
+          "end": 193.67,
+          "confidence": 0.87768555
+        }
+      ],
+      "received_at": "2026-10-02T16:21:09.352186",
+      "lag_ms": 981
+    },
+    {
+      "text": "i declare that the wisdom of god is at work in me",
+      "start": 194.22,
+      "duration": 3.8300018,
+      "is_final": true,
+      "confidence": 0.99902344,
+      "speech_final": false,
+      "words": [
+        {
+          "word": "i",
+          "start": 194.7,
+          "end": 195.02,
+          "confidence": 1.0
+        },
+        {
+          "word": "declare",
+          "start": 195.02,
+          "end": 195.5,
+          "confidence": 0.9970703
+        },
+        {
+          "word": "that",
+          "start": 195.5,
+          "end": 195.74,
+          "confidence": 1.0
+        },
+        {
+          "word": "the",
+          "start": 195.74,
+          "end": 195.9,
+          "confidence": 1.0
+        },
+        {
+          "word": "wisdom",
+          "start": 195.9,
+          "end": 196.3,
+          "confidence": 1.0
+        },
+        {
+          "word": "of",
+          "start": 196.3,
+          "end": 196.46,
+          "confidence": 1.0
+        },
+        {
+          "word": "god",
+          "start": 196.46,
+          "end": 196.7,
+          "confidence": 0.99121094
+        },
+        {
+          "word": "is",
+          "start": 196.7,
+          "end": 196.94,
+          "confidence": 0.98095703
+        },
+        {
+          "word": "at",
+          "start": 196.94,
+          "end": 197.1,
+          "confidence": 0.91259766
+        },
+        {
+          "word": "work",
+          "start": 197.1,
+          "end": 197.34,
+          "confidence": 0.99902344
+        },
+        {
+          "word": "in",
+          "start": 197.34,
+          "end": 197.5,
+          "confidence": 0.99902344
+        },
+        {
+          "word": "me",
+          "start": 197.5,
+          "end": 197.66,
+          "confidence": 0.9160156
+        }
+      ],
+      "received_at": "2026-10-02T16:21:13.242148",
+      "lag_ms": 1041
+    },
+    {
+      "text": "i declare that i'm full of wisdom",
+      "start": 198.05,
+      "duration": 3.7399902,
+      "is_final": true,
+      "confidence": 1.0,
+      "speech_final": false,
+      "words": [
+        {
+          "word": "i",
+          "start": 198.45,
+          "end": 198.77,
+          "confidence": 1.0
+        },
+        {
+          "word": "declare",
+          "start": 198.77,
+          "end": 199.17,
+          "confidence": 0.9951172
+        },
+        {
+          "word": "that",
+          "start": 199.17,
+          "end": 199.49,
+          "confidence": 1.0
+        },
+        {
+          "word": "i'm",
+          "start": 199.49,
+          "end": 199.73,
+          "confidence": 0.99658203
+        },
+        {
+          "word": "full",
+          "start": 199.73,
+          "end": 200.13,
+          "confidence": 1.0
+        },
+        {
+          "word": "of",
+          "start": 200.13,
+          "end": 200.37001,
+          "confidence": 1.0
+        },
+        {
+          "word": "wisdom",
+          "start": 200.37001,
+          "end": 200.69,
+          "confidence": 0.89697266
+        }
+      ],
+      "received_at": "2026-10-02T16:21:17.050830",
+      "lag_ms": 1110
+    },
+    {
+      "text": "i declare that i'm full of wisdom",
+      "start": 201.79,
+      "duration": 3.0200043,
+      "is_final": true,
+      "confidence": 1.0,
+      "speech_final": false,
+      "words": [
+        {
+          "word": "i",
+          "start": 201.79,
+          "end": 202.03,
+          "confidence": 0.9902344
+        },
+        {
+          "word": "declare",
+          "start": 202.03,
+          "end": 202.51,
+          "confidence": 0.99316406
+        },
+        {
+          "word": "that",
+          "start": 202.51,
+          "end": 202.75,
+          "confidence": 1.0
+        },
+        {
+          "word": "i'm",
+          "start": 202.75,
+          "end": 202.98999,
+          "confidence": 1.0
+        },
+        {
+          "word": "full",
+          "start": 202.98999,
+          "end": 203.31,
+          "confidence": 1.0
+        },
+        {
+          "word": "of",
+          "start": 203.31,
+          "end": 203.46999,
+          "confidence": 1.0
+        },
+        {
+          "word": "wisdom",
+          "start": 203.46999,
+          "end": 203.95,
+          "confidence": 0.97802734
+        }
+      ],
+      "received_at": "2026-10-02T16:21:20.743346",
+      "lag_ms": 1782
+    },
+    {
+      "text": "i decree and i declare that i'm full of wisdom",
+      "start": 204.81,
+      "duration": 3.4700012,
+      "is_final": true,
+      "confidence": 0.99902344,
+      "speech_final": false,
+      "words": [
+        {
+          "word": "i",
+          "start": 204.81,
+          "end": 205.13,
+          "confidence": 0.99902344
+        },
+        {
+          "word": "decree",
+          "start": 205.13,
+          "end": 205.61,
+          "confidence": 1.0
+        },
+        {
+          "word": "and",
+          "start": 205.61,
+          "end": 205.84999,
+          "confidence": 0.90722656
+        },
+        {
+          "word": "i",
+          "start": 205.84999,
+          "end": 206.01,
+          "confidence": 0.99609375
+        },
+        {
+          "word": "declare",
+          "start": 206.01,
+          "end": 206.65001,
+          "confidence": 1.0
+        },
+        {
+          "word": "that",
+          "start": 206.73,
+          "end": 207.05,
+          "confidence": 0.9980469
+        },
+        {
+          "word": "i'm",
+          "start": 207.05,
+          "end": 207.29,
+          "confidence": 0.99902344
+        },
+        {
+          "word": "full",
+          "start": 207.29,
+          "end": 207.53,
+          "confidence": 1.0
+        },
+        {
+          "word": "of",
+          "start": 207.53,
+          "end": 207.69,
+          "confidence": 0.9980469
+        },
+        {
+          "word": "wisdom",
+          "start": 207.69,
+          "end": 208.09,
+          "confidence": 0.9597168
+        }
+      ],
+      "received_at": "2026-10-02T16:21:23.843643",
+      "lag_ms": 1413
+    },
+    {
+      "text": "i'm full of wisdom",
+      "start": 208.28,
+      "duration": 3.8899994,
+      "is_final": true,
+      "confidence": 0.9951172,
+      "speech_final": false,
+      "words": [
+        {
+          "word": "i'm",
+          "start": 209.31999,
+          "end": 209.64,
+          "confidence": 0.9526367
+        },
+        {
+          "word": "full",
+          "start": 209.64,
+          "end": 209.88,
+          "confidence": 0.9970703
+        },
+        {
+          "word": "of",
+          "start": 209.88,
+          "end": 210.04,
+          "confidence": 0.99316406
+        },
+        {
+          "word": "wisdom",
+          "start": 210.04,
+          "end": 210.44,
+          "confidence": 0.9951172
+        }
+      ],
+      "received_at": "2026-10-02T16:21:27.245751",
+      "lag_ms": 925
+    },
+    {
+      "text": "oh yeah sorry i'm coming in",
+      "start": 215.94,
+      "duration": 4.48999,
+      "is_final": true,
+      "confidence": 0.9597168,
+      "speech_final": false,
+      "words": [
+        {
+          "word": "oh",
+          "start": 218.74,
+          "end": 219.22,
+          "confidence": 0.9152832
+        },
+        {
+          "word": "yeah",
+          "start": 219.22,
+          "end": 219.54001,
+          "confidence": 0.9597168
+        },
+        {
+          "word": "sorry",
+          "start": 219.54001,
+          "end": 219.86,
+          "confidence": 0.9904785
+        },
+        {
+          "word": "i'm",
+          "start": 219.86,
+          "end": 220.02,
+          "confidence": 0.9995117
+        },
+        {
+          "word": "coming",
+          "start": 220.02,
+          "end": 220.18001,
+          "confidence": 0.94921875
+        },
+        {
+          "word": "in",
+          "start": 220.18001,
+          "end": 220.34,
+          "confidence": 0.64575195
+        }
+      ],
+      "received_at": "2026-10-02T16:21:34.948565",
+      "lag_ms": 367
+    },
+    {
+      "text": "i'm just trying to finish up my chants alright thank you",
+      "start": 220.43,
+      "duration": 3.7700043,
+      "is_final": true,
+      "confidence": 0.9980469,
+      "speech_final": false,
+      "words": [
+        {
+          "word": "i'm",
+          "start": 220.43,
+          "end": 220.75,
+          "confidence": 1.0
+        },
+        {
+          "word": "just",
+          "start": 220.75,
+          "end": 220.98999,
+          "confidence": 0.99902344
+        },
+        {
+          "word": "trying",
+          "start": 220.98999,
+          "end": 221.31,
+          "confidence": 1.0
+        },
+        {
+          "word": "to",
+          "start": 221.31,
+          "end": 221.46999,
+          "confidence": 0.99902344
+        },
+        {
+          "word": "finish",
+          "start": 221.46999,
+          "end": 221.70999,
+          "confidence": 1.0
+        },
+        {
+          "word": "up",
+          "start": 221.70999,
+          "end": 221.95,
+          "confidence": 0.8510742
+        },
+        {
+          "word": "my",
+          "start": 221.95,
+          "end": 222.10999,
+          "confidence": 0.9980469
+        },
+        {
+          "word": "chants",
+          "start": 222.10999,
+          "end": 222.75,
+          "confidence": 0.9848633
+        },
+        {
+          "word": "alright",
+          "start": 223.31,
+          "end": 223.62999,
+          "confidence": 0.97314453
+        },
+        {
+          "word": "thank",
+          "start": 223.62999,
+          "end": 223.87,
+          "confidence": 0.9951172
+        },
+        {
+          "word": "you",
+          "start": 223.87,
+          "end": 224.03,
+          "confidence": 0.88549805
+        }
+      ],
+      "received_at": "2026-10-02T16:21:39.437536",
+      "lag_ms": 1086
+    },
+    {
+      "text": "yeah i'll be back i'm very well thank you alright see you later",
+      "start": 224.2,
+      "duration": 4.970001,
+      "is_final": true,
+      "confidence": 0.99902344,
+      "speech_final": false,
+      "words": [
+        {
+          "word": "yeah",
+          "start": 224.36,
+          "end": 224.76,
+          "confidence": 0.99609375
+        },
+        {
+          "word": "i'll",
+          "start": 224.76,
+          "end": 225.08,
+          "confidence": 0.9926758
+        },
+        {
+          "word": "be",
+          "start": 225.08,
+          "end": 225.16,
+          "confidence": 0.99902344
+        },
+        {
+          "word": "back",
+          "start": 225.16,
+          "end": 225.48,
+          "confidence": 0.99902344
+        },
+        {
+          "word": "i'm",
+          "start": 225.48,
+          "end": 226.84,
+          "confidence": 0.95410156
+        },
+        {
+          "word": "very",
+          "start": 226.84,
+          "end": 227.08,
+          "confidence": 1.0
+        },
+        {
+          "word": "well",
+          "start": 227.08,
+          "end": 227.4,
+          "confidence": 0.9970703
+        },
+        {
+          "word": "thank",
+          "start": 227.4,
+          "end": 227.56,
+          "confidence": 1.0
+        },
+        {
+          "word": "you",
+          "start": 227.56,
+          "end": 227.8,
+          "confidence": 1.0
+        },
+        {
+          "word": "alright",
+          "start": 227.8,
+          "end": 228.2,
+          "confidence": 1.0
+        },
+        {
+          "word": "see",
+          "start": 228.2,
+          "end": 228.36,
+          "confidence": 1.0
+        },
+        {
+          "word": "you",
+          "start": 228.36,
+          "end": 228.51999,
+          "confidence": 1.0
+        },
+        {
+          "word": "later",
+          "start": 228.51999,
+          "end": 228.76,
+          "confidence": 0.99853516
+        }
+      ],
+      "received_at": "2026-10-02T16:21:43.271834",
+      "lag_ms": 0
+    },
+    {
+      "text": "okay so back to what i was doing now",
+      "start": 229.17,
+      "duration": 3.9799957,
+      "is_final": true,
+      "confidence": 0.99902344,
+      "speech_final": false,
+      "words": [
+        {
+          "word": "okay",
+          "start": 229.56999,
+          "end": 230.37,
+          "confidence": 0.99658203
+        },
+        {
+          "word": "so",
+          "start": 230.37,
+          "end": 230.69,
+          "confidence": 0.9951172
+        },
+        {
+          "word": "back",
+          "start": 230.69,
+          "end": 230.93,
+          "confidence": 0.9980469
+        },
+        {
+          "word": "to",
+          "start": 230.93,
+          "end": 231.09,
+          "confidence": 0.99902344
+        },
+        {
+          "word": "what",
+          "start": 231.09,
+          "end": 231.25,
+          "confidence": 1.0
+        },
+        {
+          "word": "i",
+          "start": 231.25,
+          "end": 231.33,
+          "confidence": 1.0
+        },
+        {
+          "word": "was",
+          "start": 231.33,
+          "end": 231.49,
+          "confidence": 1.0
+        },
+        {
+          "word": "doing",
+          "start": 231.49,
+          "end": 231.73,
+          "confidence": 0.99902344
+        },
+        {
+          "word": "now",
+          "start": 231.73,
+          "end": 231.89,
+          "confidence": 0.9560547
+        }
+      ],
+      "received_at": "2026-10-02T16:21:48.167875",
+      "lag_ms": 867
+    },
+    {
+      "text": "i'm rich in wisdom i'm rich in wisdom",
+      "start": 233.15,
+      "duration": 4.400009,
+      "is_final": true,
+      "confidence": 0.9880371,
+      "speech_final": false,
+      "words": [
+        {
+          "word": "i'm",
+          "start": 233.15,
+          "end": 233.47,
+          "confidence": 0.90283203
+        },
+        {
+          "word": "rich",
+          "start": 233.47,
+          "end": 233.79,
+          "confidence": 0.5410156
+        },
+        {
+          "word": "in",
+          "start": 233.79,
+          "end": 233.87,
+          "confidence": 0.9902344
+        },
+        {
+          "word": "wisdom",
+          "start": 233.87,
+          "end": 234.51,
+          "confidence": 0.9748535
+        },
+        {
+          "word": "i'm",
+          "start": 234.51,
+          "end": 236.43,
+          "confidence": 0.984375
+        },
+        {
+          "word": "rich",
+          "start": 236.43,
+          "end": 236.67,
+          "confidence": 0.99609375
+        },
+        {
+          "word": "in",
+          "start": 236.67,
+          "end": 236.82999,
+          "confidence": 0.99609375
+        },
+        {
+          "word": "wisdom",
+          "start": 236.82999,
+          "end": 237.15,
+          "confidence": 0.9880371
+        }
+      ],
+      "received_at": "2026-10-02T16:21:52.145325",
+      "lag_ms": 444
+    },
+    {
+      "text": "god is for me god is with me god is",
+      "start": 237.55,
+      "duration": 4.699997,
+      "is_final": true,
+      "confidence": 0.99902344,
+      "speech_final": false,
+      "words": [
+        {
+          "word": "god",
+          "start": 238.11,
+          "end": 238.51001,
+          "confidence": 0.9980469
+        },
+        {
+          "word": "is",
+          "start": 238.51001,
+          "end": 238.75,
+          "confidence": 1.0
+        },
+        {
+          "word": "for",
+          "start": 238.75,
+          "end": 238.91,
+          "confidence": 0.99902344
+        },
+        {
+          "word": "me",
+          "start": 238.91,
+          "end": 239.47002,
+          "confidence": 1.0
+        },
+        {
+          "word": "god",
+          "start": 239.95,
+          "end": 240.27,
+          "confidence": 0.99902344
+        },
+        {
+          "word": "is",
+          "start": 240.27,
+          "end": 240.43001,
+          "confidence": 1.0
+        },
+        {
+          "word": "with",
+          "start": 240.43001,
+          "end": 240.67,
+          "confidence": 0.9970703
+        },
+        {
+          "word": "me",
+          "start": 240.67,
+          "end": 240.99,
+          "confidence": 1.0
+        },
+        {
+          "word": "god",
+          "start": 240.99,
+          "end": 241.55,
+          "confidence": 0.9863281
+        },
+        {
+          "word": "is",
+          "start": 242.03,
+          "end": 242.19,
+          "confidence": 0.8183594
+        }
+      ],
+      "received_at": "2026-10-02T16:21:56.546210",
+      "lag_ms": 145
+    },
+    {
+      "text": "with me god is with me god is with me",
+      "start": 242.25,
+      "duration": 4.6399994,
+      "is_final": true,
+      "confidence": 1.0,
+      "speech_final": false,
+      "words": [
+        {
+          "word": "with",
+          "start": 242.33,
+          "end": 242.57,
+          "confidence": 1.0
+        },
+        {
+          "word": "me",
+          "start": 242.57,
+          "end": 243.05,
+          "confidence": 1.0
+        },
+        {
+          "word": "god",
+          "start": 243.53,
+          "end": 243.93,
+          "confidence": 0.99316406
+        },
+        {
+          "word": "is",
+          "start": 243.93,
+          "end": 244.17,
+          "confidence": 1.0
+        },
+        {
+          "word": "with",
+          "start": 244.17,
+          "end": 244.41,
+          "confidence": 1.0
+        },
+        {
+          "word": "me",
+          "start": 244.41,
+          "end": 244.97,
+          "confidence": 1.0
+        },
+        {
+          "word": "god",
+          "start": 245.29,
+          "end": 245.69,
+          "confidence": 0.98828125
+        },
+        {
+          "word": "is",
+          "start": 245.69,
+          "end": 245.93,
+          "confidence": 0.99902344
+        },
+        {
+          "word": "with",
+          "start": 245.93,
+          "end": 246.17,
+          "confidence": 0.99902344
+        },
+        {
+          "word": "me",
+          "start": 246.17,
+          "end": 246.33,
+          "confidence": 0.99853516
+        }
+      ],
+      "received_at": "2026-10-02T16:22:01.248611",
+      "lag_ms": 208
+    },
+    {
+      "text": "god is with me god is with me",
+      "start": 246.89,
+      "duration": 4.0700073,
+      "is_final": true,
+      "confidence": 0.9980469,
+      "speech_final": false,
+      "words": [
+        {
+          "word": "god",
+          "start": 247.53,
+          "end": 247.93,
+          "confidence": 0.9980469
+        },
+        {
+          "word": "is",
+          "start": 247.93,
+          "end": 248.17,
+          "confidence": 0.9980469
+        },
+        {
+          "word": "with",
+          "start": 248.17,
+          "end": 248.33,
+          "confidence": 1.0
+        },
+        {
+          "word": "me",
+          "start": 248.33,
+          "end": 248.89,
+          "confidence": 1.0
+        },
+        {
+          "word": "god",
+          "start": 248.89,
+          "end": 249.45001,
+          "confidence": 0.9819336
+        },
+        {
+          "word": "is",
+          "start": 249.69,
+          "end": 249.93,
+          "confidence": 0.9970703
+        },
+        {
+          "word": "with",
+          "start": 249.93,
+          "end": 250.09,
+          "confidence": 0.99902344
+        },
+        {
+          "word": "me",
+          "start": 250.09,
+          "end": 250.25,
+          "confidence": 0.99658203
+        }
+      ],
+      "received_at": "2026-10-02T16:22:05.847006",
+      "lag_ms": 736
+    },
+    {
+      "text": "i'll be back one second",
+      "start": 257.48,
+      "duration": 4.3399963,
+      "is_final": true,
+      "confidence": 0.9975586,
+      "speech_final": false,
+      "words": [
+        {
+          "word": "i'll",
+          "start": 258.44,
+          "end": 258.84,
+          "confidence": 0.8798828
+        },
+        {
+          "word": "be",
+          "start": 258.84,
+          "end": 258.92,
+          "confidence": 0.99902344
+        },
+        {
+          "word": "back",
+          "start": 258.92,
+          "end": 259.24002,
+          "confidence": 0.92993164
+        },
+        {
+          "word": "one",
+          "start": 259.24002,
+          "end": 259.56,
+          "confidence": 1.0
+        },
+        {
+          "word": "second",
+          "start": 259.56,
+          "end": 259.96002,
+          "confidence": 0.9975586
+        }
+      ],
+      "received_at": "2026-10-02T16:22:16.438153",
+      "lag_ms": 467
+    },
+    {
+      "text": "okay yeah i'm back let me continue now",
+      "start": 266.37,
+      "duration": 4.76001,
+      "is_final": true,
+      "confidence": 1.0,
+      "speech_final": false,
+      "words": [
+        {
+          "word": "okay",
+          "start": 268.13,
+          "end": 268.69,
+          "confidence": 0.95410156
+        },
+        {
+          "word": "yeah",
+          "start": 268.69,
+          "end": 269.01,
+          "confidence": 0.9921875
+        },
+        {
+          "word": "i'm",
+          "start": 269.01,
+          "end": 269.25,
+          "confidence": 1.0
+        },
+        {
+          "word": "back",
+          "start": 269.25,
+          "end": 269.65,
+          "confidence": 1.0
+        },
+        {
+          "word": "let",
+          "start": 269.65,
+          "end": 269.81,
+          "confidence": 1.0
+        },
+        {
+          "word": "me",
+          "start": 269.81,
+          "end": 269.97,
+          "confidence": 1.0
+        },
+        {
+          "word": "continue",
+          "start": 269.97,
+          "end": 270.44998,
+          "confidence": 1.0
+        },
+        {
+          "word": "now",
+          "start": 270.44998,
+          "end": 270.77,
+          "confidence": 0.9951172
+        }
+      ],
+      "received_at": "2026-10-02T16:22:25.369132",
+      "lag_ms": 88
+    },
+    {
+      "text": "so where was i okay yeah i'm reaching wisdom",
+      "start": 271.13,
+      "duration": 4.519989,
+      "is_final": true,
+      "confidence": 0.9941406,
+      "speech_final": false,
+      "words": [
+        {
+          "word": "so",
+          "start": 271.21,
+          "end": 271.93,
+          "confidence": 0.60595703
+        },
+        {
+          "word": "where",
+          "start": 271.93,
+          "end": 272.17,
+          "confidence": 0.9941406
+        },
+        {
+          "word": "was",
+          "start": 272.17,
+          "end": 272.41,
+          "confidence": 1.0
+        },
+        {
+          "word": "i",
+          "start": 272.41,
+          "end": 272.73,
+          "confidence": 0.9836426
+        },
+        {
+          "word": "okay",
+          "start": 272.73,
+          "end": 273.29,
+          "confidence": 0.9995117
+        },
+        {
+          "word": "yeah",
+          "start": 273.29,
+          "end": 273.93002,
+          "confidence": 1.0
+        },
+        {
+          "word": "i'm",
+          "start": 274.01,
+          "end": 274.25,
+          "confidence": 0.9970703
+        },
+        {
+          "word": "reaching",
+          "start": 274.25,
+          "end": 274.57,
+          "confidence": 0.6870117
+        },
+        {
+          "word": "wisdom",
+          "start": 274.57,
+          "end": 275.05002,
+          "confidence": 0.7907715
+        }
+      ],
+      "received_at": "2026-10-02T16:22:30.155811",
+      "lag_ms": 355
+    },
+    {
+      "text": "the wisdom of god is at work in me no god is with me",
+      "start": 275.65,
+      "duration": 4.4900208,
+      "is_final": true,
+      "confidence": 0.9941406,
+      "speech_final": false,
+      "words": [
+        {
+          "word": "the",
+          "start": 275.88998,
+          "end": 276.21,
+          "confidence": 0.9941406
+        },
+        {
+          "word": "wisdom",
+          "start": 276.21,
+          "end": 276.61,
+          "confidence": 1.0
+        },
+        {
+          "word": "of",
+          "start": 276.61,
+          "end": 276.77,
+          "confidence": 0.9980469
+        },
+        {
+          "word": "god",
+          "start": 276.77,
+          "end": 277.00998,
+          "confidence": 0.8989258
+        },
+        {
+          "word": "is",
+          "start": 277.00998,
+          "end": 277.16998,
+          "confidence": 0.9819336
+        },
+        {
+          "word": "at",
+          "start": 277.16998,
+          "end": 277.33,
+          "confidence": 0.97314453
+        },
+        {
+          "word": "work",
+          "start": 277.33,
+          "end": 277.57,
+          "confidence": 0.9980469
+        },
+        {
+          "word": "in",
+          "start": 277.57,
+          "end": 277.65,
+          "confidence": 0.99902344
+        },
+        {
+          "word": "me",
+          "start": 277.65,
+          "end": 277.97,
+          "confidence": 0.9941406
+        },
+        {
+          "word": "no",
+          "start": 277.97,
+          "end": 278.61002,
+          "confidence": 0.9003906
+        },
+        {
+          "word": "god",
+          "start": 278.85,
+          "end": 279.16998,
+          "confidence": 0.9892578
+        },
+        {
+          "word": "is",
+          "start": 279.16998,
+          "end": 279.41,
+          "confidence": 0.99609375
+        },
+        {
+          "word": "with",
+          "start": 279.41,
+          "end": 279.57,
+          "confidence": 0.99902344
+        },
+        {
+          "word": "me",
+          "start": 279.57,
+          "end": 279.65,
+          "confidence": 0.9926758
+        }
+      ],
+      "received_at": "2026-10-02T16:22:34.649605",
+      "lag_ms": 358
+    },
+    {
+      "text": "god is for me",
+      "start": 280.14,
+      "duration": 2.6299744,
+      "is_final": true,
+      "confidence": 0.9980469,
+      "speech_final": true,
+      "words": [
+        {
+          "word": "god",
+          "start": 280.62003,
+          "end": 280.94,
+          "confidence": 0.96240234
+        },
+        {
+          "word": "is",
+          "start": 280.94,
+          "end": 281.1,
+          "confidence": 0.99902344
+        },
+        {
+          "word": "for",
+          "start": 281.1,
+          "end": 281.26,
+          "confidence": 0.9980469
+        },
+        {
+          "word": "me",
+          "start": 281.26,
+          "end": 281.42,
+          "confidence": 0.9692383
+        }
+      ],
+      "received_at": "2026-10-02T16:22:36.762726",
+      "lag_ms": 0
+    },
+    {
+      "text": "i'm full of wisdom",
+      "start": 287.54,
+      "duration": 4.819977,
+      "is_final": true,
+      "confidence": 0.9980469,
+      "speech_final": false,
+      "words": [
+        {
+          "word": "i'm",
+          "start": 290.5,
+          "end": 290.9,
+          "confidence": 0.8762207
+        },
+        {
+          "word": "full",
+          "start": 290.9,
+          "end": 291.14,
+          "confidence": 0.9980469
+        },
+        {
+          "word": "of",
+          "start": 291.14,
+          "end": 291.38,
+          "confidence": 1.0
+        },
+        {
+          "word": "wisdom",
+          "start": 291.38,
+          "end": 291.78,
+          "confidence": 0.84765625
+        }
+      ],
+      "received_at": "2026-10-02T16:22:46.531657",
+      "lag_ms": 21
+    },
+    {
+      "text": "i'm full of wisdom i'm full of wisdom",
+      "start": 292.36,
+      "duration": 3.710022,
+      "is_final": true,
+      "confidence": 0.99902344,
+      "speech_final": false,
+      "words": [
+        {
+          "word": "i'm",
+          "start": 292.52,
+          "end": 292.84,
+          "confidence": 0.9890137
+        },
+        {
+          "word": "full",
+          "start": 292.84,
+          "end": 293.08,
+          "confidence": 1.0
+        },
+        {
+          "word": "of",
+          "start": 293.08,
+          "end": 293.31998,
+          "confidence": 1.0
+        },
+        {
+          "word": "wisdom",
+          "start": 293.31998,
+          "end": 294.03998,
+          "confidence": 0.98339844
+        },
+        {
+          "word": "i'm",
+          "start": 294.36,
+          "end": 294.59998,
+          "confidence": 0.97094727
+        },
+        {
+          "word": "full",
+          "start": 294.59998,
+          "end": 294.84,
+          "confidence": 1.0
+        },
+        {
+          "word": "of",
+          "start": 294.84,
+          "end": 295.08,
+          "confidence": 0.99902344
+        },
+        {
+          "word": "wisdom",
+          "start": 295.08,
+          "end": 295.4,
+          "confidence": 0.99316406
+        }
+      ],
+      "received_at": "2026-10-02T16:22:51.326559",
+      "lag_ms": 1105
+    },
+    {
+      "text": "hey stop that",
+      "start": 296.07,
+      "duration": 1.6600037,
+      "is_final": true,
+      "confidence": 0.9147949,
+      "speech_final": true,
+      "words": [
+        {
+          "word": "hey",
+          "start": 296.07,
+          "end": 296.79,
+          "confidence": 0.9147949
+        },
+        {
+          "word": "stop",
+          "start": 296.79,
+          "end": 297.03,
+          "confidence": 0.9970703
+        },
+        {
+          "word": "that",
+          "start": 297.03,
+          "end": 297.27002,
+          "confidence": 0.8811035
+        }
+      ],
+      "received_at": "2026-10-02T16:22:51.738907",
+      "lag_ms": 0
+    },
+    {
+      "text": "don't touch don't touch",
+      "start": 297.73,
+      "duration": 3.2799988,
+      "is_final": true,
+      "confidence": 0.99902344,
+      "speech_final": true,
+      "words": [
+        {
+          "word": "don't",
+          "start": 297.73,
+          "end": 298.21002,
+          "confidence": 1.0
+        },
+        {
+          "word": "touch",
+          "start": 298.21002,
+          "end": 298.69003,
+          "confidence": 0.99902344
+        },
+        {
+          "word": "don't",
+          "start": 298.93002,
+          "end": 300.29,
+          "confidence": 0.92041016
+        },
+        {
+          "word": "touch",
+          "start": 300.29,
+          "end": 300.53,
+          "confidence": 0.9946289
+        }
+      ],
+      "received_at": "2026-10-02T16:22:55.048429",
+      "lag_ms": 0
+    },
+    {
+      "text": "i'm full of wisdom god is for me",
+      "start": 301.01,
+      "duration": 4.0599976,
+      "is_final": true,
+      "confidence": 0.9926758,
+      "speech_final": true,
+      "words": [
+        {
+          "word": "i'm",
+          "start": 301.25,
+          "end": 301.57,
+          "confidence": 0.98999023
+        },
+        {
+          "word": "full",
+          "start": 301.57,
+          "end": 301.89,
+          "confidence": 1.0
+        },
+        {
+          "word": "of",
+          "start": 301.89,
+          "end": 302.05002,
+          "confidence": 0.9970703
+        },
+        {
+          "word": "wisdom",
+          "start": 302.05002,
+          "end": 302.69,
+          "confidence": 0.9926758
+        },
+        {
+          "word": "god",
+          "start": 303.57,
+          "end": 303.89,
+          "confidence": 0.94189453
+        },
+        {
+          "word": "is",
+          "start": 303.89,
+          "end": 304.21002,
+          "confidence": 0.9873047
+        },
+        {
+          "word": "for",
+          "start": 304.21002,
+          "end": 304.37,
+          "confidence": 1.0
+        },
+        {
+          "word": "me",
+          "start": 304.37,
+          "end": 304.53,
+          "confidence": 0.9338379
+        }
+      ],
+      "received_at": "2026-10-02T16:22:59.035808",
+      "lag_ms": 0
+    },
+    {
+      "text": "god is for me god is for me",
+      "start": 305.07,
+      "duration": 3.5,
+      "is_final": true,
+      "confidence": 0.99902344,
+      "speech_final": false,
+      "words": [
+        {
+          "word": "god",
+          "start": 305.47,
+          "end": 305.79,
+          "confidence": 0.99902344
+        },
+        {
+          "word": "is",
+          "start": 305.79,
+          "end": 306.03,
+          "confidence": 0.99902344
+        },
+        {
+          "word": "for",
+          "start": 306.03,
+          "end": 306.19,
+          "confidence": 1.0
+        },
+        {
+          "word": "me",
+          "start": 306.19,
+          "end": 306.67,
+          "confidence": 1.0
+        },
+        {
+          "word": "god",
+          "start": 307.31,
+          "end": 307.63,
+          "confidence": 0.9980469
+        },
+        {
+          "word": "is",
+          "start": 307.63,
+          "end": 307.79,
+          "confidence": 0.99902344
+        },
+        {
+          "word": "for",
+          "start": 307.79,
+          "end": 307.95,
+          "confidence": 1.0
+        },
+        {
+          "word": "me",
+          "start": 307.95,
+          "end": 308.11002,
+          "confidence": 0.99853516
+        }
+      ],
+      "received_at": "2026-10-02T16:23:04.047458",
+      "lag_ms": 1326
+    },
+    {
+      "text": "god is for me i'm rich in wisdom",
+      "start": 308.57,
+      "duration": 3.7399902,
+      "is_final": true,
+      "confidence": 0.9892578,
+      "speech_final": false,
+      "words": [
+        {
+          "word": "god",
+          "start": 308.97,
+          "end": 309.29,
+          "confidence": 0.9892578
+        },
+        {
+          "word": "is",
+          "start": 309.29,
+          "end": 309.53,
+          "confidence": 1.0
+        },
+        {
+          "word": "for",
+          "start": 309.53,
+          "end": 309.69,
+          "confidence": 1.0
+        },
+        {
+          "word": "me",
+          "start": 309.69,
+          "end": 310.01,
+          "confidence": 1.0
+        },
+        {
+          "word": "i'm",
+          "start": 310.01,
+          "end": 310.89,
+          "confidence": 0.95874023
+        },
+        {
+          "word": "rich",
+          "start": 310.89,
+          "end": 311.13,
+          "confidence": 0.88134766
+        },
+        {
+          "word": "in",
+          "start": 311.13,
+          "end": 311.29,
+          "confidence": 0.9248047
+        },
+        {
+          "word": "wisdom",
+          "start": 311.29,
+          "end": 311.69,
+          "confidence": 0.8149414
+        }
+      ],
+      "received_at": "2026-10-02T16:23:07.556438",
+      "lag_ms": 1095
+    },
+    {
+      "text": "the wisdom of god is at work in me i'm full of wisdom",
+      "start": 312.31,
+      "duration": 4.970001,
+      "is_final": true,
+      "confidence": 0.99121094,
+      "speech_final": false,
+      "words": [
+        {
+          "word": "the",
+          "start": 312.38998,
+          "end": 312.63,
+          "confidence": 0.9951172
+        },
+        {
+          "word": "wisdom",
+          "start": 312.63,
+          "end": 313.03,
+          "confidence": 1.0
+        },
+        {
+          "word": "of",
+          "start": 313.03,
+          "end": 313.19,
+          "confidence": 0.9970703
+        },
+        {
+          "word": "god",
+          "start": 313.19,
+          "end": 313.43,
+          "confidence": 0.8457031
+        },
+        {
+          "word": "is",
+          "start": 313.43,
+          "end": 313.59,
+          "confidence": 0.82177734
+        },
+        {
+          "word": "at",
+          "start": 313.59,
+          "end": 313.75,
+          "confidence": 0.9526367
+        },
+        {
+          "word": "work",
+          "start": 313.75,
+          "end": 313.99,
+          "confidence": 0.9980469
+        },
+        {
+          "word": "in",
+          "start": 313.99,
+          "end": 314.15,
+          "confidence": 0.9970703
+        },
+        {
+          "word": "me",
+          "start": 314.15,
+          "end": 314.63,
+          "confidence": 0.9980469
+        },
+        {
+          "word": "i'm",
+          "start": 314.63,
+          "end": 315.51,
+          "confidence": 0.94091797
+        },
+        {
+          "word": "full",
+          "start": 315.51,
+          "end": 315.75,
+          "confidence": 0.99121094
+        },
+        {
+          "word": "of",
+          "start": 315.75,
+          "end": 315.99,
+          "confidence": 0.9760742
+        },
+        {
+          "word": "wisdom",
+          "start": 315.99,
+          "end": 316.31,
+          "confidence": 0.98413086
+        }
+      ],
+      "received_at": "2026-10-02T16:23:11.370635",
+      "lag_ms": 0
+    }
+  ],
+  "interim_segments": [
+    {
+      "text": "i'm full of wisdom",
+      "start": 4.46,
+      "duration": 3.04,
+      "is_final": false,
+      "confidence": 0.99902344,
+      "speech_final": false,
+      "words": [],
+      "received_at": "2026-10-02T16:18:01.434285",
+      "lag_ms": 0
+    },
+    {
+      "text": "that's full",
+      "start": 12.38,
+      "duration": 1.0199995,
+      "is_final": false,
+      "confidence": 0.93408203,
+      "speech_final": false,
+      "words": [],
+      "received_at": "2026-10-02T16:18:07.336193",
+      "lag_ms": 0
+    },
+    {
+      "text": "i'm",
+      "start": 40.07,
+      "duration": 1.0299988,
+      "is_final": false,
+      "confidence": 0.6972656,
+      "speech_final": false,
+      "words": [],
+      "received_at": "2026-10-02T16:18:35.049901",
+      "lag_ms": 0
+    },
+    {
+      "text": "i'm full of wisdom",
+      "start": 40.07,
+      "duration": 2.0299988,
+      "is_final": false,
+      "confidence": 0.99902344,
+      "speech_final": false,
+      "words": [],
+      "received_at": "2026-10-02T16:18:36.184554",
+      "lag_ms": 0
+    },
+    {
+      "text": "i'm full of wisdom",
+      "start": 40.07,
+      "duration": 2.2299995,
+      "is_final": false,
+      "confidence": 0.99902344,
+      "speech_final": false,
+      "words": [],
+      "received_at": "2026-10-02T16:18:36.223388",
+      "lag_ms": 0
+    },
+    {
+      "text": "god is",
+      "start": 42.7,
+      "duration": 1.0,
+      "is_final": false,
+      "confidence": 1.0,
+      "speech_final": false,
+      "words": [],
+      "received_at": "2026-10-02T16:18:37.636859",
+      "lag_ms": 0
+    },
+    {
+      "text": "god",
+      "start": 44.55,
+      "duration": 1.0499992,
+      "is_final": false,
+      "confidence": 0.9970703,
+      "speech_final": false,
+      "words": [],
+      "received_at": "2026-10-02T16:18:39.551245",
+      "lag_ms": 0
+    },
+    {
+      "text": "god is for me",
+      "start": 44.55,
+      "duration": 2.1500015,
+      "is_final": false,
+      "confidence": 1.0,
+      "speech_final": false,
+      "words": [],
+      "received_at": "2026-10-02T16:18:40.677848",
+      "lag_ms": 0
+    },
+    {
+      "text": "god is for me",
+      "start": 47.03,
+      "duration": 2.170002,
+      "is_final": false,
+      "confidence": 1.0,
+      "speech_final": false,
+      "words": [],
+      "received_at": "2026-10-02T16:18:43.139663",
+      "lag_ms": 0
+    },
+    {
+      "text": "god is for me",
+      "start": 47.03,
+      "duration": 2.670002,
+      "is_final": false,
+      "confidence": 1.0,
+      "speech_final": false,
+      "words": [],
+      "received_at": "2026-10-02T16:18:43.720572",
+      "lag_ms": 0
+    },
+    {
+      "text": "god is for me",
+      "start": 47.03,
+      "duration": 3.670002,
+      "is_final": false,
+      "confidence": 1.0,
+      "speech_final": false,
+      "words": [],
+      "received_at": "2026-10-02T16:18:44.637561",
+      "lag_ms": 0
+    },
+    {
+      "text": "god is for me god is for me",
+      "start": 47.03,
+      "duration": 4.670002,
+      "is_final": false,
+      "confidence": 1.0,
+      "speech_final": false,
+      "words": [],
+      "received_at": "2026-10-02T16:18:45.648431",
+      "lag_ms": 0
+    },
+    {
+      "text": "god is for me",
+      "start": 50.2,
+      "duration": 1.8999977,
+      "is_final": false,
+      "confidence": 1.0,
+      "speech_final": false,
+      "words": [],
+      "received_at": "2026-10-02T16:18:46.039677",
+      "lag_ms": 0
+    },
+    {
+      "text": "god is for me",
+      "start": 50.2,
+      "duration": 2.7000008,
+      "is_final": false,
+      "confidence": 0.99902344,
+      "speech_final": false,
+      "words": [],
+      "received_at": "2026-10-02T16:18:46.863562",
+      "lag_ms": 0
+    },
+    {
+      "text": "god is for me god is with",
+      "start": 50.2,
+      "duration": 3.7000008,
+      "is_final": false,
+      "confidence": 1.0,
+      "speech_final": false,
+      "words": [],
+      "received_at": "2026-10-02T16:18:47.826645",
+      "lag_ms": 0
+    },
+    {
+      "text": "god is for me god is with me",
+      "start": 50.2,
+      "duration": 4.700001,
+      "is_final": false,
+      "confidence": 1.0,
+      "speech_final": false,
+      "words": [],
+      "received_at": "2026-10-02T16:18:48.847694",
+      "lag_ms": 0
+    },
+    {
+      "text": "god is with",
+      "start": 54.75,
+      "duration": 1.0499992,
+      "is_final": false,
+      "confidence": 1.0,
+      "speech_final": false,
+      "words": [],
+      "received_at": "2026-10-02T16:18:49.735585",
+      "lag_ms": 0
+    },
+    {
+      "text": "god is with",
+      "start": 56.87,
+      "duration": 1.0300026,
+      "is_final": false,
+      "confidence": 1.0,
+      "speech_final": false,
+      "words": [],
+      "received_at": "2026-10-02T16:18:51.834123",
+      "lag_ms": 0
+    },
+    {
+      "text": "god is with me",
+      "start": 56.87,
+      "duration": 2.0300026,
+      "is_final": false,
+      "confidence": 1.0,
+      "speech_final": false,
+      "words": [],
+      "received_at": "2026-10-02T16:18:52.845137",
+      "lag_ms": 0
+    },
+    {
+      "text": "god is with me god is with me",
+      "start": 56.87,
+      "duration": 3.0300026,
+      "is_final": false,
+      "confidence": 1.0,
+      "speech_final": false,
+      "words": [],
+      "received_at": "2026-10-02T16:18:53.891284",
+      "lag_ms": 0
+    },
+    {
+      "text": "god is with me god is with me",
+      "start": 56.87,
+      "duration": 3.3300018,
+      "is_final": false,
+      "confidence": 1.0,
+      "speech_final": false,
+      "words": [],
+      "received_at": "2026-10-02T16:18:54.147868",
+      "lag_ms": 0
+    },
+    {
+      "text": "the wisdom of",
+      "start": 60.5,
+      "duration": 1.0,
+      "is_final": false,
+      "confidence": 1.0,
+      "speech_final": false,
+      "words": [],
+      "received_at": "2026-10-02T16:18:55.451339",
+      "lag_ms": 0
+    },
+    {
+      "text": "the wisdom of god is at work in me",
+      "start": 60.5,
+      "duration": 2.0,
+      "is_final": false,
+      "confidence": 0.99902344,
+      "speech_final": false,
+      "words": [],
+      "received_at": "2026-10-02T16:18:56.438392",
+      "lag_ms": 0
+    },
+    {
+      "text": "the wisdom of god is at work in me",
+      "start": 60.5,
+      "duration": 2.5,
+      "is_final": false,
+      "confidence": 0.99902344,
+      "speech_final": false,
+      "words": [],
+      "received_at": "2026-10-02T16:18:56.952718",
+      "lag_ms": 0
+    },
+    {
+      "text": "the wisdom of god is at work in me the wisdom of",
+      "start": 60.5,
+      "duration": 3.5,
+      "is_final": false,
+      "confidence": 1.0,
+      "speech_final": false,
+      "words": [],
+      "received_at": "2026-10-02T16:18:57.975165",
+      "lag_ms": 0
+    },
+    {
+      "text": "the wisdom of god is at work in me the wisdom of god is at work in",
+      "start": 60.5,
+      "duration": 4.5,
+      "is_final": false,
+      "confidence": 0.99902344,
+      "speech_final": false,
+      "words": [],
+      "received_at": "2026-10-02T16:18:58.991195",
+      "lag_ms": 0
+    },
+    {
+      "text": "the wisdom",
+      "start": 65.14,
+      "duration": 1.0599976,
+      "is_final": false,
+      "confidence": 0.99902344,
+      "speech_final": false,
+      "words": [],
+      "received_at": "2026-10-02T16:19:00.136354",
+      "lag_ms": 0
+    },
+    {
+      "text": "the wisdom of god is at",
+      "start": 65.14,
+      "duration": 2.0599976,
+      "is_final": false,
+      "confidence": 1.0,
+      "speech_final": false,
+      "words": [],
+      "received_at": "2026-10-02T16:19:01.147799",
+      "lag_ms": 0
+    },
+    {
+      "text": "the wisdom of god is at work in me",
+      "start": 65.14,
+      "duration": 2.959999,
+      "is_final": false,
+      "confidence": 0.99902344,
+      "speech_final": false,
+      "words": [],
+      "received_at": "2026-10-02T16:19:02.107191",
+      "lag_ms": 0
+    },
+    {
+      "text": "the wisdom of god is at work in me the wisdom of",
+      "start": 65.14,
+      "duration": 3.959999,
+      "is_final": false,
+      "confidence": 1.0,
+      "speech_final": false,
+      "words": [],
+      "received_at": "2026-10-02T16:19:03.054022",
+      "lag_ms": 0
+    },
+    {
+      "text": "the wisdom of god is at work in me the wisdom of god is at work in",
+      "start": 65.14,
+      "duration": 4.959999,
+      "is_final": false,
+      "confidence": 0.99902344,
+      "speech_final": false,
+      "words": [],
+      "received_at": "2026-10-02T16:19:04.064888",
+      "lag_ms": 0
+    },
+    {
+      "text": "the wisdom of god is at work in me",
+      "start": 68.16,
+      "duration": 2.0399933,
+      "is_final": false,
+      "confidence": 0.9980469,
+      "speech_final": false,
+      "words": [],
+      "received_at": "2026-10-02T16:19:04.170949",
+      "lag_ms": 0
+    },
+    {
+      "text": "the wisdom of god is at work in me",
+      "start": 68.16,
+      "duration": 2.6399994,
+      "is_final": false,
+      "confidence": 1.0,
+      "speech_final": false,
+      "words": [],
+      "received_at": "2026-10-02T16:19:04.741556",
+      "lag_ms": 0
+    },
+    {
+      "text": "the wisdom of god is at work in me the",
+      "start": 68.16,
+      "duration": 2.9399948,
+      "is_final": false,
+      "confidence": 1.0,
+      "speech_final": false,
+      "words": [],
+      "received_at": "2026-10-02T16:19:05.049436",
+      "lag_ms": 0
+    },
+    {
+      "text": "the wisdom of god is at work in me the wisdom of god is at",
+      "start": 68.16,
+      "duration": 3.9399948,
+      "is_final": false,
+      "confidence": 1.0,
+      "speech_final": false,
+      "words": [],
+      "received_at": "2026-10-02T16:19:06.052175",
+      "lag_ms": 0
+    },
+    {
+      "text": "the wisdom of god is at work in me the wisdom of god is at work in me",
+      "start": 68.16,
+      "duration": 4.939995,
+      "is_final": false,
+      "confidence": 1.0,
+      "speech_final": false,
+      "words": [],
+      "received_at": "2026-10-02T16:19:07.062192",
+      "lag_ms": 0
+    },
+    {
+      "text": "i'm",
+      "start": 72.65,
+      "duration": 1.0499954,
+      "is_final": false,
+      "confidence": 0.98706055,
+      "speech_final": false,
+      "words": [],
+      "received_at": "2026-10-02T16:19:07.638382",
+      "lag_ms": 0
+    },
+    {
+      "text": "i'm rich in wisdom",
+      "start": 72.65,
+      "duration": 2.0499954,
+      "is_final": false,
+      "confidence": 0.9536133,
+      "speech_final": false,
+      "words": [],
+      "received_at": "2026-10-02T16:19:08.671957",
+      "lag_ms": 0
+    },
+    {
+      "text": "i'm reaching wisdom",
+      "start": 72.65,
+      "duration": 2.3499985,
+      "is_final": false,
+      "confidence": 0.6765137,
+      "speech_final": false,
+      "words": [],
+      "received_at": "2026-10-02T16:19:08.966054",
+      "lag_ms": 0
+    },
+    {
+      "text": "i'm rich in wisdom i'm rich in",
+      "start": 72.65,
+      "duration": 3.3499985,
+      "is_final": false,
+      "confidence": 0.9970703,
+      "speech_final": false,
+      "words": [],
+      "received_at": "2026-10-02T16:19:09.951301",
+      "lag_ms": 0
+    },
+    {
+      "text": "i'm rich in wisdom i'm rich in wisdom",
+      "start": 72.65,
+      "duration": 3.8499985,
+      "is_final": false,
+      "confidence": 0.9970703,
+      "speech_final": false,
+      "words": [],
+      "received_at": "2026-10-02T16:19:10.450127",
+      "lag_ms": 0
+    },
+    {
+      "text": "i'm rich in wisdom i'm rich in wisdom i'm rich",
+      "start": 72.65,
+      "duration": 4.8499985,
+      "is_final": false,
+      "confidence": 0.99902344,
+      "speech_final": false,
+      "words": [],
+      "received_at": "2026-10-02T16:19:11.463824",
+      "lag_ms": 0
+    },
+    {
+      "text": "i'm rich in wisdom",
+      "start": 76.9,
+      "duration": 1.0,
+      "is_final": false,
+      "confidence": 0.9980469,
+      "speech_final": false,
+      "words": [],
+      "received_at": "2026-10-02T16:19:11.838808",
+      "lag_ms": 0
+    },
+    {
+      "text": "i'm rich in wisdom",
+      "start": 76.9,
+      "duration": 1.699997,
+      "is_final": false,
+      "confidence": 0.9980469,
+      "speech_final": false,
+      "words": [],
+      "received_at": "2026-10-02T16:19:12.535800",
+      "lag_ms": 0
+    },
+    {
+      "text": "i'm rich in wisdom",
+      "start": 76.9,
+      "duration": 1.9000015,
+      "is_final": false,
+      "confidence": 0.99853516,
+      "speech_final": false,
+      "words": [],
+      "received_at": "2026-10-02T16:19:12.735267",
+      "lag_ms": 0
+    },
+    {
+      "text": "i'm rich in wisdom i'm rich in wisdom",
+      "start": 76.9,
+      "duration": 2.9000015,
+      "is_final": false,
+      "confidence": 0.99902344,
+      "speech_final": false,
+      "words": [],
+      "received_at": "2026-10-02T16:19:13.760344",
+      "lag_ms": 0
+    },
+    {
+      "text": "i'm rich in wisdom i'm rich in wisdom",
+      "start": 76.9,
+      "duration": 3.2999954,
+      "is_final": false,
+      "confidence": 0.99902344,
+      "speech_final": false,
+      "words": [],
+      "received_at": "2026-10-02T16:19:14.178038",
+      "lag_ms": 0
+    },
+    {
+      "text": "i'm rich in wisdom i'm rich in wisdom i'm full of",
+      "start": 76.9,
+      "duration": 4.2999954,
+      "is_final": false,
+      "confidence": 0.99902344,
+      "speech_final": false,
+      "words": [],
+      "received_at": "2026-10-02T16:19:15.141850",
+      "lag_ms": 0
+    },
+    {
+      "text": "i'm full",
+      "start": 81.66,
+      "duration": 1.0399933,
+      "is_final": false,
+      "confidence": 1.0,
+      "speech_final": false,
+      "words": [],
+      "received_at": "2026-10-02T16:19:16.659724",
+      "lag_ms": 0
+    },
+    {
+      "text": "i'm full of wisdom",
+      "start": 81.66,
+      "duration": 2.3399963,
+      "is_final": false,
+      "confidence": 0.9995117,
+      "speech_final": false,
+      "words": [],
+      "received_at": "2026-10-02T16:19:17.992111",
+      "lag_ms": 0
+    },
+    {
+      "text": "i'm full of wisdom",
+      "start": 81.66,
+      "duration": 3.3399963,
+      "is_final": false,
+      "confidence": 0.9995117,
+      "speech_final": false,
+      "words": [],
+      "received_at": "2026-10-02T16:19:18.952275",
+      "lag_ms": 0
+    },
+    {
+      "text": "i'm full of wisdom the wisdom of",
+      "start": 81.66,
+      "duration": 4.3399963,
+      "is_final": false,
+      "confidence": 0.99902344,
+      "speech_final": false,
+      "words": [],
+      "received_at": "2026-10-02T16:19:19.944055",
+      "lag_ms": 0
+    },
+    {
+      "text": "the wisdom of god is at",
+      "start": 84.71,
+      "duration": 1.9899979,
+      "is_final": false,
+      "confidence": 0.9970703,
+      "speech_final": false,
+      "words": [],
+      "received_at": "2026-10-02T16:19:20.662782",
+      "lag_ms": 0
+    },
+    {
+      "text": "the wisdom of god is at work in me",
+      "start": 84.71,
+      "duration": 2.9899979,
+      "is_final": false,
+      "confidence": 0.99902344,
+      "speech_final": false,
+      "words": [],
+      "received_at": "2026-10-02T16:19:21.654124",
+      "lag_ms": 0
+    },
+    {
+      "text": "the wisdom",
+      "start": 88.06,
+      "duration": 1.0400009,
+      "is_final": false,
+      "confidence": 1.0,
+      "speech_final": false,
+      "words": [],
+      "received_at": "2026-10-02T16:19:23.055538",
+      "lag_ms": 0
+    },
+    {
+      "text": "the wisdom of god is",
+      "start": 88.06,
+      "duration": 2.040001,
+      "is_final": false,
+      "confidence": 1.0,
+      "speech_final": false,
+      "words": [],
+      "received_at": "2026-10-02T16:19:24.033058",
+      "lag_ms": 0
+    },
+    {
+      "text": "the wisdom of god is at work in me",
+      "start": 88.06,
+      "duration": 3.040001,
+      "is_final": false,
+      "confidence": 1.0,
+      "speech_final": false,
+      "words": [],
+      "received_at": "2026-10-02T16:19:25.046703",
+      "lag_ms": 0
+    },
+    {
+      "text": "the wisdom of god is at work in me",
+      "start": 88.06,
+      "duration": 3.540001,
+      "is_final": false,
+      "confidence": 1.0,
+      "speech_final": false,
+      "words": [],
+      "received_at": "2026-10-02T16:19:25.597303",
+      "lag_ms": 0
+    },
+    {
+      "text": "the wisdom of god is at work in me the wisdom",
+      "start": 88.06,
+      "duration": 4.540001,
+      "is_final": false,
+      "confidence": 1.0,
+      "speech_final": false,
+      "words": [],
+      "received_at": "2026-10-02T16:19:26.543644",
+      "lag_ms": 0
+    },
+    {
+      "text": "the wisdom of god is",
+      "start": 91.41,
+      "duration": 1.6899948,
+      "is_final": false,
+      "confidence": 1.0,
+      "speech_final": false,
+      "words": [],
+      "received_at": "2026-10-02T16:19:27.079621",
+      "lag_ms": 0
+    },
+    {
+      "text": "the wisdom of god is at work in me",
+      "start": 91.41,
+      "duration": 2.6899948,
+      "is_final": false,
+      "confidence": 1.0,
+      "speech_final": false,
+      "words": [],
+      "received_at": "2026-10-02T16:19:28.057583",
+      "lag_ms": 0
+    },
+    {
+      "text": "the wisdom of god is at work in me",
+      "start": 91.41,
+      "duration": 3.3899994,
+      "is_final": false,
+      "confidence": 1.0,
+      "speech_final": false,
+      "words": [],
+      "received_at": "2026-10-02T16:19:28.753956",
+      "lag_ms": 0
+    },
+    {
+      "text": "the wisdom of god is at work in me god is with me",
+      "start": 91.41,
+      "duration": 4.489998,
+      "is_final": false,
+      "confidence": 1.0,
+      "speech_final": false,
+      "words": [],
+      "received_at": "2026-10-02T16:19:29.863114",
+      "lag_ms": 0
+    },
+    {
+      "text": "the wisdom of god is at work in me god is with me",
+      "start": 91.41,
+      "duration": 4.989998,
+      "is_final": false,
+      "confidence": 1.0,
+      "speech_final": false,
+      "words": [],
+      "received_at": "2026-10-02T16:19:30.344418",
+      "lag_ms": 0
+    },
+    {
+      "text": "god is with me",
+      "start": 94.67,
+      "duration": 1.8300018,
+      "is_final": false,
+      "confidence": 1.0,
+      "speech_final": false,
+      "words": [],
+      "received_at": "2026-10-02T16:19:30.455205",
+      "lag_ms": 0
+    },
+    {
+      "text": "god is with me god is with",
+      "start": 94.67,
+      "duration": 2.9300003,
+      "is_final": false,
+      "confidence": 1.0,
+      "speech_final": false,
+      "words": [],
+      "received_at": "2026-10-02T16:19:31.548436",
+      "lag_ms": 0
+    },
+    {
+      "text": "god is with me god is with me",
+      "start": 94.67,
+      "duration": 4.130005,
+      "is_final": false,
+      "confidence": 1.0,
+      "speech_final": false,
+      "words": [],
+      "received_at": "2026-10-02T16:19:32.768289",
+      "lag_ms": 0
+    },
+    {
+      "text": "god is for me",
+      "start": 98.32,
+      "duration": 1.3799973,
+      "is_final": false,
+      "confidence": 1.0,
+      "speech_final": false,
+      "words": [],
+      "received_at": "2026-10-02T16:19:33.679321",
+      "lag_ms": 0
+    },
+    {
+      "text": "god is for me god",
+      "start": 98.32,
+      "duration": 2.3799973,
+      "is_final": false,
+      "confidence": 1.0,
+      "speech_final": false,
+      "words": [],
+      "received_at": "2026-10-02T16:19:34.680255",
+      "lag_ms": 0
+    },
+    {
+      "text": "god is for me god is for me",
+      "start": 98.32,
+      "duration": 3.3799973,
+      "is_final": false,
+      "confidence": 1.0,
+      "speech_final": false,
+      "words": [],
+      "received_at": "2026-10-02T16:19:35.651663",
+      "lag_ms": 0
+    },
+    {
+      "text": "god is for me god is for me",
+      "start": 98.32,
+      "duration": 3.5800018,
+      "is_final": false,
+      "confidence": 1.0,
+      "speech_final": false,
+      "words": [],
+      "received_at": "2026-10-02T16:19:35.849242",
+      "lag_ms": 0
+    },
+    {
+      "text": "god is for me god is for me i'm full of",
+      "start": 98.32,
+      "duration": 4.580002,
+      "is_final": false,
+      "confidence": 1.0,
+      "speech_final": false,
+      "words": [],
+      "received_at": "2026-10-02T16:19:36.851826",
+      "lag_ms": 0
+    },
+    {
+      "text": "i'm full of wisdom",
+      "start": 101.61,
+      "duration": 1.7900009,
+      "is_final": false,
+      "confidence": 0.9970703,
+      "speech_final": false,
+      "words": [],
+      "received_at": "2026-10-02T16:19:37.419900",
+      "lag_ms": 0
+    },
+    {
+      "text": "i'm full of wisdom",
+      "start": 101.61,
+      "duration": 2.1900024,
+      "is_final": false,
+      "confidence": 0.9970703,
+      "speech_final": false,
+      "words": [],
+      "received_at": "2026-10-02T16:19:37.742883",
+      "lag_ms": 0
+    },
+    {
+      "text": "i'm full of wisdom the wisdom of",
+      "start": 101.61,
+      "duration": 3.1900024,
+      "is_final": false,
+      "confidence": 0.99902344,
+      "speech_final": false,
+      "words": [],
+      "received_at": "2026-10-02T16:19:38.726289",
+      "lag_ms": 0
+    },
+    {
+      "text": "i'm full of wisdom the wisdom of god is at work in",
+      "start": 101.61,
+      "duration": 4.1900024,
+      "is_final": false,
+      "confidence": 0.9980469,
+      "speech_final": false,
+      "words": [],
+      "received_at": "2026-10-02T16:19:39.751342",
+      "lag_ms": 0
+    },
+    {
+      "text": "i'm full of wisdom the wisdom of god is at work in me",
+      "start": 101.61,
+      "duration": 4.989998,
+      "is_final": false,
+      "confidence": 0.99902344,
+      "speech_final": false,
+      "words": [],
+      "received_at": "2026-10-02T16:19:40.560775",
+      "lag_ms": 0
+    },
+    {
+      "text": "god is",
+      "start": 106.13,
+      "duration": 1.0699997,
+      "is_final": false,
+      "confidence": 1.0,
+      "speech_final": false,
+      "words": [],
+      "received_at": "2026-10-02T16:19:41.166423",
+      "lag_ms": 0
+    },
+    {
+      "text": "god is with me",
+      "start": 106.13,
+      "duration": 1.9700012,
+      "is_final": false,
+      "confidence": 1.0,
+      "speech_final": false,
+      "words": [],
+      "received_at": "2026-10-02T16:19:42.043421",
+      "lag_ms": 0
+    },
+    {
+      "text": "god is with me",
+      "start": 106.13,
+      "duration": 2.1700058,
+      "is_final": false,
+      "confidence": 1.0,
+      "speech_final": false,
+      "words": [],
+      "received_at": "2026-10-02T16:19:42.350304",
+      "lag_ms": 0
+    },
+    {
+      "text": "god is with me",
+      "start": 106.13,
+      "duration": 2.5699997,
+      "is_final": false,
+      "confidence": 1.0,
+      "speech_final": false,
+      "words": [],
+      "received_at": "2026-10-02T16:19:42.648893",
+      "lag_ms": 0
+    },
+    {
+      "text": "god is with me god is with me",
+      "start": 106.13,
+      "duration": 3.5699997,
+      "is_final": false,
+      "confidence": 1.0,
+      "speech_final": false,
+      "words": [],
+      "received_at": "2026-10-02T16:19:43.659054",
+      "lag_ms": 0
+    },
+    {
+      "text": "god is with me god is with me",
+      "start": 106.13,
+      "duration": 3.8700027,
+      "is_final": false,
+      "confidence": 1.0,
+      "speech_final": false,
+      "words": [],
+      "received_at": "2026-10-02T16:19:43.951640",
+      "lag_ms": 0
+    },
+    {
+      "text": "god is with me god is with me",
+      "start": 106.13,
+      "duration": 4.170006,
+      "is_final": false,
+      "confidence": 1.0,
+      "speech_final": false,
+      "words": [],
+      "received_at": "2026-10-02T16:19:44.269502",
+      "lag_ms": 0
+    },
+    {
+      "text": "god is with",
+      "start": 110.11,
+      "duration": 1.0899963,
+      "is_final": false,
+      "confidence": 0.99902344,
+      "speech_final": false,
+      "words": [],
+      "received_at": "2026-10-02T16:19:45.180293",
+      "lag_ms": 0
+    },
+    {
+      "text": "god is with me",
+      "start": 110.11,
+      "duration": 1.8899994,
+      "is_final": false,
+      "confidence": 1.0,
+      "speech_final": false,
+      "words": [],
+      "received_at": "2026-10-02T16:19:45.946869",
+      "lag_ms": 0
+    },
+    {
+      "text": "god is with me god",
+      "start": 110.11,
+      "duration": 2.8899994,
+      "is_final": false,
+      "confidence": 0.99902344,
+      "speech_final": false,
+      "words": [],
+      "received_at": "2026-10-02T16:19:46.935637",
+      "lag_ms": 0
+    },
+    {
+      "text": "god is with me god is with me",
+      "start": 110.11,
+      "duration": 3.790001,
+      "is_final": false,
+      "confidence": 1.0,
+      "speech_final": false,
+      "words": [],
+      "received_at": "2026-10-02T16:19:47.841674",
+      "lag_ms": 0
+    },
+    {
+      "text": "god is with me god is with me",
+      "start": 110.11,
+      "duration": 4.0899963,
+      "is_final": false,
+      "confidence": 1.0,
+      "speech_final": false,
+      "words": [],
+      "received_at": "2026-10-02T16:19:48.154418",
+      "lag_ms": 0
+    },
+    {
+      "text": "god is with me god is with me",
+      "start": 110.11,
+      "duration": 4.3899994,
+      "is_final": false,
+      "confidence": 1.0,
+      "speech_final": false,
+      "words": [],
+      "received_at": "2026-10-02T16:19:48.448646",
+      "lag_ms": 0
+    },
+    {
+      "text": "god is with",
+      "start": 113.7,
+      "duration": 1.5,
+      "is_final": false,
+      "confidence": 0.9980469,
+      "speech_final": false,
+      "words": [],
+      "received_at": "2026-10-02T16:19:49.311046",
+      "lag_ms": 0
+    },
+    {
+      "text": "god is with me",
+      "start": 113.7,
+      "duration": 2.5,
+      "is_final": false,
+      "confidence": 0.9995117,
+      "speech_final": false,
+      "words": [],
+      "received_at": "2026-10-02T16:19:50.160649",
+      "lag_ms": 0
+    },
+    {
+      "text": "god is with me",
+      "start": 113.7,
+      "duration": 2.7000046,
+      "is_final": false,
+      "confidence": 1.0,
+      "speech_final": false,
+      "words": [],
+      "received_at": "2026-10-02T16:19:50.371679",
+      "lag_ms": 0
+    },
+    {
+      "text": "god is with me god is with me",
+      "start": 113.7,
+      "duration": 3.7000046,
+      "is_final": false,
+      "confidence": 1.0,
+      "speech_final": false,
+      "words": [],
+      "received_at": "2026-10-02T16:19:51.336737",
+      "lag_ms": 0
+    },
+    {
+      "text": "god is with me god is with me",
+      "start": 113.7,
+      "duration": 4.2000046,
+      "is_final": false,
+      "confidence": 1.0,
+      "speech_final": false,
+      "words": [],
+      "received_at": "2026-10-02T16:19:51.854927",
+      "lag_ms": 0
+    },
+    {
+      "text": "god is with me god is with me",
+      "start": 113.7,
+      "duration": 4.7000046,
+      "is_final": false,
+      "confidence": 1.0,
+      "speech_final": false,
+      "words": [],
+      "received_at": "2026-10-02T16:19:52.348302",
+      "lag_ms": 0
+    },
+    {
+      "text": "god is",
+      "start": 117.71,
+      "duration": 1.090004,
+      "is_final": false,
+      "confidence": 0.99902344,
+      "speech_final": false,
+      "words": [],
+      "received_at": "2026-10-02T16:19:52.739763",
+      "lag_ms": 0
+    },
+    {
+      "text": "god is with me",
+      "start": 117.71,
+      "duration": 1.9899979,
+      "is_final": false,
+      "confidence": 1.0,
+      "speech_final": false,
+      "words": [],
+      "received_at": "2026-10-02T16:19:53.633979",
+      "lag_ms": 0
+    },
+    {
+      "text": "god is with me",
+      "start": 117.71,
+      "duration": 2.290001,
+      "is_final": false,
+      "confidence": 1.0,
+      "speech_final": false,
+      "words": [],
+      "received_at": "2026-10-02T16:19:53.948984",
+      "lag_ms": 0
+    },
+    {
+      "text": "god is with me",
+      "start": 117.71,
+      "duration": 2.4899979,
+      "is_final": false,
+      "confidence": 1.0,
+      "speech_final": false,
+      "words": [],
+      "received_at": "2026-10-02T16:19:54.141283",
+      "lag_ms": 0
+    },
+    {
+      "text": "god is with me god is with me",
+      "start": 117.71,
+      "duration": 3.4899979,
+      "is_final": false,
+      "confidence": 0.9995117,
+      "speech_final": false,
+      "words": [],
+      "received_at": "2026-10-02T16:19:55.156313",
+      "lag_ms": 0
+    },
+    {
+      "text": "god is with me god is with me god",
+      "start": 117.71,
+      "duration": 4.590004,
+      "is_final": false,
+      "confidence": 1.0,
+      "speech_final": false,
+      "words": [],
+      "received_at": "2026-10-02T16:19:56.281027",
+      "lag_ms": 0
+    },
+    {
+      "text": "god is with me",
+      "start": 121.6,
+      "duration": 1.2000046,
+      "is_final": false,
+      "confidence": 1.0,
+      "speech_final": false,
+      "words": [],
+      "received_at": "2026-10-02T16:19:56.748152",
+      "lag_ms": 0
+    },
+    {
+      "text": "go this with me",
+      "start": 121.6,
+      "duration": 2.0,
+      "is_final": false,
+      "confidence": 0.99853516,
+      "speech_final": false,
+      "words": [],
+      "received_at": "2026-10-02T16:19:57.539517",
+      "lag_ms": 0
+    },
+    {
+      "text": "god is with me the wisdom of",
+      "start": 121.6,
+      "duration": 3.0,
+      "is_final": false,
+      "confidence": 0.9970703,
+      "speech_final": false,
+      "words": [],
+      "received_at": "2026-10-02T16:19:58.531184",
+      "lag_ms": 0
+    },
+    {
+      "text": "god is with me the wisdom of god is at work in",
+      "start": 121.6,
+      "duration": 4.0,
+      "is_final": false,
+      "confidence": 0.9980469,
+      "speech_final": false,
+      "words": [],
+      "received_at": "2026-10-02T16:19:59.550117",
+      "lag_ms": 0
+    },
+    {
+      "text": "god is with me",
+      "start": 126.45,
+      "duration": 1.050003,
+      "is_final": false,
+      "confidence": 1.0,
+      "speech_final": false,
+      "words": [],
+      "received_at": "2026-10-02T16:20:01.434339",
+      "lag_ms": 0
+    },
+    {
+      "text": "god is with me",
+      "start": 126.45,
+      "duration": 2.050003,
+      "is_final": false,
+      "confidence": 1.0,
+      "speech_final": false,
+      "words": [],
+      "received_at": "2026-10-02T16:20:02.473616",
+      "lag_ms": 0
+    },
+    {
+      "text": "god is with me god is",
+      "start": 126.45,
+      "duration": 3.050003,
+      "is_final": false,
+      "confidence": 1.0,
+      "speech_final": false,
+      "words": [],
+      "received_at": "2026-10-02T16:20:03.433596",
+      "lag_ms": 0
+    },
+    {
+      "text": "god is with me god is for me",
+      "start": 126.45,
+      "duration": 3.75,
+      "is_final": false,
+      "confidence": 0.9980469,
+      "speech_final": false,
+      "words": [],
+      "received_at": "2026-10-02T16:20:04.180735",
+      "lag_ms": 0
+    },
+    {
+      "text": "god is with me god is for me god is",
+      "start": 126.45,
+      "duration": 4.75,
+      "is_final": false,
+      "confidence": 1.0,
+      "speech_final": false,
+      "words": [],
+      "received_at": "2026-10-02T16:20:05.137338",
+      "lag_ms": 0
+    },
+    {
+      "text": "god is for",
+      "start": 130.16,
+      "duration": 1.3399963,
+      "is_final": false,
+      "confidence": 0.99902344,
+      "speech_final": false,
+      "words": [],
+      "received_at": "2026-10-02T16:20:05.437632",
+      "lag_ms": 0
+    },
+    {
+      "text": "god is for me",
+      "start": 130.16,
+      "duration": 2.4400024,
+      "is_final": false,
+      "confidence": 0.99902344,
+      "speech_final": false,
+      "words": [],
+      "received_at": "2026-10-02T16:20:06.541284",
+      "lag_ms": 0
+    },
+    {
+      "text": "god is for me god is for me",
+      "start": 130.16,
+      "duration": 3.4400024,
+      "is_final": false,
+      "confidence": 1.0,
+      "speech_final": false,
+      "words": [],
+      "received_at": "2026-10-02T16:20:07.568184",
+      "lag_ms": 0
+    },
+    {
+      "text": "god is for me god is for me",
+      "start": 130.16,
+      "duration": 3.8399963,
+      "is_final": false,
+      "confidence": 1.0,
+      "speech_final": false,
+      "words": [],
+      "received_at": "2026-10-02T16:20:07.941968",
+      "lag_ms": 0
+    },
+    {
+      "text": "god is for me god is for me god is for",
+      "start": 130.16,
+      "duration": 4.8399963,
+      "is_final": false,
+      "confidence": 1.0,
+      "speech_final": false,
+      "words": [],
+      "received_at": "2026-10-02T16:20:08.955829",
+      "lag_ms": 0
+    },
+    {
+      "text": "god is for me",
+      "start": 133.87,
+      "duration": 1.3300018,
+      "is_final": false,
+      "confidence": 1.0,
+      "speech_final": false,
+      "words": [],
+      "received_at": "2026-10-02T16:20:09.154356",
+      "lag_ms": 0
+    },
+    {
+      "text": "god is for me i'm",
+      "start": 133.87,
+      "duration": 2.430008,
+      "is_final": false,
+      "confidence": 1.0,
+      "speech_final": false,
+      "words": [],
+      "received_at": "2026-10-02T16:20:10.243880",
+      "lag_ms": 0
+    },
+    {
+      "text": "god is for me i'm rich in wisdom",
+      "start": 133.87,
+      "duration": 3.430008,
+      "is_final": false,
+      "confidence": 0.99902344,
+      "speech_final": false,
+      "words": [],
+      "received_at": "2026-10-02T16:20:11.256797",
+      "lag_ms": 0
+    },
+    {
+      "text": "god is for me i'm rich in wisdom",
+      "start": 133.87,
+      "duration": 3.8300018,
+      "is_final": false,
+      "confidence": 0.9995117,
+      "speech_final": false,
+      "words": [],
+      "received_at": "2026-10-02T16:20:11.670758",
+      "lag_ms": 0
+    },
+    {
+      "text": "god is for me i'm rich in wisdom i'm full",
+      "start": 133.87,
+      "duration": 4.830002,
+      "is_final": false,
+      "confidence": 1.0,
+      "speech_final": false,
+      "words": [],
+      "received_at": "2026-10-02T16:20:12.638614",
+      "lag_ms": 0
+    },
+    {
+      "text": "i'm full of",
+      "start": 137.61,
+      "duration": 1.2899933,
+      "is_final": false,
+      "confidence": 0.9980469,
+      "speech_final": false,
+      "words": [],
+      "received_at": "2026-10-02T16:20:12.849334",
+      "lag_ms": 0
+    },
+    {
+      "text": "i'm full of wisdom",
+      "start": 137.61,
+      "duration": 2.0899963,
+      "is_final": false,
+      "confidence": 0.99902344,
+      "speech_final": false,
+      "words": [],
+      "received_at": "2026-10-02T16:20:13.646757",
+      "lag_ms": 0
+    },
+    {
+      "text": "i'm full of wisdom i'm rich in",
+      "start": 137.61,
+      "duration": 3.0899963,
+      "is_final": false,
+      "confidence": 0.99902344,
+      "speech_final": false,
+      "words": [],
+      "received_at": "2026-10-02T16:20:14.637944",
+      "lag_ms": 0
+    },
+    {
+      "text": "i'm full of wisdom i'm rich in wisdom",
+      "start": 137.61,
+      "duration": 3.8899994,
+      "is_final": false,
+      "confidence": 0.99902344,
+      "speech_final": false,
+      "words": [],
+      "received_at": "2026-10-02T16:20:15.443733",
+      "lag_ms": 0
+    },
+    {
+      "text": "i'm full of wisdom i'm rich in wisdom",
+      "start": 137.61,
+      "duration": 4.1900024,
+      "is_final": false,
+      "confidence": 0.99902344,
+      "speech_final": false,
+      "words": [],
+      "received_at": "2026-10-02T16:20:15.740533",
+      "lag_ms": 0
+    },
+    {
+      "text": "i'm full of",
+      "start": 141.26,
+      "duration": 1.4400024,
+      "is_final": false,
+      "confidence": 0.9995117,
+      "speech_final": false,
+      "words": [],
+      "received_at": "2026-10-02T16:20:16.647085",
+      "lag_ms": 0
+    },
+    {
+      "text": "i'm full of wisdom",
+      "start": 141.26,
+      "duration": 2.4400024,
+      "is_final": false,
+      "confidence": 1.0,
+      "speech_final": false,
+      "words": [],
+      "received_at": "2026-10-02T16:20:17.647649",
+      "lag_ms": 0
+    },
+    {
+      "text": "i'm full of wisdom i'm rich in",
+      "start": 141.26,
+      "duration": 3.4400024,
+      "is_final": false,
+      "confidence": 0.9995117,
+      "speech_final": false,
+      "words": [],
+      "received_at": "2026-10-02T16:20:18.633089",
+      "lag_ms": 0
+    },
+    {
+      "text": "i'm full of wisdom i'm rich in wisdom",
+      "start": 141.26,
+      "duration": 4.2400055,
+      "is_final": false,
+      "confidence": 1.0,
+      "speech_final": false,
+      "words": [],
+      "received_at": "2026-10-02T16:20:19.439585",
+      "lag_ms": 0
+    },
+    {
+      "text": "god is with",
+      "start": 147.46,
+      "duration": 1.0399933,
+      "is_final": false,
+      "confidence": 0.98095703,
+      "speech_final": false,
+      "words": [],
+      "received_at": "2026-10-02T16:20:22.448194",
+      "lag_ms": 0
+    },
+    {
+      "text": "god is with me",
+      "start": 147.46,
+      "duration": 1.6399994,
+      "is_final": false,
+      "confidence": 1.0,
+      "speech_final": false,
+      "words": [],
+      "received_at": "2026-10-02T16:20:23.051368",
+      "lag_ms": 0
+    },
+    {
+      "text": "god is with me",
+      "start": 147.46,
+      "duration": 1.9399872,
+      "is_final": false,
+      "confidence": 0.99902344,
+      "speech_final": false,
+      "words": [],
+      "received_at": "2026-10-02T16:20:23.366306",
+      "lag_ms": 0
+    },
+    {
+      "text": "god is with me god",
+      "start": 147.46,
+      "duration": 2.4399872,
+      "is_final": false,
+      "confidence": 0.9975586,
+      "speech_final": false,
+      "words": [],
+      "received_at": "2026-10-02T16:20:23.850612",
+      "lag_ms": 0
+    },
+    {
+      "text": "god is with me god is for me",
+      "start": 147.46,
+      "duration": 3.4399872,
+      "is_final": false,
+      "confidence": 0.99902344,
+      "speech_final": false,
+      "words": [],
+      "received_at": "2026-10-02T16:20:24.860981",
+      "lag_ms": 0
+    },
+    {
+      "text": "god is with me god is for me",
+      "start": 147.46,
+      "duration": 3.6399994,
+      "is_final": false,
+      "confidence": 1.0,
+      "speech_final": false,
+      "words": [],
+      "received_at": "2026-10-02T16:20:25.052738",
+      "lag_ms": 0
+    },
+    {
+      "text": "god is with me god is for me",
+      "start": 147.46,
+      "duration": 3.9399872,
+      "is_final": false,
+      "confidence": 1.0,
+      "speech_final": false,
+      "words": [],
+      "received_at": "2026-10-02T16:20:25.357314",
+      "lag_ms": 0
+    },
+    {
+      "text": "god is with me god is for me",
+      "start": 147.46,
+      "duration": 4.23999,
+      "is_final": false,
+      "confidence": 1.0,
+      "speech_final": false,
+      "words": [],
+      "received_at": "2026-10-02T16:20:25.691954",
+      "lag_ms": 0
+    },
+    {
+      "text": "god is with me",
+      "start": 150.9,
+      "duration": 1.6000061,
+      "is_final": false,
+      "confidence": 1.0,
+      "speech_final": false,
+      "words": [],
+      "received_at": "2026-10-02T16:20:26.486772",
+      "lag_ms": 0
+    },
+    {
+      "text": "god is with me",
+      "start": 150.9,
+      "duration": 2.100006,
+      "is_final": false,
+      "confidence": 1.0,
+      "speech_final": false,
+      "words": [],
+      "received_at": "2026-10-02T16:20:26.934191",
+      "lag_ms": 0
+    },
+    {
+      "text": "god is with me",
+      "start": 150.9,
+      "duration": 2.4000092,
+      "is_final": false,
+      "confidence": 1.0,
+      "speech_final": false,
+      "words": [],
+      "received_at": "2026-10-02T16:20:27.230778",
+      "lag_ms": 0
+    },
+    {
+      "text": "god is with me god is for",
+      "start": 150.9,
+      "duration": 3.4000092,
+      "is_final": false,
+      "confidence": 0.99902344,
+      "speech_final": false,
+      "words": [],
+      "received_at": "2026-10-02T16:20:28.245573",
+      "lag_ms": 0
+    },
+    {
+      "text": "god is with me god is for me",
+      "start": 150.9,
+      "duration": 4.0,
+      "is_final": false,
+      "confidence": 0.99902344,
+      "speech_final": false,
+      "words": [],
+      "received_at": "2026-10-02T16:20:28.869887",
+      "lag_ms": 0
+    },
+    {
+      "text": "i'm full of",
+      "start": 154.67,
+      "duration": 1.2299957,
+      "is_final": false,
+      "confidence": 0.99902344,
+      "speech_final": false,
+      "words": [],
+      "received_at": "2026-10-02T16:20:29.916299",
+      "lag_ms": 0
+    },
+    {
+      "text": "i'm full of wisdom",
+      "start": 154.67,
+      "duration": 2.3300018,
+      "is_final": false,
+      "confidence": 1.0,
+      "speech_final": false,
+      "words": [],
+      "received_at": "2026-10-02T16:20:30.936134",
+      "lag_ms": 0
+    },
+    {
+      "text": "i'm full of wisdom i'm",
+      "start": 154.67,
+      "duration": 2.630005,
+      "is_final": false,
+      "confidence": 0.99902344,
+      "speech_final": false,
+      "words": [],
+      "received_at": "2026-10-02T16:20:31.280257",
+      "lag_ms": 0
+    },
+    {
+      "text": "i'm full of wisdom i'm rich in wisdom",
+      "start": 154.67,
+      "duration": 3.630005,
+      "is_final": false,
+      "confidence": 0.99902344,
+      "speech_final": false,
+      "words": [],
+      "received_at": "2026-10-02T16:20:32.261121",
+      "lag_ms": 0
+    },
+    {
+      "text": "the wisdom of",
+      "start": 158.93,
+      "duration": 1.0700073,
+      "is_final": false,
+      "confidence": 1.0,
+      "speech_final": false,
+      "words": [],
+      "received_at": "2026-10-02T16:20:33.926785",
+      "lag_ms": 0
+    },
+    {
+      "text": "the wisdom of god is at work in me",
+      "start": 158.93,
+      "duration": 2.1700134,
+      "is_final": false,
+      "confidence": 0.99902344,
+      "speech_final": false,
+      "words": [],
+      "received_at": "2026-10-02T16:20:35.040471",
+      "lag_ms": 0
+    },
+    {
+      "text": "the wisdom of god is at work in me",
+      "start": 158.93,
+      "duration": 2.4700012,
+      "is_final": false,
+      "confidence": 0.9980469,
+      "speech_final": false,
+      "words": [],
+      "received_at": "2026-10-02T16:20:35.352291",
+      "lag_ms": 0
+    },
+    {
+      "text": "the wisdom of god is at work in me god is",
+      "start": 158.93,
+      "duration": 3.4700012,
+      "is_final": false,
+      "confidence": 0.99902344,
+      "speech_final": false,
+      "words": [],
+      "received_at": "2026-10-02T16:20:36.347855",
+      "lag_ms": 0
+    },
+    {
+      "text": "the wisdom of god is at work in me god is with me",
+      "start": 158.93,
+      "duration": 4.5700073,
+      "is_final": false,
+      "confidence": 0.9980469,
+      "speech_final": false,
+      "words": [],
+      "received_at": "2026-10-02T16:20:37.456924",
+      "lag_ms": 0
+    },
+    {
+      "text": "the wisdom of god is at work in me god is with me",
+      "start": 158.93,
+      "duration": 4.8700104,
+      "is_final": false,
+      "confidence": 0.9980469,
+      "speech_final": false,
+      "words": [],
+      "received_at": "2026-10-02T16:20:37.763163",
+      "lag_ms": 0
+    },
+    {
+      "text": "god is",
+      "start": 163.3,
+      "duration": 1.0,
+      "is_final": false,
+      "confidence": 1.0,
+      "speech_final": false,
+      "words": [],
+      "received_at": "2026-10-02T16:20:38.228130",
+      "lag_ms": 0
+    },
+    {
+      "text": "god is for me",
+      "start": 163.3,
+      "duration": 2.0999908,
+      "is_final": false,
+      "confidence": 1.0,
+      "speech_final": false,
+      "words": [],
+      "received_at": "2026-10-02T16:20:39.354414",
+      "lag_ms": 0
+    },
+    {
+      "text": "god is for me",
+      "start": 163.3,
+      "duration": 2.800003,
+      "is_final": false,
+      "confidence": 1.0,
+      "speech_final": false,
+      "words": [],
+      "received_at": "2026-10-02T16:20:40.053845",
+      "lag_ms": 0
+    },
+    {
+      "text": "god is for me",
+      "start": 163.3,
+      "duration": 3.800003,
+      "is_final": false,
+      "confidence": 1.0,
+      "speech_final": false,
+      "words": [],
+      "received_at": "2026-10-02T16:20:41.047599",
+      "lag_ms": 0
+    },
+    {
+      "text": "god is for me",
+      "start": 163.3,
+      "duration": 4.0,
+      "is_final": false,
+      "confidence": 1.0,
+      "speech_final": false,
+      "words": [],
+      "received_at": "2026-10-02T16:20:41.242558",
+      "lag_ms": 0
+    },
+    {
+      "text": "god is for me",
+      "start": 163.3,
+      "duration": 4.599991,
+      "is_final": false,
+      "confidence": 1.0,
+      "speech_final": false,
+      "words": [],
+      "received_at": "2026-10-02T16:20:41.845602",
+      "lag_ms": 0
+    },
+    {
+      "text": "god is for me",
+      "start": 163.3,
+      "duration": 4.899994,
+      "is_final": false,
+      "confidence": 0.9980469,
+      "speech_final": false,
+      "words": [],
+      "received_at": "2026-10-02T16:20:42.140802",
+      "lag_ms": 0
+    },
+    {
+      "text": "i'm full",
+      "start": 167.55,
+      "duration": 1.050003,
+      "is_final": false,
+      "confidence": 0.98168945,
+      "speech_final": false,
+      "words": [],
+      "received_at": "2026-10-02T16:20:42.524478",
+      "lag_ms": 0
+    },
+    {
+      "text": "go this for",
+      "start": 169.86,
+      "duration": 1.0399933,
+      "is_final": false,
+      "confidence": 0.6958008,
+      "speech_final": false,
+      "words": [],
+      "received_at": "2026-10-02T16:20:44.817454",
+      "lag_ms": 0
+    },
+    {
+      "text": "god is for me",
+      "start": 169.86,
+      "duration": 2.0399933,
+      "is_final": false,
+      "confidence": 0.99316406,
+      "speech_final": false,
+      "words": [],
+      "received_at": "2026-10-02T16:20:45.838529",
+      "lag_ms": 0
+    },
+    {
+      "text": "god is for me god is with me",
+      "start": 169.86,
+      "duration": 3.0399933,
+      "is_final": false,
+      "confidence": 0.9980469,
+      "speech_final": false,
+      "words": [],
+      "received_at": "2026-10-02T16:20:46.841592",
+      "lag_ms": 0
+    },
+    {
+      "text": "god is for me god is with me",
+      "start": 169.86,
+      "duration": 3.7400055,
+      "is_final": false,
+      "confidence": 0.99902344,
+      "speech_final": false,
+      "words": [],
+      "received_at": "2026-10-02T16:20:47.573012",
+      "lag_ms": 0
+    },
+    {
+      "text": "god is for me god is with me i'm rich in",
+      "start": 169.86,
+      "duration": 4.8399963,
+      "is_final": false,
+      "confidence": 0.99902344,
+      "speech_final": false,
+      "words": [],
+      "received_at": "2026-10-02T16:20:48.668755",
+      "lag_ms": 0
+    },
+    {
+      "text": "i'm rich in wisdom",
+      "start": 173.42,
+      "duration": 1.4799957,
+      "is_final": false,
+      "confidence": 0.99316406,
+      "speech_final": false,
+      "words": [],
+      "received_at": "2026-10-02T16:20:48.882287",
+      "lag_ms": 0
+    },
+    {
+      "text": "i'm rich in wisdom",
+      "start": 173.42,
+      "duration": 2.0800018,
+      "is_final": false,
+      "confidence": 0.9941406,
+      "speech_final": false,
+      "words": [],
+      "received_at": "2026-10-02T16:20:49.444370",
+      "lag_ms": 0
+    },
+    {
+      "text": "i'm rich in wisdom the wisdom of",
+      "start": 173.42,
+      "duration": 3.0800018,
+      "is_final": false,
+      "confidence": 0.99853516,
+      "speech_final": false,
+      "words": [],
+      "received_at": "2026-10-02T16:20:50.462570",
+      "lag_ms": 0
+    },
+    {
+      "text": "i'm rich in wisdom the wisdom of god is at work in",
+      "start": 173.42,
+      "duration": 4.080002,
+      "is_final": false,
+      "confidence": 0.99902344,
+      "speech_final": false,
+      "words": [],
+      "received_at": "2026-10-02T16:20:51.444363",
+      "lag_ms": 0
+    },
+    {
+      "text": "i'm rich in wisdom the wisdom of god is at work in me",
+      "start": 173.42,
+      "duration": 4.680008,
+      "is_final": false,
+      "confidence": 0.99902344,
+      "speech_final": false,
+      "words": [],
+      "received_at": "2026-10-02T16:20:52.067500",
+      "lag_ms": 0
+    },
+    {
+      "text": "the wisdom",
+      "start": 178.0,
+      "duration": 1.0,
+      "is_final": false,
+      "confidence": 1.0,
+      "speech_final": false,
+      "words": [],
+      "received_at": "2026-10-02T16:20:52.948233",
+      "lag_ms": 0
+    },
+    {
+      "text": "the wisdom of god is at",
+      "start": 178.0,
+      "duration": 2.0,
+      "is_final": false,
+      "confidence": 0.99902344,
+      "speech_final": false,
+      "words": [],
+      "received_at": "2026-10-02T16:20:53.968715",
+      "lag_ms": 0
+    },
+    {
+      "text": "the wisdom of god is at work in me",
+      "start": 178.0,
+      "duration": 3.0,
+      "is_final": false,
+      "confidence": 0.99902344,
+      "speech_final": false,
+      "words": [],
+      "received_at": "2026-10-02T16:20:54.961501",
+      "lag_ms": 0
+    },
+    {
+      "text": "the wisdom of god is at work in me",
+      "start": 178.0,
+      "duration": 3.300003,
+      "is_final": false,
+      "confidence": 1.0,
+      "speech_final": false,
+      "words": [],
+      "received_at": "2026-10-02T16:20:55.272502",
+      "lag_ms": 0
+    },
+    {
+      "text": "the wisdom of god is at work in me",
+      "start": 178.0,
+      "duration": 3.600006,
+      "is_final": false,
+      "confidence": 1.0,
+      "speech_final": false,
+      "words": [],
+      "received_at": "2026-10-02T16:20:55.587664",
+      "lag_ms": 0
+    },
+    {
+      "text": "the wisdom of god is at work in me the wisdom of",
+      "start": 178.0,
+      "duration": 4.600006,
+      "is_final": false,
+      "confidence": 1.0,
+      "speech_final": false,
+      "words": [],
+      "received_at": "2026-10-02T16:20:56.552069",
+      "lag_ms": 0
+    },
+    {
+      "text": "the wisdom of god",
+      "start": 181.17,
+      "duration": 1.8300018,
+      "is_final": false,
+      "confidence": 1.0,
+      "speech_final": false,
+      "words": [],
+      "received_at": "2026-10-02T16:20:56.935480",
+      "lag_ms": 0
+    },
+    {
+      "text": "the wisdom of god is at work in me",
+      "start": 181.17,
+      "duration": 2.930008,
+      "is_final": false,
+      "confidence": 0.99902344,
+      "speech_final": false,
+      "words": [],
+      "received_at": "2026-10-02T16:20:58.030742",
+      "lag_ms": 0
+    },
+    {
+      "text": "the wisdom of god is at work in me",
+      "start": 181.17,
+      "duration": 3.3300018,
+      "is_final": false,
+      "confidence": 1.0,
+      "speech_final": false,
+      "words": [],
+      "received_at": "2026-10-02T16:20:58.462450",
+      "lag_ms": 0
+    },
+    {
+      "text": "the wisdom of god is at work in me i'm",
+      "start": 181.17,
+      "duration": 4.330002,
+      "is_final": false,
+      "confidence": 1.0,
+      "speech_final": false,
+      "words": [],
+      "received_at": "2026-10-02T16:20:59.484804",
+      "lag_ms": 0
+    },
+    {
+      "text": "i'm rich in wisdom",
+      "start": 184.67,
+      "duration": 1.5299988,
+      "is_final": false,
+      "confidence": 0.9892578,
+      "speech_final": false,
+      "words": [],
+      "received_at": "2026-10-02T16:21:00.170183",
+      "lag_ms": 0
+    },
+    {
+      "text": "i'm rich in wisdom",
+      "start": 184.67,
+      "duration": 2.3300018,
+      "is_final": false,
+      "confidence": 0.99902344,
+      "speech_final": false,
+      "words": [],
+      "received_at": "2026-10-02T16:21:00.923774",
+      "lag_ms": 0
+    },
+    {
+      "text": "i declare",
+      "start": 187.55,
+      "duration": 1.050003,
+      "is_final": false,
+      "confidence": 1.0,
+      "speech_final": false,
+      "words": [],
+      "received_at": "2026-10-02T16:21:02.584851",
+      "lag_ms": 0
+    },
+    {
+      "text": "i declare that i'm rich in",
+      "start": 187.55,
+      "duration": 2.050003,
+      "is_final": false,
+      "confidence": 1.0,
+      "speech_final": false,
+      "words": [],
+      "received_at": "2026-10-02T16:21:03.541164",
+      "lag_ms": 0
+    },
+    {
+      "text": "i",
+      "start": 190.39,
+      "duration": 1.0099945,
+      "is_final": false,
+      "confidence": 0.99609375,
+      "speech_final": false,
+      "words": [],
+      "received_at": "2026-10-02T16:21:05.380005",
+      "lag_ms": 0
+    },
+    {
+      "text": "i declare",
+      "start": 190.39,
+      "duration": 2.0099945,
+      "is_final": false,
+      "confidence": 1.0,
+      "speech_final": false,
+      "words": [],
+      "received_at": "2026-10-02T16:21:06.335080",
+      "lag_ms": 0
+    },
+    {
+      "text": "i declare i'm rich in",
+      "start": 190.39,
+      "duration": 3.0099945,
+      "is_final": false,
+      "confidence": 0.99902344,
+      "speech_final": false,
+      "words": [],
+      "received_at": "2026-10-02T16:21:07.341789",
+      "lag_ms": 0
+    },
+    {
+      "text": "i declare i'm rich in wisdom",
+      "start": 190.39,
+      "duration": 3.8099976,
+      "is_final": false,
+      "confidence": 0.99902344,
+      "speech_final": false,
+      "words": [],
+      "received_at": "2026-10-02T16:21:08.126893",
+      "lag_ms": 0
+    },
+    {
+      "text": "i declare i'm rich in wisdom",
+      "start": 190.39,
+      "duration": 4.1100006,
+      "is_final": false,
+      "confidence": 0.99902344,
+      "speech_final": false,
+      "words": [],
+      "received_at": "2026-10-02T16:21:08.423634",
+      "lag_ms": 0
+    },
+    {
+      "text": "i declare",
+      "start": 194.22,
+      "duration": 1.1799927,
+      "is_final": false,
+      "confidence": 1.0,
+      "speech_final": false,
+      "words": [],
+      "received_at": "2026-10-02T16:21:09.378864",
+      "lag_ms": 0
+    },
+    {
+      "text": "i declare that the wisdom of",
+      "start": 194.22,
+      "duration": 2.1799927,
+      "is_final": false,
+      "confidence": 1.0,
+      "speech_final": false,
+      "words": [],
+      "received_at": "2026-10-02T16:21:10.369279",
+      "lag_ms": 0
+    },
+    {
+      "text": "i declare that the wisdom of god is at work",
+      "start": 194.22,
+      "duration": 3.1799927,
+      "is_final": false,
+      "confidence": 1.0,
+      "speech_final": false,
+      "words": [],
+      "received_at": "2026-10-02T16:21:11.365985",
+      "lag_ms": 0
+    },
+    {
+      "text": "i declare that the wisdom of god is at work in me",
+      "start": 194.22,
+      "duration": 3.7799988,
+      "is_final": false,
+      "confidence": 0.99902344,
+      "speech_final": false,
+      "words": [],
+      "received_at": "2026-10-02T16:21:11.956398",
+      "lag_ms": 0
+    },
+    {
+      "text": "i declare that the wisdom of god is at work in me",
+      "start": 194.22,
+      "duration": 4.080002,
+      "is_final": false,
+      "confidence": 0.99902344,
+      "speech_final": false,
+      "words": [],
+      "received_at": "2026-10-02T16:21:12.259703",
+      "lag_ms": 0
+    },
+    {
+      "text": "i declare",
+      "start": 198.05,
+      "duration": 1.25,
+      "is_final": false,
+      "confidence": 1.0,
+      "speech_final": false,
+      "words": [],
+      "received_at": "2026-10-02T16:21:13.243243",
+      "lag_ms": 0
+    },
+    {
+      "text": "i declare that i'm full of",
+      "start": 198.05,
+      "duration": 2.25,
+      "is_final": false,
+      "confidence": 0.9980469,
+      "speech_final": false,
+      "words": [],
+      "received_at": "2026-10-02T16:21:14.251744",
+      "lag_ms": 0
+    },
+    {
+      "text": "i declare that i'm full of wisdom",
+      "start": 198.05,
+      "duration": 3.25,
+      "is_final": false,
+      "confidence": 1.0,
+      "speech_final": false,
+      "words": [],
+      "received_at": "2026-10-02T16:21:15.249526",
+      "lag_ms": 0
+    },
+    {
+      "text": "i declare that i'm full of wisdom",
+      "start": 198.05,
+      "duration": 3.649994,
+      "is_final": false,
+      "confidence": 1.0,
+      "speech_final": false,
+      "words": [],
+      "received_at": "2026-10-02T16:21:15.649556",
+      "lag_ms": 0
+    },
+    {
+      "text": "i declare that i'm full of wisdom i",
+      "start": 198.05,
+      "duration": 3.949997,
+      "is_final": false,
+      "confidence": 1.0,
+      "speech_final": false,
+      "words": [],
+      "received_at": "2026-10-02T16:21:15.951371",
+      "lag_ms": 0
+    },
+    {
+      "text": "i declare that i'm full",
+      "start": 201.79,
+      "duration": 1.3100128,
+      "is_final": false,
+      "confidence": 0.99902344,
+      "speech_final": false,
+      "words": [],
+      "received_at": "2026-10-02T16:21:17.052246",
+      "lag_ms": 0
+    },
+    {
+      "text": "i declare that i'm full of wisdom",
+      "start": 201.79,
+      "duration": 2.3100128,
+      "is_final": false,
+      "confidence": 1.0,
+      "speech_final": false,
+      "words": [],
+      "received_at": "2026-10-02T16:21:18.039192",
+      "lag_ms": 0
+    },
+    {
+      "text": "i declare that i'm full of wisdom i",
+      "start": 201.79,
+      "duration": 3.2100067,
+      "is_final": false,
+      "confidence": 1.0,
+      "speech_final": false,
+      "words": [],
+      "received_at": "2026-10-02T16:21:18.936267",
+      "lag_ms": 0
+    },
+    {
+      "text": "i declare that i'm full of wisdom i decree and i",
+      "start": 201.79,
+      "duration": 4.2100067,
+      "is_final": false,
+      "confidence": 0.99902344,
+      "speech_final": false,
+      "words": [],
+      "received_at": "2026-10-02T16:21:19.936770",
+      "lag_ms": 0
+    },
+    {
+      "text": "i decree and i declare",
+      "start": 204.81,
+      "duration": 1.9900055,
+      "is_final": false,
+      "confidence": 0.9980469,
+      "speech_final": false,
+      "words": [],
+      "received_at": "2026-10-02T16:21:20.743956",
+      "lag_ms": 0
+    },
+    {
+      "text": "i decree and i declare that i'm full of",
+      "start": 204.81,
+      "duration": 2.9900055,
+      "is_final": false,
+      "confidence": 0.9980469,
+      "speech_final": false,
+      "words": [],
+      "received_at": "2026-10-02T16:21:21.762523",
+      "lag_ms": 0
+    },
+    {
+      "text": "i decree and i declare that i'm full of wisdom",
+      "start": 204.81,
+      "duration": 3.9900055,
+      "is_final": false,
+      "confidence": 0.9980469,
+      "speech_final": false,
+      "words": [],
+      "received_at": "2026-10-02T16:21:22.738211",
+      "lag_ms": 0
+    },
+    {
+      "text": "i'm full",
+      "start": 208.28,
+      "duration": 1.6199951,
+      "is_final": false,
+      "confidence": 0.9921875,
+      "speech_final": false,
+      "words": [],
+      "received_at": "2026-10-02T16:21:23.844798",
+      "lag_ms": 0
+    },
+    {
+      "text": "i'm full of wisdom",
+      "start": 208.28,
+      "duration": 2.7200012,
+      "is_final": false,
+      "confidence": 0.9951172,
+      "speech_final": false,
+      "words": [],
+      "received_at": "2026-10-02T16:21:24.950148",
+      "lag_ms": 0
+    },
+    {
+      "text": "i'm full of wisdom",
+      "start": 208.28,
+      "duration": 3.7200012,
+      "is_final": false,
+      "confidence": 0.99316406,
+      "speech_final": false,
+      "words": [],
+      "received_at": "2026-10-02T16:21:25.933602",
+      "lag_ms": 0
+    },
+    {
+      "text": "i'm full of wisdom",
+      "start": 208.28,
+      "duration": 4.8200073,
+      "is_final": false,
+      "confidence": 0.99560547,
+      "speech_final": false,
+      "words": [],
+      "received_at": "2026-10-02T16:21:27.038326",
+      "lag_ms": 0
+    },
+    {
+      "text": "oh",
+      "start": 215.94,
+      "duration": 3.2599945,
+      "is_final": false,
+      "confidence": 0.8017578,
+      "speech_final": false,
+      "words": [],
+      "received_at": "2026-10-02T16:21:33.118655",
+      "lag_ms": 0
+    },
+    {
+      "text": "oh yeah sorry i'm coming",
+      "start": 215.94,
+      "duration": 4.2599945,
+      "is_final": false,
+      "confidence": 0.9416504,
+      "speech_final": false,
+      "words": [],
+      "received_at": "2026-10-02T16:21:34.131966",
+      "lag_ms": 0
+    },
+    {
+      "text": "i'm just trying to",
+      "start": 220.43,
+      "duration": 1.0700073,
+      "is_final": false,
+      "confidence": 1.0,
+      "speech_final": false,
+      "words": [],
+      "received_at": "2026-10-02T16:21:35.426069",
+      "lag_ms": 0
+    },
+    {
+      "text": "i'm just trying to finish up my chants",
+      "start": 220.43,
+      "duration": 2.1700134,
+      "is_final": false,
+      "confidence": 1.0,
+      "speech_final": false,
+      "words": [],
+      "received_at": "2026-10-02T16:21:36.558712",
+      "lag_ms": 0
+    },
+    {
+      "text": "i'm just trying to finish up my chants",
+      "start": 220.43,
+      "duration": 2.4700012,
+      "is_final": false,
+      "confidence": 1.0,
+      "speech_final": false,
+      "words": [],
+      "received_at": "2026-10-02T16:21:36.837481",
+      "lag_ms": 0
+    },
+    {
+      "text": "i'm just trying to finish up my chants alright thank",
+      "start": 220.43,
+      "duration": 3.4700012,
+      "is_final": false,
+      "confidence": 0.99902344,
+      "speech_final": false,
+      "words": [],
+      "received_at": "2026-10-02T16:21:37.858020",
+      "lag_ms": 0
+    },
+    {
+      "text": "i'm just trying to finish up my chants alright thank you",
+      "start": 220.43,
+      "duration": 4.0700073,
+      "is_final": false,
+      "confidence": 0.9980469,
+      "speech_final": false,
+      "words": [],
+      "received_at": "2026-10-02T16:21:38.450636",
+      "lag_ms": 0
+    },
+    {
+      "text": "yeah i'll be back",
+      "start": 224.2,
+      "duration": 1.300003,
+      "is_final": false,
+      "confidence": 0.9848633,
+      "speech_final": false,
+      "words": [],
+      "received_at": "2026-10-02T16:21:39.467898",
+      "lag_ms": 0
+    },
+    {
+      "text": "yeah i'll be back",
+      "start": 224.2,
+      "duration": 2.100006,
+      "is_final": false,
+      "confidence": 0.9892578,
+      "speech_final": false,
+      "words": [],
+      "received_at": "2026-10-02T16:21:40.243384",
+      "lag_ms": 0
+    },
+    {
+      "text": "yeah i'll be back i'm very well",
+      "start": 224.2,
+      "duration": 3.100006,
+      "is_final": false,
+      "confidence": 0.9951172,
+      "speech_final": false,
+      "words": [],
+      "received_at": "2026-10-02T16:21:41.260513",
+      "lag_ms": 0
+    },
+    {
+      "text": "yeah i'll be back i'm very well thank you alright see",
+      "start": 224.2,
+      "duration": 4.100006,
+      "is_final": false,
+      "confidence": 0.99902344,
+      "speech_final": false,
+      "words": [],
+      "received_at": "2026-10-02T16:21:42.260118",
+      "lag_ms": 0
+    },
+    {
+      "text": "okay",
+      "start": 229.17,
+      "duration": 1.0299988,
+      "is_final": false,
+      "confidence": 0.99560547,
+      "speech_final": false,
+      "words": [],
+      "received_at": "2026-10-02T16:21:44.146530",
+      "lag_ms": 0
+    },
+    {
+      "text": "okay so back to what",
+      "start": 229.17,
+      "duration": 2.0299988,
+      "is_final": false,
+      "confidence": 0.9926758,
+      "speech_final": false,
+      "words": [],
+      "received_at": "2026-10-02T16:21:45.172548",
+      "lag_ms": 0
+    },
+    {
+      "text": "okay so back to what i was doing now",
+      "start": 229.17,
+      "duration": 3.0299988,
+      "is_final": false,
+      "confidence": 0.99902344,
+      "speech_final": false,
+      "words": [],
+      "received_at": "2026-10-02T16:21:46.181244",
+      "lag_ms": 0
+    },
+    {
+      "text": "okay so back to what i was doing now",
+      "start": 229.17,
+      "duration": 4.029999,
+      "is_final": false,
+      "confidence": 0.99902344,
+      "speech_final": false,
+      "words": [],
+      "received_at": "2026-10-02T16:21:47.193813",
+      "lag_ms": 0
+    },
+    {
+      "text": "i'm reaching we still",
+      "start": 233.15,
+      "duration": 1.050003,
+      "is_final": false,
+      "confidence": 0.98706055,
+      "speech_final": false,
+      "words": [],
+      "received_at": "2026-10-02T16:21:48.206660",
+      "lag_ms": 0
+    },
+    {
+      "text": "i'm reaching wisdom",
+      "start": 233.15,
+      "duration": 2.050003,
+      "is_final": false,
+      "confidence": 0.7770996,
+      "speech_final": false,
+      "words": [],
+      "received_at": "2026-10-02T16:21:49.157833",
+      "lag_ms": 0
+    },
+    {
+      "text": "i'm reaching wisdom",
+      "start": 233.15,
+      "duration": 3.050003,
+      "is_final": false,
+      "confidence": 0.8984375,
+      "speech_final": false,
+      "words": [],
+      "received_at": "2026-10-02T16:21:50.149013",
+      "lag_ms": 0
+    },
+    {
+      "text": "i'm rich in wisdom i'm rich in wisdom",
+      "start": 233.15,
+      "duration": 4.050003,
+      "is_final": false,
+      "confidence": 0.9880371,
+      "speech_final": false,
+      "words": [],
+      "received_at": "2026-10-02T16:21:51.147059",
+      "lag_ms": 0
+    },
+    {
+      "text": "good",
+      "start": 237.55,
+      "duration": 1.050003,
+      "is_final": false,
+      "confidence": 0.61694336,
+      "speech_final": false,
+      "words": [],
+      "received_at": "2026-10-02T16:21:52.533157",
+      "lag_ms": 0
+    },
+    {
+      "text": "god is for me",
+      "start": 237.55,
+      "duration": 2.050003,
+      "is_final": false,
+      "confidence": 0.99609375,
+      "speech_final": false,
+      "words": [],
+      "received_at": "2026-10-02T16:21:53.612196",
+      "lag_ms": 0
+    },
+    {
+      "text": "god is for me god is with",
+      "start": 237.55,
+      "duration": 3.050003,
+      "is_final": false,
+      "confidence": 0.99853516,
+      "speech_final": false,
+      "words": [],
+      "received_at": "2026-10-02T16:21:54.556530",
+      "lag_ms": 0
+    },
+    {
+      "text": "god is for me god is with me",
+      "start": 237.55,
+      "duration": 3.75,
+      "is_final": false,
+      "confidence": 0.99902344,
+      "speech_final": false,
+      "words": [],
+      "received_at": "2026-10-02T16:21:55.238122",
+      "lag_ms": 0
+    },
+    {
+      "text": "god is for me god is with me",
+      "start": 237.55,
+      "duration": 4.25,
+      "is_final": false,
+      "confidence": 0.99902344,
+      "speech_final": false,
+      "words": [],
+      "received_at": "2026-10-02T16:21:55.765024",
+      "lag_ms": 0
+    },
+    {
+      "text": "with me",
+      "start": 242.25,
+      "duration": 1.050003,
+      "is_final": false,
+      "confidence": 1.0,
+      "speech_final": false,
+      "words": [],
+      "received_at": "2026-10-02T16:21:57.226703",
+      "lag_ms": 0
+    },
+    {
+      "text": "with me",
+      "start": 242.25,
+      "duration": 1.25,
+      "is_final": false,
+      "confidence": 1.0,
+      "speech_final": false,
+      "words": [],
+      "received_at": "2026-10-02T16:21:57.433150",
+      "lag_ms": 0
+    },
+    {
+      "text": "with me god is is with me",
+      "start": 242.25,
+      "duration": 2.25,
+      "is_final": false,
+      "confidence": 0.9980469,
+      "speech_final": false,
+      "words": [],
+      "received_at": "2026-10-02T16:21:58.427498",
+      "lag_ms": 0
+    },
+    {
+      "text": "with me god is with me",
+      "start": 242.25,
+      "duration": 2.949997,
+      "is_final": false,
+      "confidence": 0.99902344,
+      "speech_final": false,
+      "words": [],
+      "received_at": "2026-10-02T16:21:59.135007",
+      "lag_ms": 0
+    },
+    {
+      "text": "with me god is with me god is with",
+      "start": 242.25,
+      "duration": 3.949997,
+      "is_final": false,
+      "confidence": 0.99902344,
+      "speech_final": false,
+      "words": [],
+      "received_at": "2026-10-02T16:22:00.147911",
+      "lag_ms": 0
+    },
+    {
+      "text": "go",
+      "start": 246.89,
+      "duration": 1.0099945,
+      "is_final": false,
+      "confidence": 0.99121094,
+      "speech_final": false,
+      "words": [],
+      "received_at": "2026-10-02T16:22:01.866312",
+      "lag_ms": 0
+    },
+    {
+      "text": "god is with me",
+      "start": 246.89,
+      "duration": 2.0099945,
+      "is_final": false,
+      "confidence": 0.9995117,
+      "speech_final": false,
+      "words": [],
+      "received_at": "2026-10-02T16:22:02.858716",
+      "lag_ms": 0
+    },
+    {
+      "text": "god is with me god is",
+      "start": 246.89,
+      "duration": 3.0099945,
+      "is_final": false,
+      "confidence": 0.99902344,
+      "speech_final": false,
+      "words": [],
+      "received_at": "2026-10-02T16:22:03.845745",
+      "lag_ms": 0
+    },
+    {
+      "text": "god is with me god is with me",
+      "start": 246.89,
+      "duration": 4.0099945,
+      "is_final": false,
+      "confidence": 0.9980469,
+      "speech_final": false,
+      "words": [],
+      "received_at": "2026-10-02T16:22:04.846904",
+      "lag_ms": 0
+    },
+    {
+      "text": "god is with me god is with me",
+      "start": 246.89,
+      "duration": 4.3099976,
+      "is_final": false,
+      "confidence": 0.9980469,
+      "speech_final": false,
+      "words": [],
+      "received_at": "2026-10-02T16:22:05.146373",
+      "lag_ms": 0
+    },
+    {
+      "text": "god is with me god is with me",
+      "start": 246.89,
+      "duration": 4.6100006,
+      "is_final": false,
+      "confidence": 0.9980469,
+      "speech_final": false,
+      "words": [],
+      "received_at": "2026-10-02T16:22:05.486174",
+      "lag_ms": 0
+    },
+    {
+      "text": "i'll be",
+      "start": 253.98,
+      "duration": 4.919998,
+      "is_final": false,
+      "confidence": 0.9941406,
+      "speech_final": false,
+      "words": [],
+      "received_at": "2026-10-02T16:22:12.854062",
+      "lag_ms": 0
+    },
+    {
+      "text": "i'll be",
+      "start": 257.48,
+      "duration": 1.519989,
+      "is_final": false,
+      "confidence": 0.9980469,
+      "speech_final": false,
+      "words": [],
+      "received_at": "2026-10-02T16:22:12.938452",
+      "lag_ms": 0
+    },
+    {
+      "text": "i'll be back one second",
+      "start": 257.48,
+      "duration": 2.519989,
+      "is_final": false,
+      "confidence": 0.9836426,
+      "speech_final": false,
+      "words": [],
+      "received_at": "2026-10-02T16:22:13.950768",
+      "lag_ms": 0
+    },
+    {
+      "text": "i'll be back one second",
+      "start": 257.48,
+      "duration": 3.419983,
+      "is_final": false,
+      "confidence": 0.9970703,
+      "speech_final": false,
+      "words": [],
+      "received_at": "2026-10-02T16:22:14.832271",
+      "lag_ms": 0
+    },
+    {
+      "text": "i'll be back one second",
+      "start": 257.48,
+      "duration": 4.519989,
+      "is_final": false,
+      "confidence": 0.9975586,
+      "speech_final": false,
+      "words": [],
+      "received_at": "2026-10-02T16:22:15.922188",
+      "lag_ms": 0
+    },
+    {
+      "text": "okay yeah i'm back",
+      "start": 266.37,
+      "duration": 3.0299988,
+      "is_final": false,
+      "confidence": 0.9970703,
+      "speech_final": false,
+      "words": [],
+      "received_at": "2026-10-02T16:22:23.328499",
+      "lag_ms": 0
+    },
+    {
+      "text": "okay yeah i'm back let me continue",
+      "start": 266.37,
+      "duration": 4.029999,
+      "is_final": false,
+      "confidence": 0.99902344,
+      "speech_final": false,
+      "words": [],
+      "received_at": "2026-10-02T16:22:24.345781",
+      "lag_ms": 0
+    },
+    {
+      "text": "okay yeah i'm back let me continue now",
+      "start": 266.37,
+      "duration": 4.830017,
+      "is_final": false,
+      "confidence": 1.0,
+      "speech_final": false,
+      "words": [],
+      "received_at": "2026-10-02T16:22:25.143677",
+      "lag_ms": 0
+    },
+    {
+      "text": "so we're",
+      "start": 271.13,
+      "duration": 1.0700073,
+      "is_final": false,
+      "confidence": 0.92578125,
+      "speech_final": false,
+      "words": [],
+      "received_at": "2026-10-02T16:22:26.163544",
+      "lag_ms": 0
+    },
+    {
+      "text": "so where was i okay",
+      "start": 271.13,
+      "duration": 2.169983,
+      "is_final": false,
+      "confidence": 0.9980469,
+      "speech_final": false,
+      "words": [],
+      "received_at": "2026-10-02T16:22:27.250477",
+      "lag_ms": 0
+    },
+    {
+      "text": "so where was i okay yeah",
+      "start": 271.13,
+      "duration": 2.9700012,
+      "is_final": false,
+      "confidence": 0.99902344,
+      "speech_final": false,
+      "words": [],
+      "received_at": "2026-10-02T16:22:28.032740",
+      "lag_ms": 0
+    },
+    {
+      "text": "so where was i okay yeah i'm originally based on",
+      "start": 271.13,
+      "duration": 3.9700012,
+      "is_final": false,
+      "confidence": 0.9921875,
+      "speech_final": false,
+      "words": [],
+      "received_at": "2026-10-02T16:22:29.091975",
+      "lag_ms": 0
+    },
+    {
+      "text": "so where was i okay yeah i'm reaching wisdom",
+      "start": 271.13,
+      "duration": 4.669983,
+      "is_final": false,
+      "confidence": 0.9970703,
+      "speech_final": false,
+      "words": [],
+      "received_at": "2026-10-02T16:22:29.758757",
+      "lag_ms": 0
+    },
+    {
+      "text": "so where was i okay yeah i'm reaching wisdom",
+      "start": 271.13,
+      "duration": 4.970001,
+      "is_final": false,
+      "confidence": 0.9970703,
+      "speech_final": false,
+      "words": [],
+      "received_at": "2026-10-02T16:22:30.055391",
+      "lag_ms": 0
+    },
+    {
+      "text": "the wisdom of",
+      "start": 275.65,
+      "duration": 1.0500183,
+      "is_final": false,
+      "confidence": 0.91503906,
+      "speech_final": false,
+      "words": [],
+      "received_at": "2026-10-02T16:22:30.628572",
+      "lag_ms": 0
+    },
+    {
+      "text": "the wisdom of god is at work in",
+      "start": 275.65,
+      "duration": 2.0500183,
+      "is_final": false,
+      "confidence": 0.99121094,
+      "speech_final": false,
+      "words": [],
+      "received_at": "2026-10-02T16:22:31.663033",
+      "lag_ms": 0
+    },
+    {
+      "text": "the wisdom of god is at work in me no he was",
+      "start": 275.65,
+      "duration": 3.0500183,
+      "is_final": false,
+      "confidence": 0.98291016,
+      "speech_final": false,
+      "words": [],
+      "received_at": "2026-10-02T16:22:32.635297",
+      "lag_ms": 0
+    },
+    {
+      "text": "the wisdom of god is at work in me no god is with me",
+      "start": 275.65,
+      "duration": 4.0500183,
+      "is_final": false,
+      "confidence": 0.99609375,
+      "speech_final": false,
+      "words": [],
+      "received_at": "2026-10-02T16:22:33.653820",
+      "lag_ms": 0
+    },
+    {
+      "text": "god is for",
+      "start": 280.14,
+      "duration": 1.0599976,
+      "is_final": false,
+      "confidence": 0.94970703,
+      "speech_final": false,
+      "words": [],
+      "received_at": "2026-10-02T16:22:35.144167",
+      "lag_ms": 0
+    },
+    {
+      "text": "god is for me",
+      "start": 280.14,
+      "duration": 1.8599854,
+      "is_final": false,
+      "confidence": 0.9980469,
+      "speech_final": false,
+      "words": [],
+      "received_at": "2026-10-02T16:22:35.970882",
+      "lag_ms": 0
+    },
+    {
+      "text": "i'm full of where's",
+      "start": 287.54,
+      "duration": 4.0599976,
+      "is_final": false,
+      "confidence": 0.97265625,
+      "speech_final": false,
+      "words": [],
+      "received_at": "2026-10-02T16:22:45.532279",
+      "lag_ms": 0
+    },
+    {
+      "text": "i'm full of wisdom",
+      "start": 287.54,
+      "duration": 4.5599976,
+      "is_final": false,
+      "confidence": 0.99902344,
+      "speech_final": false,
+      "words": [],
+      "received_at": "2026-10-02T16:22:46.025764",
+      "lag_ms": 0
+    },
+    {
+      "text": "i'm full of wisdom",
+      "start": 287.54,
+      "duration": 4.8599854,
+      "is_final": false,
+      "confidence": 0.9980469,
+      "speech_final": false,
+      "words": [],
+      "received_at": "2026-10-02T16:22:46.343896",
+      "lag_ms": 0
+    },
+    {
+      "text": "and full of",
+      "start": 292.36,
+      "duration": 1.0400085,
+      "is_final": false,
+      "confidence": 0.9941406,
+      "speech_final": false,
+      "words": [],
+      "received_at": "2026-10-02T16:22:47.316474",
+      "lag_ms": 0
+    },
+    {
+      "text": "i'm full of wisdom",
+      "start": 292.36,
+      "duration": 1.7400208,
+      "is_final": false,
+      "confidence": 0.99902344,
+      "speech_final": false,
+      "words": [],
+      "received_at": "2026-10-02T16:22:48.041147",
+      "lag_ms": 0
+    },
+    {
+      "text": "i'm full of wisdom i'm",
+      "start": 292.36,
+      "duration": 2.1400146,
+      "is_final": false,
+      "confidence": 0.99658203,
+      "speech_final": false,
+      "words": [],
+      "received_at": "2026-10-02T16:22:48.425431",
+      "lag_ms": 0
+    },
+    {
+      "text": "i'm full of wisdom i'm full of wisdom",
+      "start": 292.36,
+      "duration": 3.1400146,
+      "is_final": false,
+      "confidence": 0.9980469,
+      "speech_final": false,
+      "words": [],
+      "received_at": "2026-10-02T16:22:49.471054",
+      "lag_ms": 0
+    },
+    {
+      "text": "i'm full of wisdom i'm full of wisdom",
+      "start": 292.36,
+      "duration": 3.4400024,
+      "is_final": false,
+      "confidence": 0.99902344,
+      "speech_final": false,
+      "words": [],
+      "received_at": "2026-10-02T16:22:49.741533",
+      "lag_ms": 0
+    },
+    {
+      "text": "i'm full of wisdom i'm full of wisdom",
+      "start": 292.36,
+      "duration": 3.7400208,
+      "is_final": false,
+      "confidence": 0.99902344,
+      "speech_final": false,
+      "words": [],
+      "received_at": "2026-10-02T16:22:50.076549",
+      "lag_ms": 0
+    },
+    {
+      "text": "i'm full of wisdom i'm full of wisdom hey stop that",
+      "start": 292.36,
+      "duration": 4.840027,
+      "is_final": false,
+      "confidence": 0.99902344,
+      "speech_final": false,
+      "words": [],
+      "received_at": "2026-10-02T16:22:51.184952",
+      "lag_ms": 0
+    },
+    {
+      "text": "hey stop that",
+      "start": 296.07,
+      "duration": 1.3299866,
+      "is_final": false,
+      "confidence": 0.9375,
+      "speech_final": false,
+      "words": [],
+      "received_at": "2026-10-02T16:22:51.367452",
+      "lag_ms": 0
+    },
+    {
+      "text": "don't touch",
+      "start": 297.73,
+      "duration": 1.1699829,
+      "is_final": false,
+      "confidence": 1.0,
+      "speech_final": false,
+      "words": [],
+      "received_at": "2026-10-02T16:22:52.858356",
+      "lag_ms": 0
+    },
+    {
+      "text": "don't touch",
+      "start": 297.73,
+      "duration": 2.169983,
+      "is_final": false,
+      "confidence": 1.0,
+      "speech_final": false,
+      "words": [],
+      "received_at": "2026-10-02T16:22:53.859905",
+      "lag_ms": 0
+    },
+    {
+      "text": "i'm full of wood",
+      "start": 301.01,
+      "duration": 1.0899963,
+      "is_final": false,
+      "confidence": 0.98828125,
+      "speech_final": false,
+      "words": [],
+      "received_at": "2026-10-02T16:22:56.040176",
+      "lag_ms": 0
+    },
+    {
+      "text": "i'm full of wisdom",
+      "start": 301.01,
+      "duration": 2.1900024,
+      "is_final": false,
+      "confidence": 0.9970703,
+      "speech_final": false,
+      "words": [],
+      "received_at": "2026-10-02T16:22:57.161643",
+      "lag_ms": 0
+    },
+    {
+      "text": "i'm full of wisdom",
+      "start": 301.01,
+      "duration": 2.4899902,
+      "is_final": false,
+      "confidence": 0.99609375,
+      "speech_final": false,
+      "words": [],
+      "received_at": "2026-10-02T16:22:57.470737",
+      "lag_ms": 0
+    },
+    {
+      "text": "i'm full of wisdom god is for me",
+      "start": 301.01,
+      "duration": 3.4899902,
+      "is_final": false,
+      "confidence": 0.9941406,
+      "speech_final": false,
+      "words": [],
+      "received_at": "2026-10-02T16:22:58.464443",
+      "lag_ms": 0
+    },
+    {
+      "text": "god is for",
+      "start": 305.07,
+      "duration": 1.0299988,
+      "is_final": false,
+      "confidence": 0.9892578,
+      "speech_final": false,
+      "words": [],
+      "received_at": "2026-10-02T16:23:00.046500",
+      "lag_ms": 0
+    },
+    {
+      "text": "god is for me",
+      "start": 305.07,
+      "duration": 2.0299988,
+      "is_final": false,
+      "confidence": 0.9980469,
+      "speech_final": false,
+      "words": [],
+      "received_at": "2026-10-02T16:23:01.035696",
+      "lag_ms": 0
+    },
+    {
+      "text": "god is for me",
+      "start": 305.07,
+      "duration": 2.2299805,
+      "is_final": false,
+      "confidence": 0.9980469,
+      "speech_final": false,
+      "words": [],
+      "received_at": "2026-10-02T16:23:01.239036",
+      "lag_ms": 0
+    },
+    {
+      "text": "god is for me god is for me",
+      "start": 305.07,
+      "duration": 3.2299805,
+      "is_final": false,
+      "confidence": 0.99902344,
+      "speech_final": false,
+      "words": [],
+      "received_at": "2026-10-02T16:23:02.232562",
+      "lag_ms": 0
+    },
+    {
+      "text": "god is for me god is for me god",
+      "start": 305.07,
+      "duration": 4.2299805,
+      "is_final": false,
+      "confidence": 0.99902344,
+      "speech_final": false,
+      "words": [],
+      "received_at": "2026-10-02T16:23:03.248926",
+      "lag_ms": 0
+    },
+    {
+      "text": "god is for me",
+      "start": 308.57,
+      "duration": 1.5299988,
+      "is_final": false,
+      "confidence": 0.99902344,
+      "speech_final": false,
+      "words": [],
+      "received_at": "2026-10-02T16:23:04.048746",
+      "lag_ms": 0
+    },
+    {
+      "text": "god is for me",
+      "start": 308.57,
+      "duration": 2.0299988,
+      "is_final": false,
+      "confidence": 1.0,
+      "speech_final": false,
+      "words": [],
+      "received_at": "2026-10-02T16:23:04.529608",
+      "lag_ms": 0
+    },
+    {
+      "text": "god is for me i'm rich in wisdom",
+      "start": 308.57,
+      "duration": 3.0299988,
+      "is_final": false,
+      "confidence": 0.99316406,
+      "speech_final": false,
+      "words": [],
+      "received_at": "2026-10-02T16:23:05.571666",
+      "lag_ms": 0
+    },
+    {
+      "text": "god is for me i'm rich in wisdom",
+      "start": 308.57,
+      "duration": 3.5299988,
+      "is_final": false,
+      "confidence": 0.98828125,
+      "speech_final": false,
+      "words": [],
+      "received_at": "2026-10-02T16:23:06.052407",
+      "lag_ms": 0
+    },
+    {
+      "text": "god is for me i'm rich in wisdom the wisdom",
+      "start": 308.57,
+      "duration": 4.529999,
+      "is_final": false,
+      "confidence": 0.99316406,
+      "speech_final": false,
+      "words": [],
+      "received_at": "2026-10-02T16:23:07.052074",
+      "lag_ms": 0
+    },
+    {
+      "text": "the wisdom of god is",
+      "start": 312.31,
+      "duration": 1.2900085,
+      "is_final": false,
+      "confidence": 0.94189453,
+      "speech_final": false,
+      "words": [],
+      "received_at": "2026-10-02T16:23:07.557872",
+      "lag_ms": 0
+    },
+    {
+      "text": "the wisdom of god is at work in me",
+      "start": 312.31,
+      "duration": 2.2900085,
+      "is_final": false,
+      "confidence": 0.9951172,
+      "speech_final": false,
+      "words": [],
+      "received_at": "2026-10-02T16:23:08.542968",
+      "lag_ms": 0
+    },
+    {
+      "text": "the wisdom of god is at work in me i'm",
+      "start": 312.31,
+      "duration": 3.2900085,
+      "is_final": false,
+      "confidence": 0.9970703,
+      "speech_final": false,
+      "words": [],
+      "received_at": "2026-10-02T16:23:09.548385",
+      "lag_ms": 0
+    },
+    {
+      "text": "the wisdom of god is at work in me i'm full of wisdom",
+      "start": 312.31,
+      "duration": 4.2900085,
+      "is_final": false,
+      "confidence": 0.9921875,
+      "speech_final": false,
+      "words": [],
+      "received_at": "2026-10-02T16:23:10.543111",
+      "lag_ms": 0
+    }
+  ]
+}
