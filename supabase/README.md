@@ -28,13 +28,15 @@ supabase/
   migrations/*_voice_blocks.sql     counta schema: tables, indexes, RLS, grants
   migrations/*_voucher_credited_at.sql  records that a redemption's payout landed
   migrations/*_redeem_voucher.sql   counta.redeem_voucher: one-transaction redemption
+  migrations/*_block_released_at.sql  when a block was handed back, for the refund
   tests/*.sql                       concurrency tests; local databases only
   functions/deno.json               workspace root: `deno task test`, lint, lockfile
   functions/voice-block/
     deno.json                       pinned imports; what the deploy bundler reads
     index.ts                        entrypoint: env -> adapters -> handler
     attestors.ts                    which platforms get a trial gate, from env
-    handler.ts                      router; the five POST routes share one JWT check
+    handler.ts                      router; the six POST routes share one JWT check.
+                                    Grant, release and POST /balance live here
     token.ts                        POST /token   (re-mint for a block you hold)
     trial.ts                        POST /trial   (device-gated free trial)
     redeem.ts                       POST /redeem  (voucher codes)
@@ -118,8 +120,27 @@ answer `404 block_not_found` — a block that is not yours must not be
 distinguishable from one that does not exist.
 
 `streamed_secs` and `detections` must be non-negative integers when present
-(anything else is a 400). A refund needs `detections` to be present and zero:
-an omitted count is no report at all, not a report of zero.
+(anything else is a 400).
+
+**What a release returns.** A block is paid for up front and the unused part
+comes back when it is released: a five-minute block stopped after forty
+seconds costs one credit and returns four. The used part is measured by the
+server, from the grant time to the `released_at` it stamps, rounded up to a
+whole credit and never less than one. Nothing the client reports moves that
+figure. The one exception is a session that never got going: released inside
+`REFUND_WINDOW_SECONDS` with `detections` present and zero, it costs nothing.
+An omitted count is no report at all, not a report of zero.
+
+The answer says what happened — `used_credits`, `refunded_credits`, and
+`balance` when it changed. A second release of the same block answers
+`refunded: false` and moves nothing.
+
+```bash
+# What the user has, and what a session needs to start. Reads, never debits.
+curl -X POST http://127.0.0.1:54321/functions/v1/voice-block/balance \
+  -H "Authorization: Bearer $USER_JWT"
+# -> {"balance": 23, "required": 5}
+```
 
 ```bash
 # The one-per-device free trial. `platform` is ios or android and decides
@@ -187,11 +208,13 @@ Injected by the runtime (do not set): `SUPABASE_URL`,
 | `REVENUECAT_CURRENCY_CODE` | `VOICE` | Virtual currency code for voice credits |
 | `BLOCK_CREDITS` | 5 | Credits debited per block |
 | `BLOCK_SECONDS` | 300 | Block duration |
-| `REFUND_WINDOW_SECONDS` | 30 | Release within this window with zero detections is refunded |
+| `REFUND_WINDOW_SECONDS` | 30 | Release within this window with zero detections costs nothing. Any other early release returns the unused part |
 | `RATE_LIMIT_MAX` | 6 | Max grants per user per window |
 | `RATE_LIMIT_WINDOW_MINUTES` | 10 | Rate-limit window |
 | `TOKEN_MINT_MAX` | 20 | Max `/token` mints per user per window, counted in the worker's memory |
 | `TOKEN_MINT_WINDOW_MINUTES` | 5 | Window for the above |
+| `BALANCE_READ_MAX` | 30 | Max `/balance` reads per user per window, counted in the worker's memory |
+| `BALANCE_READ_WINDOW_MINUTES` | 5 | Window for the above |
 
 The trial and voucher settings:
 
