@@ -16,7 +16,7 @@ the reasoning behind blocks, and the device gate on the free trial.
 >   needs are set by hand in the dashboard instead (see "Deploy to a project").
 > - `supabase db push` is safe here **only because** the migrations are
 >   additive and confined to `counta`. Together they create a schema, six
->   tables and one function, and touch nothing in `public`, `mcpl`,
+>   tables and three functions, and touch nothing in `public`, `mcpl`,
 >   `mcp_oauth` or `auth` beyond foreign keys to `auth.users`. Re-read them
 >   before pushing any change.
 
@@ -29,8 +29,9 @@ supabase/
   migrations/*_voucher_credited_at.sql  records that a redemption's payout landed
   migrations/*_redeem_voucher.sql   counta.redeem_voucher: one-transaction redemption
   tests/*.sql                       concurrency tests; local databases only
-  functions/deno.json               pinned imports + `deno task test`
+  functions/deno.json               workspace root: `deno task test`, lint, lockfile
   functions/voice-block/
+    deno.json                       pinned imports; what the deploy bundler reads
     index.ts                        entrypoint: env -> adapters -> handler
     attestors.ts                    which platforms get a trial gate, from env
     handler.ts                      router; the five POST routes share one JWT check
@@ -228,31 +229,25 @@ the RevenueCat SDK with the same id (task 10.3).
 
 ## Deploy to a project
 
-Nothing here talks to a remote project until you run these.
+The full runbook, covering first deploys, routine updates, secrets, schema
+changes, rollback and troubleshooting, is **`docs/DEPLOYING-BACKEND.md`**. The
+short version:
 
 ```bash
-supabase login
-supabase link --project-ref <your-project-ref>
-supabase db push                                  # applies supabase/migrations
-supabase secrets set --env-file supabase/.env     # or individual NAME=VALUE pairs
-supabase functions deploy voice-block             # verify_jwt=false comes from config.toml
+supabase link --project-ref <ref>   # once; recorded in supabase/.temp
+make supabase-status                # what the project has now (read-only)
+make supabase-deploy                # preflight, migrations, function, smoke test
+make supabase-secrets               # push supabase/remote.env
 ```
 
-There is deliberately no `supabase config push` here. It would push this
-local `config.toml` over the shared project's auth settings. Do these two
-steps by hand in the dashboard instead — once per project, not per deploy:
+Two rules that apply every time:
 
-1. **Authentication -> Sign In / Providers -> Anonymous sign-ins: enable.**
-   The app signs in anonymously (`supabaseSessionProvider`), so without this
-   every request arrives without a user and the function answers 401.
-2. **Project Settings -> API (Data API) -> Exposed schemas: add `counta`.**
-   PostgREST serves only the schemas on that list. Without it the function's
-   queries fail with `PGRST106` / "schema must be one of the following", which
-   surfaces as a 500 rather than as anything about credits.
-
-Then set the project URL and publishable key in the app `.env` and rebuild.
-Also configure a hard spend limit on the Deepgram project (req 10.4); no code
-here can bound cost once a client holds an open socket.
+- **Never `supabase config push`** on a shared project. It overwrites the whole
+  project's auth settings. The two settings this feature needs (anonymous
+  sign-ins on, `counta` in the exposed schemas) are set by hand, once.
+- **The import map lives in `functions/voice-block/deno.json`.** The deploy
+  bundler reads `deno.json` from the function's own folder. The one above is a
+  workspace root for `deno test` and the lockfile, and the bundler can't see it.
 
 ## Operator setup for the trial and vouchers
 
