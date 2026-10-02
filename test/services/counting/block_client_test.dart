@@ -493,6 +493,175 @@ void main() {
         throwsA(isA<BlockProviderUnavailable>()),
       );
     });
+
+    test('reports what the block cost and what came back', () async {
+      // Stopping early returns the unused minutes, and the app tells the user
+      // how many.
+      final client = clientAnswering(200, {
+        'refunded': true,
+        'balance': 19,
+        'used_credits': 1,
+        'refunded_credits': 4,
+      });
+      addTearDown(client.dispose);
+
+      final release = await client.release(
+        blockId,
+        streamedSecs: 37,
+        detections: 4,
+        eligibleForRefund: false,
+      );
+
+      expect(release.refunded, isTrue);
+      expect(release.balance, 19);
+      expect(release.usedCredits, 1);
+      expect(release.refundedCredits, 4);
+    });
+
+    test('an older answer without the split still parses', () async {
+      final client = clientAnswering(200, {'refunded': false});
+      addTearDown(client.dispose);
+
+      final release = await client.release(
+        blockId,
+        streamedSecs: 300,
+        detections: 9,
+        eligibleForRefund: false,
+      );
+
+      expect(release.usedCredits, isNull);
+      expect(release.refundedCredits, isNull);
+    });
+  });
+
+  group('BlockClient.readBalance', () {
+    test('reads the balance and what a session needs', () async {
+      final client = clientAnswering(200, {'balance': 23, 'required': 5});
+      addTearDown(client.dispose);
+
+      final balance = await client.readBalance();
+
+      expect(balance.balance, 23);
+      expect(balance.required, 5);
+      expect(balance.canStart, isTrue);
+      expect(sent.single.request.url.path, endsWith('/voice-block/balance'));
+      expect(sent.single.request.headers['Authorization'], 'Bearer jwt-token');
+    });
+
+    test('too little to start is reported, not hidden', () async {
+      final client = clientAnswering(200, {'balance': 3, 'required': 5});
+      addTearDown(client.dispose);
+
+      expect((await client.readBalance()).canStart, isFalse);
+    });
+
+    test('a 200 with no balance is not read as zero', () async {
+      // Zero is a real answer with consequences: it tells someone they have
+      // no minutes. A malformed body must not produce it.
+      final client = clientAnswering(200, {'something': 'else'});
+      addTearDown(client.dispose);
+
+      await expectLater(client.readBalance(), throwsA(isA<BlockUnreachable>()));
+    });
+
+    test('429 is a rate limit', () async {
+      final client = clientAnswering(429, {
+        'error': 'rate_limited',
+        'retry_after_seconds': 30,
+      });
+      addTearDown(client.dispose);
+
+      await expectLater(client.readBalance(), throwsA(isA<BlockRateLimited>()));
+    });
+  });
+
+  group('BlockClient.redeem', () {
+    test('a good code reports what it added', () async {
+      final client = clientAnswering(200, {
+        'redeemed': true,
+        'credits': 50,
+        'balance': 50,
+      });
+      addTearDown(client.dispose);
+
+      final outcome = await client.redeem('  spring24 ');
+
+      expect(
+        outcome,
+        isA<VoucherRedeemed>()
+            .having((o) => o.credits, 'credits', 50)
+            .having((o) => o.balance, 'balance', 50),
+      );
+      expect(sent.single.request.url.path, endsWith('/voice-block/redeem'));
+      // Trimmed: a code pasted with a trailing space is still that code.
+      expect(sent.single.body, {'code': 'spring24'});
+    });
+
+    test('a code this user already used moves nothing', () async {
+      final client = clientAnswering(200, {
+        'redeemed': false,
+        'reason': 'already_redeemed',
+        'credits': 50,
+      });
+      addTearDown(client.dispose);
+
+      expect(await client.redeem('SPRING24'), isA<VoucherAlreadyRedeemed>());
+    });
+
+    test('an unknown code is a refusal, not a missing block', () async {
+      // 404 means "block gone" on the block routes and ends a session there.
+      // Here it means "no such code", and must not be read as the other.
+      final client = clientAnswering(404, {'error': 'voucher_invalid'});
+      addTearDown(client.dispose);
+
+      final outcome = await client.redeem('NOPE');
+
+      expect(
+        outcome,
+        isA<VoucherRefused>().having(
+          (o) => o.reason,
+          'reason',
+          VoucherRefusal.invalid,
+        ),
+      );
+    });
+
+    test('expired and used-up codes say which', () async {
+      final expired = clientAnswering(409, {'error': 'voucher_expired'});
+      addTearDown(expired.dispose);
+      final usedUp = clientAnswering(409, {'error': 'voucher_exhausted'});
+      addTearDown(usedUp.dispose);
+
+      expect(
+        (await expired.redeem('OLD') as VoucherRefused).reason,
+        VoucherRefusal.expired,
+      );
+      expect(
+        (await usedUp.redeem('FULL') as VoucherRefused).reason,
+        VoucherRefusal.usedUp,
+      );
+    });
+
+    test('too many wrong guesses is a rate limit, not a refusal', () async {
+      final client = clientAnswering(429, {
+        'error': 'rate_limited',
+        'retry_after_seconds': 600,
+      });
+      addTearDown(client.dispose);
+
+      await expectLater(
+        client.redeem('GUESS'),
+        throwsA(isA<BlockRateLimited>()),
+      );
+    });
+
+    test('every refusal reads as a sentence for the person who typed it', () {
+      for (final reason in VoucherRefusal.values) {
+        final message = VoucherRefused(reason).message;
+        expect(message, isNot(contains('voucher')));
+        expect(message, endsWith('.'));
+      }
+    });
   });
 }
 
