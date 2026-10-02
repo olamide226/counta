@@ -526,16 +526,129 @@ Deno.test("RevenueCat provider: a currency on no page is a zero balance", async 
   assertEquals(await provider.getBalance(USER), 0);
 });
 
+// The bodies below are RevenueCat's own, captured from a live project on
+// 2 Oct 2026 rather than written from the reference.
+const customerMissing = () =>
+  jsonResponse({
+    object: "error",
+    type: "resource_missing",
+    message: "Customer could not be found",
+    param: "customer_id",
+    retryable: false,
+  }, 404);
+const customerCreated = () =>
+  jsonResponse({ object: "customer", id: USER }, 201);
+const customerExists = () =>
+  jsonResponse({
+    object: "error",
+    type: "resource_already_exists",
+    message: "id is already taken",
+    param: "id",
+    retryable: false,
+  }, 409);
+
 Deno.test("RevenueCat provider: a grant is a positive adjustment keyed on its reference", async () => {
   const { provider, sent } = revenueCat([
+    customerCreated,
     jsonResponse({ items: [{ currency_code: "VOICE", balance: 70 }] }),
   ]);
 
   assertEquals(await provider.grant(USER, `voucher:${BLOCK}`, 50), 70);
-  assertStringIncludes(sent[0].url, "/virtual_currencies/transactions");
-  assertEquals(sent[0].body.adjustments, { VOICE: 50 });
-  assertEquals(sent[0].body.reference, `voucher:${BLOCK}`);
+  assertStringIncludes(sent[1].url, "/virtual_currencies/transactions");
+  assertEquals(sent[1].body.adjustments, { VOICE: 50 });
+  assertEquals(sent[1].body.reference, `voucher:${BLOCK}`);
   // The reference is the idempotency key, which is what makes a retried
   // trial or redemption pay out once (reqs 11.8, 12.5).
-  assertEquals(sent[0].headers["Idempotency-Key"], `voucher:${BLOCK}`);
+  assertEquals(sent[1].headers["Idempotency-Key"], `voucher:${BLOCK}`);
+});
+
+Deno.test("RevenueCat provider: a customer it has never seen has no credits", async () => {
+  // Every first-time user is unknown to RevenueCat until something creates
+  // them. This was answered as an outage, so a new user asking for a block
+  // got 503 `provider_unavailable` instead of 402 — found on the first real
+  // request against a live project.
+  const { provider, sent } = revenueCat([customerMissing]);
+
+  assertEquals(await provider.getBalance(USER), 0);
+  // A balance check must not write to the ledger.
+  assertEquals(sent.length, 1);
+  assertEquals(sent[0].init.method, "GET");
+});
+
+Deno.test("RevenueCat provider: any other 404 is a failure, not an empty balance", async () => {
+  // A wrong project id also answers 404. Reading that as zero would 402
+  // every user and hide a misconfiguration behind a plausible answer.
+  const { provider } = revenueCat([
+    () =>
+      jsonResponse({
+        object: "error",
+        type: "resource_missing",
+        message: "Project could not be found",
+        param: "project_id",
+      }, 404),
+  ]);
+
+  const error = await assertRejects(
+    () => provider.getBalance(USER),
+    ProviderError,
+  );
+  assertEquals(error.reason, "unavailable");
+});
+
+Deno.test("RevenueCat provider: a grant creates the customer before crediting them", async () => {
+  // RevenueCat refuses a transaction for an unknown customer, and a trial or
+  // a voucher is usually the first thing a new user does.
+  const { provider, sent } = revenueCat([
+    customerCreated,
+    jsonResponse({ items: [{ currency_code: "VOICE", balance: 20 }] }),
+  ]);
+
+  assertEquals(await provider.grant(USER, `trial:${USER}`, 20), 20);
+  assertEquals(sent.length, 2);
+  assertEquals(
+    sent[0].url,
+    "https://api.revenuecat.com/v2/projects/proj/customers",
+  );
+  assertEquals(sent[0].init.method, "POST");
+  assertEquals(sent[0].body, { id: USER });
+  assertStringIncludes(
+    sent[1].url,
+    `/customers/${USER}/virtual_currencies/transactions`,
+  );
+});
+
+Deno.test("RevenueCat provider: a customer who already exists is still credited", async () => {
+  const { provider, sent } = revenueCat([
+    customerExists,
+    jsonResponse({ items: [{ currency_code: "VOICE", balance: 45 }] }),
+  ]);
+
+  assertEquals(await provider.grant(USER, `voucher:${BLOCK}`, 25), 45);
+  assertEquals(sent.length, 2);
+});
+
+Deno.test("RevenueCat provider: no credit moves when the customer cannot be created", async () => {
+  const { provider, sent } = revenueCat([
+    () => new Response("", { status: 500 }),
+  ]);
+
+  await assertRejects(
+    () => provider.grant(USER, `trial:${USER}`, 20),
+    ProviderError,
+  );
+  // Stopped at the create: the transaction was never attempted.
+  assertEquals(sent.length, 1);
+});
+
+Deno.test("RevenueCat provider: a debit for a customer who vanished is a failure", async () => {
+  // A debit only follows a balance that customer was found to have, so a
+  // missing customer here means the ledger disagrees with what was just
+  // read. That is something to report, never a zero to assume.
+  const { provider } = revenueCat([customerMissing]);
+
+  const error = await assertRejects(
+    () => provider.spend(USER, BLOCK, 5),
+    ProviderError,
+  );
+  assertEquals(error.reason, "unavailable");
 });

@@ -60,6 +60,12 @@ A 401 is the right answer for an anonymous call: the function refuses to
 serve anyone without a user token, and it does that itself rather than at the
 gateway.
 
+**A 401 does not prove the keys work.** It shows the secrets are *present*,
+not that Deepgram and RevenueCat accept them: neither is called until a signed-in
+user asks for a block. The first deploy to a real project answered 401 here and
+then failed on both. After setting or changing secrets, run one real request
+(see "Checking the keys end to end" below).
+
 For anything more, the function logs are in the dashboard under **Edge
 Functions → voice-block → Logs**. Every line is one JSON object with an `event`
 field (`grant`, `boot_failed`, `trial_refused` and so on), so filter on that.
@@ -80,6 +86,15 @@ Remote secrets use their own file on purpose. `supabase/.env` is what
 `make supabase-serve` uses locally, and pushing it by mistake would put local
 values on a live project. `make supabase-secrets` refuses to run if the file is
 tracked by git.
+
+**The Deepgram key must have the Member role.** The function never streams
+with it; it only asks Deepgram for a 30-second temporary token, and that call
+needs Member or higher. A key that streams perfectly well in a debug build can
+still be refused here, so do not reuse the app's dev key: create a separate one
+for the server. Reusing it also means revoking one breaks the other.
+
+**The RevenueCat key needs Customer information: Read & write**, and nothing
+else. That covers reading a balance, moving credits and creating a customer.
 
 **Secrets are project-wide.** On a project other products share, every
 function deployed there can read them. Put only what `voice-block` needs in
@@ -205,10 +220,19 @@ To test before purchases exist, grant a tester credits by hand:
    On a shared project other products' anonymous users can appear here too.
    Match on the time they opened the app.
 
-2. **Grant credits** through the RevenueCat Developer API. The customer id is
-   the Supabase user id:
+2. **Create them in RevenueCat, then grant credits.** The customer id is the
+   Supabase user id. RevenueCat refuses a transaction for a customer it has
+   never seen (`404 Customer could not be found`), and until the app carries
+   the RevenueCat SDK nothing else creates them, so create first. Creating one
+   that already exists answers 409, which is fine.
 
    ```bash
+   curl -X POST \
+     "https://api.revenuecat.com/v2/projects/$REVENUECAT_PROJECT_ID/customers" \
+     -H "Authorization: Bearer $REVENUECAT_SECRET_KEY" \
+     -H "Content-Type: application/json" \
+     -d '{"id": "<user-id>"}'
+
    curl -X POST \
      "https://api.revenuecat.com/v2/projects/$REVENUECAT_PROJECT_ID/customers/<user-id>/virtual_currencies/transactions" \
      -H "Authorization: Bearer $REVENUECAT_SECRET_KEY" \
@@ -220,8 +244,24 @@ To test before purchases exist, grant a tester credits by hand:
    100 credits is 20 blocks, or 100 minutes of voice. The `Idempotency-Key`
    makes a retried command grant once. Change the suffix for a second grant.
 
-The request shape follows RevenueCat's v2 reference, but no request has been
-made against a live project yet. Check the response the first time.
+Both requests were run against a live project on 2 Oct 2026: create answers
+201, the grant answers 200 with the new balance.
+
+### Checking the keys end to end
+
+With a user who has credits, ask for a block the way the app does. A `200` with
+a `token` means every key works. Releasing it straight away, unused, refunds
+the credits:
+
+| Answer to the block request | Meaning |
+|---|---|
+| `200` with `token` | Everything works |
+| `402 insufficient_credit` | Keys fine; this user has no credits |
+| `503 provider_unavailable`, balance unchanged | Deepgram refused the mint, and the debit was refunded. Almost always a key without the Member role |
+| `503 provider_unavailable`, before any debit | RevenueCat refused the balance read: wrong key, wrong permission or wrong project id |
+
+`boot_failed`, `mint_failed` and the provider's status are in the function
+logs.
 
 ## Troubleshooting
 
@@ -232,5 +272,7 @@ made against a live project yet. Check the response the first time.
 | Every request: 401 even with a user | Anonymous sign-ins are off, or the token is for another project | First deploy, step 2 |
 | 500 mentioning `PGRST106` / "schema must be one of" | `counta` isn't an exposed schema | First deploy, step 3 |
 | 402 `insufficient_credit` | The user has no credits | "Credits for testing" |
+| 503 `provider_unavailable` on a block, balance unchanged | Deepgram refused to mint a token: the key lacks the Member role | New Deepgram key with role Member, `make supabase-secrets`, redeploy |
+| Hand-grant answers 404 `Customer could not be found` | RevenueCat has never seen this user | Create the customer first; see "Credits for testing" |
 | App: "needs a block token from the voice-block service" | The build has no `SUPABASE_URL` | "Pointing the app at the backend" |
 | Rotated a key, still seeing the old behaviour | A warm worker cached the old value | Redeploy the function |

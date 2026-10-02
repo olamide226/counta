@@ -14,8 +14,14 @@ export function providerFetch(
   fetchFn: typeof fetch,
   url: string,
   init: RequestInit,
+  /**
+   * Statuses the caller wants back as a response rather than as a failure,
+   * because for that provider they are an answer. RevenueCat's 404 for a
+   * customer it has never seen is one: it means "no credits", not "down".
+   */
+  passThrough: readonly number[] = [],
 ): Promise<Response> {
-  return dispatch(provider, fetchFn, url, init);
+  return dispatch(provider, fetchFn, url, init, passThrough);
 }
 
 /**
