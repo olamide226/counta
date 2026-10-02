@@ -78,8 +78,10 @@ Deno.test("store: every query is scoped to the counta schema", async () => {
   await store.retireExpired("user-1", now);
   await store.findById("block-1", "user-1");
   await store.reconcile("block-1", { streamed_secs: 1, detections: 0 });
+  // Two statements: write the stamp where there is none, then read it back.
+  await store.markReleased("block-1", now);
 
-  assertEquals(schemas.length, 6);
+  assertEquals(schemas.length, 8);
   assertEquals(new Set(schemas), new Set([COUNTA_SCHEMA]));
   assertEquals(new Set(tables), new Set(["voice_blocks"]));
 });

@@ -19,6 +19,7 @@ const ROUTES: Record<
   (req: Request, deps: Deps, userId: string) => Promise<Response>
 > = {
   "/voice-block": grant,
+  "/balance": readBalance,
   "/release": release,
   "/token": mintToken,
   "/trial": trial,
@@ -237,19 +238,41 @@ async function release(req: Request, deps: Deps, userId: string): Promise<Respon
     return json(200, { refunded: false });
   }
 
-  // 3.11, validated server-side against granted_at. An absent `detections` is
-  // not "zero detections" — it is no report at all, so it is not refundable.
-  const ageMs = now.getTime() - new Date(block.granted_at).getTime();
-  const eligible = ageMs <= config.refundWindowSeconds * 1000 &&
+  // How long the block ran is measured here, on the server's clock, from the
+  // grant to the first time a release was asked for. The stamp is written
+  // once and read back on every attempt, so a release that is retried after a
+  // failed refund works out the same amount as the attempt that failed.
+  // Nothing the client reports about its own streaming time is used.
+  const releasedAt = await blocks.markReleased(block.id, now);
+  const grantedMs = new Date(block.granted_at).getTime();
+  const ageMs = Math.max(0, releasedAt.getTime() - grantedMs);
+
+  // 3.11: a session that never really started costs nothing. An absent
+  // `detections` is not "zero detections" — it is no report at all — so this
+  // full refund still needs a count that was actually reported as zero.
+  const neverStarted = ageMs <= config.refundWindowSeconds * 1000 &&
     detections === 0;
+
+  // Otherwise the block is charged for the minutes it ran, rounded up, and
+  // the unused whole minutes come back. A block is bought five minutes at a
+  // time; charging all five for a 37-second session is what this replaced.
+  const blockMs = Math.max(
+    1,
+    new Date(block.expires_at).getTime() - grantedMs,
+  );
+  const usedCredits = neverStarted ? 0 : Math.min(
+    block.credits,
+    Math.max(1, Math.ceil((ageMs / blockMs) * block.credits)),
+  );
+  const refundCredits = block.credits - usedCredits;
 
   // The refund goes before the reconcile, and is keyed on the block id so the
   // ledger applies it once however many times it is attempted. Flipping the
   // row first made a failure here permanent: the block was reconciled, the
   // money had not moved, and the client's retry was answered refunded:false.
   // Failing before the flip leaves a retry able to finish the job.
-  const balanceAfter = eligible
-    ? await balance.refund(userId, block.id, block.credits)
+  const balanceAfter = refundCredits > 0
+    ? await balance.refund(userId, block.id, refundCredits)
     : undefined;
 
   const flipped = await blocks.reconcile(block.id, {
@@ -264,14 +287,50 @@ async function release(req: Request, deps: Deps, userId: string): Promise<Respon
     detections,
     client_claimed_refund: clientClaimsRefund,
     refunded: balanceAfter !== undefined,
+    used_credits: usedCredits,
+    refunded_credits: refundCredits,
     first_release: flipped,
   });
 
   // The balance is reported only when it moved: echoing an unchanged number
-  // costs a RevenueCat round trip on every ordinary release.
+  // costs a RevenueCat round trip on every ordinary release. What was used
+  // and what came back are always reported, so the app can say so.
   return balanceAfter === undefined
-    ? json(200, { refunded: false })
-    : json(200, { refunded: true, balance: balanceAfter });
+    ? json(200, { refunded: false, used_credits: usedCredits, refunded_credits: 0 })
+    : json(200, {
+      refunded: true,
+      balance: balanceAfter,
+      used_credits: usedCredits,
+      refunded_credits: refundCredits,
+    });
+}
+
+/**
+ * POST /voice-block/balance — how many credits the caller has.
+ *
+ * The app shows this before a session starts and in settings, where there is
+ * no grant or release response to read it from. It moves nothing, so the only
+ * thing to guard is the ledger's rate limit, which every user shares.
+ */
+async function readBalance(
+  _req: Request,
+  deps: Deps,
+  userId: string,
+): Promise<Response> {
+  const budget = deps.balanceLimiter.allow(userId, deps.now());
+  if (!budget.allowed) {
+    deps.log("balance_rate_limited", {
+      user_id: userId,
+      retry_after_seconds: budget.retryAfterSeconds,
+    });
+    return rateLimited(budget.retryAfterSeconds);
+  }
+  return json(200, {
+    balance: await deps.balance.getBalance(userId),
+    // What a session needs to start, so the app can say "you need 5" without
+    // carrying its own copy of the server's block size.
+    required: deps.config.blockCredits,
+  });
 }
 
 /**
