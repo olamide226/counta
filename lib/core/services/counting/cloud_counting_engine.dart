@@ -614,6 +614,15 @@ class CloudCountingEngine implements CountingEngine {
   /// Listeners are attached before [SpeechSocket.connect] so the `connected`
   /// transition — which flushes buffered audio and starts the watchdog — is
   /// never missed.
+  /// Says what kind of credential the engine is holding.
+  ///
+  /// Decided by where it came from, never by what it looks like: a block
+  /// service only ever hands out temporary tokens, and the dev fallback only
+  /// ever hands out an API key. Exactly one of the two is wired per build.
+  SpeechCredential _credential(String value) => blockService == null
+      ? SpeechCredential.apiKey(value)
+      : SpeechCredential.temporaryToken(value);
+
   Future<_Connection> _connect(String token, {required bool asPrimary}) async {
     final socket = asPrimary && _primary != null
         ? _primary!.socket
@@ -631,7 +640,7 @@ class CloudCountingEngine implements CountingEngine {
     }
 
     try {
-      await socket.connect(apiKeyOrToken: token, phrases: _phrases);
+      await socket.connect(credential: _credential(token), phrases: _phrases);
     } catch (e) {
       if (asPrimary) {
         _primary = null;
@@ -1272,7 +1281,7 @@ class CloudCountingEngine implements CountingEngine {
 
         await primary.socket.closeGracefully(drainTimeoutMs: 0);
         await primary.socket.connect(
-          apiKeyOrToken: await _reconnectCredential(),
+          credential: _credential(await _reconnectCredential()),
           phrases: _phrases,
         );
         _rebaseAfterReconnect(primary);

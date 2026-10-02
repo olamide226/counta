@@ -349,9 +349,21 @@ class _PhraseSetupScreenState extends State<PhraseSetupScreen> {
                   ],
                   ElevatedButton.icon(
                     onPressed: isValid && !_starting ? _handleSubmit : null,
-                    icon: const Icon(Icons.mic),
+                    // Starting takes a second or two — the microphone, a
+                    // block, the connection — and the sheet stays open for
+                    // it so a failure is explained here. A button that only
+                    // went grey looked like the tap had done nothing.
+                    icon: _starting
+                        ? const SizedBox(
+                            width: 18,
+                            height: 18,
+                            child: CircularProgressIndicator(strokeWidth: 2),
+                          )
+                        : const Icon(Icons.mic),
                     label: Text(
-                      _isResuming
+                      _starting
+                          ? 'Starting…'
+                          : _isResuming
                           ? 'Resume Voice Session'
                           : 'Start Voice Session',
                     ),

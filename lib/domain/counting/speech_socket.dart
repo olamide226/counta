@@ -7,6 +7,31 @@ import 'transcript_segment.dart';
 /// Connection state of a streaming speech recognition socket.
 enum SocketState { disconnected, connecting, connected, closing, error }
 
+/// What a socket authenticates with, and so how it has to be presented.
+///
+/// The two kinds are not interchangeable, and a provider rejects one sent as
+/// the other. This used to be a bare string named `apiKeyOrToken`, which told
+/// the socket nothing: it presented everything as an API key, so every
+/// session that paid for a temporary token was refused at the handshake while
+/// dev builds, which do hold an API key, worked. Making the kind part of the
+/// value means a caller cannot hand over a credential without saying what it
+/// is.
+class SpeechCredential {
+  /// A long-lived key. Only ever held by a dev build.
+  const SpeechCredential.apiKey(this.value) : isTemporary = false;
+
+  /// A short-lived token minted by the voice service for one block.
+  const SpeechCredential.temporaryToken(this.value) : isTemporary = true;
+
+  final String value;
+  final bool isTemporary;
+
+  /// Never the value: this ends up in logs and test failure output.
+  @override
+  String toString() =>
+      'SpeechCredential(${isTemporary ? 'temporaryToken' : 'apiKey'})';
+}
+
 /// Abstract contract for streaming speech-to-text WebSocket clients.
 ///
 /// Any provider (Deepgram, AssemblyAI, Whisper, etc.) implements this contract,
@@ -33,13 +58,21 @@ abstract class SpeechSocket {
   /// silently ending.
   String? get closeDescription;
 
-  /// Connect to the provider's streaming endpoint with an API key/token and target phrase parameters.
-  Future<void> connect({required String apiKeyOrToken, PhraseSet? phrases});
+  /// Connect to the provider's streaming endpoint.
+  Future<void> connect({
+    required SpeechCredential credential,
+    PhraseSet? phrases,
+  });
 
   /// Stream binary PCM16 audio frames to the socket.
   void sendAudio(Uint8List pcmFrames);
 
   /// Gracefully close the connection after draining trailing transcript results.
+  ///
+  /// Must return in bounded time whatever state the connection is in,
+  /// including one that never opened. The engine awaits this while tearing a
+  /// session down, so an implementation that can wait for ever turns a failed
+  /// connection into a frozen app. The same holds for [dispose].
   Future<void> closeGracefully({int drainTimeoutMs = 2000});
 
   /// Dispose all stream controllers and socket resources.
