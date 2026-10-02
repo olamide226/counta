@@ -21,6 +21,8 @@ class VoiceSessionBanner extends StatefulWidget {
     this.phraseCounts = const {},
     this.lastMatchedPhrase,
     this.diagnostic,
+    this.minutesLeft,
+    this.minutesLow = false,
   });
 
   final EngineStatus status;
@@ -40,6 +42,14 @@ class VoiceSessionBanner extends StatefulWidget {
   final String? lastMatchedPhrase;
 
   final String? diagnostic;
+
+  /// Voice minutes left, shown as a third pill. Null hides it: a build with
+  /// no voice service has no minutes, and a balance that has not loaded is
+  /// not worth a placeholder mid-session.
+  final int? minutesLeft;
+
+  /// Whether [minutesLeft] is few enough to draw the eye.
+  final bool minutesLow;
 
   @override
   State<VoiceSessionBanner> createState() => _VoiceSessionBannerState();
@@ -71,7 +81,7 @@ class _VoiceSessionBannerState extends State<VoiceSessionBanner> {
     EngineStatus.reconnecting => 'Reconnecting…',
     EngineStatus.requestingBlock => 'Preparing…',
     EngineStatus.degraded => 'Poor connection',
-    EngineStatus.exhausted => 'Out of credit',
+    EngineStatus.exhausted => 'Out of voice minutes',
     EngineStatus.error => 'Voice counting stopped',
     EngineStatus.idle => 'Paused',
     EngineStatus.permissionDenied => 'Microphone access needed',
@@ -153,16 +163,27 @@ class _VoiceSessionBannerState extends State<VoiceSessionBanner> {
                 spacing: 8,
                 runSpacing: 6,
                 children: [
-                  _CountPill(
+                  VoiceCountPill(
                     icon: Icons.graphic_eq_rounded,
                     label: '$voiceCount by voice',
                     onContainer: onContainer,
                   ),
-                  _CountPill(
+                  VoiceCountPill(
                     icon: Icons.touch_app_outlined,
                     label: '$manualCount by tap',
                     onContainer: onContainer,
                   ),
+                  if (widget.minutesLeft case final left?)
+                    VoiceCountPill(
+                      icon: Icons.timer_outlined,
+                      label: '$left min left',
+                      semanticLabel:
+                          '$left voice ${left == 1 ? 'minute' : 'minutes'} left',
+                      onContainer: onContainer,
+                      // Quiet until it matters. Colour alone would not carry
+                      // it, so the number is always there to read.
+                      warning: widget.minutesLow,
+                    ),
                 ],
               ),
               if (_isMultiple && _expanded) ...[
@@ -208,41 +229,70 @@ class _VoiceSessionBannerState extends State<VoiceSessionBanner> {
   }
 }
 
-class _CountPill extends StatelessWidget {
-  const _CountPill({
+/// A small labelled figure in a voice banner: counts by voice, counts by
+/// tap, minutes left.
+class VoiceCountPill extends StatelessWidget {
+  const VoiceCountPill({
+    super.key,
     required this.icon,
     required this.label,
     required this.onContainer,
+    this.semanticLabel,
+    this.warning = false,
   });
 
   final IconData icon;
   final String label;
   final Color onContainer;
 
+  /// Read out instead of [label] when the short form would not make sense
+  /// spoken.
+  final String? semanticLabel;
+
+  /// Draws the pill in the warning colours instead of the banner's own.
+  final bool warning;
+
   @override
   Widget build(BuildContext context) {
-    return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
-      decoration: BoxDecoration(
-        color: onContainer.withValues(alpha: 0.08),
-        borderRadius: BorderRadius.circular(999),
-      ),
-      child: Row(
-        mainAxisSize: MainAxisSize.min,
-        children: [
-          Icon(icon, size: 13, color: onContainer.withValues(alpha: 0.8)),
-          const SizedBox(width: 5),
-          Text(
-            label,
-            style: Theme.of(context).textTheme.labelSmall?.copyWith(
-              color: onContainer,
-              fontWeight: FontWeight.w600,
+    final foreground = warning ? VoiceWarningColors.foreground : onContainer;
+    return Semantics(
+      label: semanticLabel,
+      excludeSemantics: semanticLabel != null,
+      child: Container(
+        padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
+        decoration: BoxDecoration(
+          color: warning
+              ? VoiceWarningColors.background
+              : onContainer.withValues(alpha: 0.08),
+          borderRadius: BorderRadius.circular(999),
+        ),
+        child: Row(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Icon(icon, size: 13, color: foreground.withValues(alpha: 0.8)),
+            const SizedBox(width: 5),
+            Text(
+              label,
+              style: Theme.of(context).textTheme.labelSmall?.copyWith(
+                color: foreground,
+                fontWeight: FontWeight.w600,
+              ),
             ),
-          ),
-        ],
+          ],
+        ),
       ),
     );
   }
+}
+
+/// The amber used when voice minutes are short.
+///
+/// `ColorScheme` has no warning role, and borrowing `error` would say
+/// something has gone wrong when nothing has. One fixed pair, dark text on
+/// light amber, reads on every theme in both brightnesses.
+abstract final class VoiceWarningColors {
+  static const background = Color(0xFFFFDDB3);
+  static const foreground = Color(0xFF2A1800);
 }
 
 /// Three bars that dance while the microphone is live, and rest flat when it

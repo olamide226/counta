@@ -3,9 +3,13 @@ import 'dart:async';
 import 'package:counta/domain/counting/block_service.dart';
 import 'package:counta/domain/counting/counting_engine.dart';
 import 'package:counta/domain/models/phrase_history_entry.dart';
+import 'package:counta/state/providers/voice_minutes_provider.dart';
 import 'package:counta/ui/screens/phrase_setup_screen.dart';
 import 'package:flutter/material.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
+
+import '../helpers/voice_fakes.dart';
 
 void main() {
   /// Pumps the screen and hands back the set the start button produced.
@@ -15,20 +19,29 @@ void main() {
     List<PhraseHistoryEntry> recentPhrases = const [],
     Object? throws,
     Future<void>? until,
+    // Null is a build with no voice service: no minutes, nothing shown.
+    FakeBlockService? service,
   }) async {
     final started = _StartedSet();
     await tester.pumpWidget(
-      MaterialApp(
-        home: Navigator(
-          onGenerateRoute: (_) => MaterialPageRoute<void>(
-            builder: (_) => PhraseSetupScreen(
-              initialPhrases: initialPhrases,
-              recentPhrases: recentPhrases,
-              onStartSession: (phrases) async {
-                if (until != null) await until;
-                if (throws != null) throw throws;
-                started.value = phrases;
-              },
+      ProviderScope(
+        overrides: [
+          voiceMinutesProvider.overrideWith(
+            (ref) => VoiceMinutesNotifier(service),
+          ),
+        ],
+        child: MaterialApp(
+          home: Navigator(
+            onGenerateRoute: (_) => MaterialPageRoute<void>(
+              builder: (_) => PhraseSetupScreen(
+                initialPhrases: initialPhrases,
+                recentPhrases: recentPhrases,
+                onStartSession: (phrases) async {
+                  if (until != null) await until;
+                  if (throws != null) throw throws;
+                  started.value = phrases;
+                },
+              ),
             ),
           ),
         ),
@@ -331,6 +344,103 @@ void main() {
       find.textContaining("Couldn't start voice counting. Please try again."),
       findsOneWidget,
     );
+  });
+
+  group('voice minutes', () {
+    testWidgets('a build with no voice service shows nothing about minutes', (
+      tester,
+    ) async {
+      await pumpSetup(tester);
+      await tester.pumpAndSettle();
+
+      expect(find.textContaining('voice minute'), findsNothing);
+      expect(find.text('Start Voice Session'), findsOneWidget);
+    });
+
+    testWidgets('the balance is on the screen before starting', (tester) async {
+      await pumpSetup(tester, service: FakeBlockService(balance: 23));
+      await tester.pumpAndSettle();
+
+      expect(find.text('23 voice minutes'), findsOneWidget);
+      expect(find.text('Only used while voice counting is on'), findsOneWidget);
+      expect(find.text('Get more'), findsOneWidget);
+      expect(find.text('Start Voice Session'), findsOneWidget);
+    });
+
+    testWidgets('one minute is not "1 voice minutes"', (tester) async {
+      await pumpSetup(
+        tester,
+        service: FakeBlockService(balance: 1)..required = 1,
+      );
+      await tester.pumpAndSettle();
+
+      expect(find.text('1 voice minute'), findsOneWidget);
+    });
+
+    testWidgets('with none left, it says so instead of offering a start', (
+      tester,
+    ) async {
+      await pumpSetup(tester, service: FakeBlockService(balance: 0));
+      await tester.pumpAndSettle();
+
+      // Known before the user tries, so they are not sent to be refused.
+      expect(find.text('No voice minutes left'), findsOneWidget);
+      expect(find.text('Get minutes'), findsOneWidget);
+      expect(find.text('Count by tapping instead'), findsOneWidget);
+      expect(find.text('Start Voice Session'), findsNothing);
+    });
+
+    testWidgets('too few to start says how many are needed', (tester) async {
+      await pumpSetup(tester, service: FakeBlockService(balance: 3));
+      await tester.pumpAndSettle();
+
+      expect(find.text('Not enough voice minutes'), findsOneWidget);
+      expect(
+        find.textContaining('needs 5 minutes to start, and you have 3'),
+        findsOneWidget,
+      );
+    });
+
+    testWidgets('counting by tapping instead just goes back', (tester) async {
+      final started = await pumpSetup(
+        tester,
+        service: FakeBlockService(balance: 0),
+      );
+      await tester.pumpAndSettle();
+
+      await tester.tap(find.text('Count by tapping instead'));
+      await tester.pumpAndSettle();
+
+      expect(find.byType(PhraseSetupScreen), findsNothing);
+      expect(started.value, isNull);
+    });
+
+    testWidgets('a code takes someone from no minutes to a running session', (
+      tester,
+    ) async {
+      final service = FakeBlockService(balance: 0)..vouchers['SPRING24'] = 50;
+      final started = await pumpSetup(tester, service: service);
+      await tester.pumpAndSettle();
+
+      await tester.tap(find.text('Get minutes'));
+      await tester.pumpAndSettle();
+      await tester.enterText(
+        find.widgetWithText(TextField, 'Enter your code'),
+        'spring24',
+      );
+      await tester.pump();
+      await tester.tap(find.text('Redeem'));
+      await tester.pumpAndSettle();
+
+      expect(find.text('50 minutes added'), findsOneWidget);
+
+      // One tap from there to counting: the phrase is already typed.
+      await tester.tap(find.text('Start voice counting'));
+      await tester.pumpAndSettle();
+
+      expect(started.value?.rawPhrases, ["I'm rich in wisdom"]);
+      expect(find.byType(PhraseSetupScreen), findsNothing);
+    });
   });
 
   testWidgets('a successful start closes the sheet', (tester) async {

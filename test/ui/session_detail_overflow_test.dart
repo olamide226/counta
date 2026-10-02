@@ -50,6 +50,6 @@ void main() {
     // the phrase list off the side of the card. Rows further down the page
     // are covered by the summary card's own test.
     expect(tester.takeException(), isNull);
-    expect(find.text('Phrases chanted'), findsOneWidget);
+    expect(find.text('Phrases counted'), findsOneWidget);
   });
 }
