@@ -87,13 +87,57 @@ Deno.test("grant: missing or invalid JWT is 401 and touches nothing", async () =
   assertEquals(h.minter.minted, 0);
 });
 
-Deno.test("grant: insufficient balance is 402 with balance and required, no mint", async () => {
-  const h = harness({ initialBalance: 2 });
+Deno.test("grant: an empty balance is 402 with balance and required, no mint", async () => {
+  const h = harness({ initialBalance: 0 });
   const { status, body } = await call(h.deps, grantReq());
   assertEquals(status, 402);
-  assertEquals(body, { error: "insufficient_credit", balance: 2, required: 5 });
+  assertEquals(body, { error: "insufficient_credit", balance: 0, required: 1 });
   assertEquals(h.minter.minted, 0);
   assertEquals(h.balance.calls.map((c) => c.op), ["get"]);
+});
+
+Deno.test("grant: less than a block buys a shorter block of what is left", async () => {
+  const h = harness({ initialBalance: 2 });
+  const { status, body } = await call(h.deps, grantReq());
+
+  assertEquals(status, 200);
+  assertEquals(body.credits, 2);
+  assertEquals(body.block_seconds, 120);
+  assertEquals(body.expires_at, "2026-09-07T12:02:00.000Z");
+  assertEquals(body.balance_after, 0);
+  assertEquals(h.blocks.rows[0].credits, 2);
+  assertEquals(h.balance.calls.find((c) => c.op === "spend")?.credits, 2);
+});
+
+Deno.test("grant: a renewal on a short balance is short too", async () => {
+  const h = harness({ initialBalance: 7 });
+  const first = await call(h.deps, grantReq());
+  assertEquals(first.body.credits, 5);
+
+  h.clock.now = new Date("2026-09-07T12:04:30.000Z");
+  const renewal = await call(h.deps, grantReq());
+
+  // Before, this was a 402 and the last two minutes could never be spent.
+  assertEquals(renewal.status, 200);
+  assertEquals(renewal.body.credits, 2);
+  assertEquals(renewal.body.block_seconds, 120);
+  assertEquals(renewal.body.balance_after, 0);
+});
+
+Deno.test("release: a short block refunds against its own size", async () => {
+  const h = harness({ initialBalance: 3 });
+  const grant = await call(h.deps, grantReq());
+  assertEquals(grant.body.block_seconds, 180);
+
+  // 70 s of a 180 s, three-credit block: two minutes started, one unused.
+  h.clock.now = new Date("2026-09-07T12:01:10.000Z");
+  const { body } = await call(
+    h.deps,
+    releaseReq({ block_id: grant.body.block_id, streamed_secs: 70, detections: 9 }),
+  );
+
+  assertEquals(body.used_credits, 2);
+  assertEquals(body.refunded_credits, 1);
 });
 
 Deno.test("grant: the same session renewing supersedes its own block", async () => {
@@ -587,7 +631,7 @@ Deno.test("balance: reports what the user has and what a session needs", async (
   const h = harness({ initialBalance: 23 });
   const { status, body } = await call(h.deps, balanceReq());
   assertEquals(status, 200);
-  assertEquals(body, { balance: 23, required: 5 });
+  assertEquals(body, { balance: 23, required: 1 });
   // A read moves nothing.
   assertEquals(h.balance.calls.map((c) => c.op), ["get"]);
 });

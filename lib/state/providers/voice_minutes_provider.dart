@@ -33,7 +33,7 @@ class VoiceMinutes {
   const VoiceMinutes({
     this.available = false,
     this.balance,
-    this.required = 5,
+    this.required = 1,
     this.paidUntil,
     this.sessionStart,
     this.lastUsage,
@@ -184,14 +184,16 @@ class VoiceMinutesNotifier extends StateNotifier<VoiceMinutes> {
       _spent = 0;
       _returned = 0;
     }
-    _spent += state.required;
+    // What this block cost, not a full block's worth: the last one on a
+    // short balance is smaller.
+    _spent += block.credits;
     state = state.copyWith(
       consumed: _settled + _sessionCost,
       balance: block.balanceAfter,
       paidUntil: block.expiresAt,
       // What they had the moment before this session's first block.
       sessionStart: firstOfSession
-          ? block.balanceAfter + state.required
+          ? block.balanceAfter + block.credits
           : state.sessionStart,
       clearLastUsage: true,
       asOf: _now(),

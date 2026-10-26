@@ -273,7 +273,8 @@ class FakeBlockService implements BlockService {
   BlockRelease? releaseAnswer;
 
   /// Credits a session needs to start.
-  int required = 5;
+  /// One, as the server now asks: a short balance buys a short block.
+  int required = 1;
 
   /// Failure for the next [readBalance], if any.
   BlockFailure? balanceFailure;

@@ -11,7 +11,8 @@ class VoiceBlock {
     required this.blockSeconds,
     required this.expiresAt,
     required this.balanceAfter,
-  });
+    int? credits,
+  }) : _credits = credits;
 
   /// Server-assigned id, and the key every ledger movement for this block is
   /// made under. Reported back on release.
@@ -30,6 +31,13 @@ class VoiceBlock {
 
   /// Credit balance after the block was debited.
   final int balanceAfter;
+
+  final int? _credits;
+
+  /// Credits this block cost. Usually a full block's worth, but the last
+  /// block on a short balance is only what was left. Derived from its length,
+  /// a minute a credit, when the server did not say.
+  int get credits => _credits ?? (blockSeconds / 60).ceil();
 
   @override
   String toString() =>

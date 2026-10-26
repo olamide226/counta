@@ -139,7 +139,7 @@ The answer says what happened — `used_credits`, `refunded_credits`, and
 # What the user has, and what a session needs to start. Reads, never debits.
 curl -X POST http://127.0.0.1:54321/functions/v1/voice-block/balance \
   -H "Authorization: Bearer $USER_JWT"
-# -> {"balance": 23, "required": 5}
+# -> {"balance": 23, "required": 1}
 ```
 
 ```bash
@@ -206,7 +206,7 @@ Injected by the runtime (do not set): `SUPABASE_URL`,
 | `REVENUECAT_SECRET_KEY` | required | Developer API v2 key, `customer_information:purchases:read_write` |
 | `REVENUECAT_PROJECT_ID` | required | RevenueCat project id |
 | `REVENUECAT_CURRENCY_CODE` | `VOICE` | Virtual currency code for voice credits |
-| `BLOCK_CREDITS` | 5 | Credits debited per block |
+| `BLOCK_CREDITS` | 5 | Credits debited per full block. A balance short of a full block buys a shorter one of what is left (`BLOCK_SECONDS` scaled to match), so the last minutes of a pack can be spent; only an empty balance is refused |
 | `BLOCK_SECONDS` | 300 | Block duration |
 | `REFUND_WINDOW_SECONDS` | 30 | Release within this window with zero detections costs nothing. Any other early release returns the unused part |
 | `RATE_LIMIT_MAX` | 6 | Max grants per user per window |

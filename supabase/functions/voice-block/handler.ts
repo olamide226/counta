@@ -67,6 +67,9 @@ export async function handleVoiceBlock(
   }
 }
 
+/** The smallest block sold: one credit, one minute of voice counting. */
+const MIN_BLOCK_CREDITS = 1;
+
 async function grant(req: Request, deps: Deps, userId: string): Promise<Response> {
   const { config, blocks, balance, minter } = deps;
   const now = deps.now();
@@ -114,29 +117,37 @@ async function grant(req: Request, deps: Deps, userId: string): Promise<Response
     return json(409, { error: "block_in_flight", expires_at: live.expires_at });
   }
 
-  // 3.3 / 3.4
+  // 3.3 / 3.4. A full block when the balance covers one; otherwise a
+  // shorter block of whatever is left, so the last few minutes of a pack can
+  // be spent. Requiring a full block stranded up to four paid minutes on
+  // every account, at the start of a session and at its last renewal alike.
+  // Still paid for before anything is minted, so no streaming time is unpaid.
   const current = await balance.getBalance(userId);
-  if (current < config.blockCredits) {
+  if (current < MIN_BLOCK_CREDITS) {
     return json(402, {
       error: "insufficient_credit",
       balance: current,
-      required: config.blockCredits,
+      required: MIN_BLOCK_CREDITS,
     });
   }
+  const credits = Math.min(config.blockCredits, current);
+  const blockSeconds = Math.round(
+    (config.blockSeconds * credits) / config.blockCredits,
+  );
 
   // 3.5: debit before minting. The block id is minted here rather than by the
   // database so every ledger call for this block — the debit and any refund —
   // is keyed on the same stable identity. Keying on the attempt (a timestamp)
   // meant a retried grant looked like a new purchase and double-charged.
   const blockId = deps.newBlockId();
-  const balanceAfter = await balance.spend(userId, blockId, config.blockCredits);
+  const balanceAfter = await balance.spend(userId, blockId, credits);
 
   // 3.6: any mint failure refunds the debit and reports 503.
   let token: string;
   try {
     token = await minter.mint(config.tokenTtlSeconds);
   } catch (error) {
-    await refundQuietly(deps, userId, blockId, config.blockCredits);
+    await refundQuietly(deps, userId, blockId, credits);
     deps.log("mint_failed", { user_id: userId, message: String(error) });
     return json(503, { error: "provider_unavailable" });
   }
@@ -145,7 +156,7 @@ async function grant(req: Request, deps: Deps, userId: string): Promise<Response
   // without a row there is no block_id to return and no block to /release, so
   // letting this fall through to the outer 500 would charge the user for
   // nothing they could ever use or reclaim.
-  const expiresAt = new Date(now.getTime() + config.blockSeconds * 1000);
+  const expiresAt = new Date(now.getTime() + blockSeconds * 1000);
   let row;
   try {
     if (live) {
@@ -161,12 +172,12 @@ async function grant(req: Request, deps: Deps, userId: string): Promise<Response
       id: blockId,
       user_id: userId,
       session_id: sessionId,
-      credits: config.blockCredits,
+      credits,
       granted_at: now.toISOString(),
       expires_at: expiresAt.toISOString(),
     });
   } catch (error) {
-    await refundQuietly(deps, userId, blockId, config.blockCredits);
+    await refundQuietly(deps, userId, blockId, credits);
     if (error instanceof BlockConflictError) {
       // Another request for this user won the race between the check above and
       // this insert. The database is the authority on 3.8, so honour its
@@ -192,14 +203,15 @@ async function grant(req: Request, deps: Deps, userId: string): Promise<Response
     block_id: row.id,
     renewal_of: live?.id ?? null,
     session_id: sessionId,
-    credits: config.blockCredits,
+    credits,
     granted_at: row.granted_at,
   });
 
   return json(200, {
     block_id: row.id,
     token,
-    block_seconds: config.blockSeconds,
+    block_seconds: blockSeconds,
+    credits,
     expires_at: row.expires_at,
     balance_after: balanceAfter,
   });
@@ -327,9 +339,9 @@ async function readBalance(
   }
   return json(200, {
     balance: await deps.balance.getBalance(userId),
-    // What a session needs to start, so the app can say "you need 5" without
-    // carrying its own copy of the server's block size.
-    required: deps.config.blockCredits,
+    // What a session needs to start: one minute, since a short balance buys
+    // a short block. Sent so the app keeps no copy of the server's rule.
+    required: MIN_BLOCK_CREDITS,
   });
 }
 

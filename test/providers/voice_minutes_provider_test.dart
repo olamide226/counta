@@ -65,9 +65,15 @@ void main() {
     });
 
     test('too few minutes to start is known before the user tries', () async {
-      final notifier = notifierFor(FakeBlockService(balance: 3));
+      final notifier = notifierFor(FakeBlockService(balance: 0));
       await notifier.refresh();
       expect(notifier.state.canStart, isFalse);
+    });
+
+    test('a balance short of a full block can still start', () async {
+      final notifier = notifierFor(FakeBlockService(balance: 3));
+      await notifier.refresh();
+      expect(notifier.state.canStart, isTrue);
     });
   });
 
@@ -121,7 +127,7 @@ void main() {
         block(balanceAfter: 0, seconds: 180),
         firstOfSession: true,
       );
-      // Started with 5: a fifth of that is 1, but 3 is the floor.
+      // Started with 3: a fifth of that is 1, but 3 is the floor.
       expect(notifier.state.left, 3);
       expect(notifier.state.isLow, isTrue);
     });
@@ -134,6 +140,23 @@ void main() {
       expect(notifier.state.balance, 2);
       expect(notifier.state.canStart, isFalse);
     });
+  });
+
+  test('a short last block costs only what it was', () {
+    final notifier = notifierFor(FakeBlockService());
+    notifier.onGranted(block(balanceAfter: 2), firstOfSession: true);
+    notifier.onGranted(
+      block(balanceAfter: 0, seconds: 120),
+      firstOfSession: false,
+    );
+
+    notifier.onReleased(
+      const BlockRelease(refunded: false, usedCredits: 2, refundedCredits: 0),
+    );
+
+    // Five and then two: seven used, not ten.
+    expect(notifier.state.lastUsage!.used, 7);
+    expect(notifier.state.sessionStart, 7);
   });
 
   group('when a session stops', () {

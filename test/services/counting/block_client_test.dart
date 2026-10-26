@@ -75,6 +75,8 @@ void main() {
       expect(block.blockSeconds, 300);
       expect(block.balanceAfter, 34);
       expect(block.expiresAt.toUtc(), DateTime.utc(2026, 9, 10, 12, 5));
+      // A server that predates per-block credits: a minute a credit.
+      expect(block.credits, 5);
 
       // The grant is a POST to the function root carrying the session id, with
       // the caller's JWT — the renewal contract is keyed on that session id.
@@ -83,6 +85,23 @@ void main() {
       expect(sent.single.body, {'session_id': sessionId});
       expect(sent.single.request.headers['Authorization'], 'Bearer jwt-token');
       expect(sent.single.request.headers['apikey'], 'publishable-key');
+    });
+
+    test('a short block reports what it cost', () async {
+      final client = clientAnswering(200, {
+        'block_id': blockId,
+        'token': 'dg-token',
+        'block_seconds': 120,
+        'credits': 2,
+        'expires_at': '2026-09-10T12:02:00.000Z',
+        'balance_after': 0,
+      });
+      addTearDown(client.dispose);
+
+      final block = await client.acquire(sessionId);
+
+      expect(block.credits, 2);
+      expect(block.blockSeconds, 120);
     });
 
     test('402 carries the balance and what a block costs', () async {
