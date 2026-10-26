@@ -71,6 +71,11 @@ class FakeCountingEngine implements CountingEngine {
   @override
   void decrementManual() => decrements++;
 
+  int resumes = 0;
+
+  @override
+  Future<void> resume() async => resumes++;
+
   @override
   Future<void> dispose() async {
     disposed = true;

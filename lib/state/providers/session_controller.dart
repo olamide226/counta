@@ -8,6 +8,15 @@ import '../../domain/validation/phrase_validator.dart';
 import '../../core/services/counting/tap_counting_engine.dart';
 import '../../core/services/live_activity_service.dart';
 
+/// Why a running voice session ended without the user stopping it.
+enum VoiceStop {
+  /// The minutes ran out.
+  outOfMinutes,
+
+  /// The connection could not be recovered inside the retry window.
+  connectionLost,
+}
+
 /// Controller holding the authoritative local session count,
 /// tracking voice count and manual count separately.
 class SessionController extends ChangeNotifier {
@@ -29,6 +38,9 @@ class SessionController extends ChangeNotifier {
     EngineStatus.connecting,
     EngineStatus.live,
     EngineStatus.reconnecting,
+    // Waiting out a call. Still the user's session: rolling it back, or
+    // dropping the banner, would make a phone call look like a crash.
+    EngineStatus.paused,
     EngineStatus.degraded,
     EngineStatus.requestingBlock,
   };
@@ -66,8 +78,8 @@ class SessionController extends ChangeNotifier {
   /// Whether the voice session in hand ever got as far as listening.
   bool _voiceRan = false;
 
-  /// Set when a session that was running ended because the minutes ran out.
-  bool _outOfMinutes = false;
+  /// Why a session that was running ended by itself, if it did.
+  VoiceStop? _voiceStop;
   DateTime? _sessionStart;
   String? _lastDiagnostic;
 
@@ -108,13 +120,20 @@ class SessionController extends ChangeNotifier {
   /// phrase was just heard.
   String? get lastVoicePhrase => _lastVoicePhrase;
 
-  /// Whether voice counting stopped mid-session for lack of minutes.
+  /// Why a session that was running ended without the user stopping it: out
+  /// of minutes, or a connection that could not be recovered.
   ///
   /// The count is intact and tapping still works; this is what lets the
-  /// screen say so, and offer a way back, instead of the banner simply
-  /// vanishing. Only a session that was actually running sets it: being
-  /// refused at the start is explained on the setup sheet, where the user is.
-  bool get outOfMinutes => _outOfMinutes;
+  /// screen say so calmly, and offer a way back, instead of the banner
+  /// vanishing or turning red. Only a session that was actually running sets
+  /// it: being refused at the start is explained on the setup sheet, where
+  /// the user is.
+  VoiceStop? get voiceStop => _voiceStop;
+
+  bool get outOfMinutes => _voiceStop == VoiceStop.outOfMinutes;
+
+  /// Picks a session paused by a call back up. See [CountingEngine.resume].
+  Future<void> resumeVoice() => _engine.resume();
 
   /// Voice minutes this counting session has been charged, across every
   /// voice run in it. Saved with the record.
@@ -133,13 +152,13 @@ class SessionController extends ChangeNotifier {
     _minutesBaseline = _minutesReported;
     _minutesRestored = carried;
     // A new count is a new page: the notice belonged to the old one.
-    _outOfMinutes = false;
+    _voiceStop = null;
   }
 
-  /// The user has seen the out-of-minutes notice and moved on.
-  void dismissOutOfMinutes() {
-    if (!_outOfMinutes) return;
-    _outOfMinutes = false;
+  /// The user has seen the notice and moved on.
+  void dismissVoiceStop() {
+    if (_voiceStop == null) return;
+    _voiceStop = null;
     notifyListeners();
   }
 
@@ -222,10 +241,15 @@ class SessionController extends ChangeNotifier {
     if (newStatus == EngineStatus.live) {
       _lastDiagnostic = null;
       _voiceRan = true;
-      _outOfMinutes = false;
+      _voiceStop = null;
     }
-    if (newStatus == EngineStatus.exhausted && _voiceRan) {
-      _outOfMinutes = true;
+    if (_voiceRan && isVoiceActive) {
+      // Only a session that was running, ending without being asked to.
+      if (newStatus == EngineStatus.exhausted) {
+        _voiceStop = VoiceStop.outOfMinutes;
+      } else if (newStatus == EngineStatus.error) {
+        _voiceStop = VoiceStop.connectionLost;
+      }
     }
     final wasActive = isVoiceActive;
     _status = newStatus;
@@ -247,7 +271,7 @@ class SessionController extends ChangeNotifier {
     _activePhrases = targetPhrases;
     _lastDiagnostic = null;
     _voiceRan = false;
-    _outOfMinutes = false;
+    _voiceStop = null;
     _sessionStart ??= DateTime.now();
     await _engine.start(targetPhrases);
 

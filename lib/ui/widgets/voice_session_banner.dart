@@ -23,6 +23,7 @@ class VoiceSessionBanner extends StatefulWidget {
     this.diagnostic,
     this.minutesLeft,
     this.minutesLow = false,
+    this.onResume,
   });
 
   final EngineStatus status;
@@ -51,6 +52,10 @@ class VoiceSessionBanner extends StatefulWidget {
   /// Whether [minutesLeft] is few enough to draw the eye.
   final bool minutesLow;
 
+  /// Picks a paused session back up by hand, for when the call has ended but
+  /// the phone never said so.
+  final VoidCallback? onResume;
+
   @override
   State<VoiceSessionBanner> createState() => _VoiceSessionBannerState();
 }
@@ -69,8 +74,9 @@ class _VoiceSessionBannerState extends State<VoiceSessionBanner> {
 
   bool get _isListening => status == EngineStatus.live;
 
+  // Reconnecting and paused are not here on purpose: the count is safe and
+  // the session is on its way back by itself, which is not news worth red.
   bool get _isUnhealthy =>
-      status == EngineStatus.reconnecting ||
       status == EngineStatus.degraded ||
       status == EngineStatus.notConfigured ||
       status == EngineStatus.error;
@@ -79,6 +85,7 @@ class _VoiceSessionBannerState extends State<VoiceSessionBanner> {
     EngineStatus.live => 'Listening',
     EngineStatus.connecting => 'Connecting…',
     EngineStatus.reconnecting => 'Reconnecting…',
+    EngineStatus.paused => 'Paused',
     EngineStatus.requestingBlock => 'Preparing…',
     EngineStatus.degraded => 'Poor connection',
     EngineStatus.exhausted => 'Out of voice minutes',
@@ -221,6 +228,16 @@ class _VoiceSessionBannerState extends State<VoiceSessionBanner> {
                   ],
                 ),
               ],
+              if (status == EngineStatus.paused && widget.onResume != null)
+                Align(
+                  alignment: Alignment.centerLeft,
+                  child: TextButton.icon(
+                    onPressed: widget.onResume,
+                    icon: const Icon(Icons.mic_rounded, size: 18),
+                    label: const Text('Resume now'),
+                    style: TextButton.styleFrom(foregroundColor: onContainer),
+                  ),
+                ),
             ],
           ),
         ),

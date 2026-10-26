@@ -214,7 +214,7 @@ void main() {
       }
 
       final dismissed = await ranOut();
-      dismissed.dismissOutOfMinutes();
+      dismissed.dismissVoiceStop();
       expect(dismissed.outOfMinutes, isFalse);
       dismissed.dispose();
 
@@ -246,6 +246,64 @@ void main() {
       expect(activity.ended, 1);
 
       controller.dispose();
+    });
+  });
+
+  group('a phone call', () {
+    test('a paused session is still the running one', () async {
+      final t = build();
+      await t.controller.startVoiceSession(PhraseSet.single(phrase));
+      await pumpEventQueue();
+
+      t.voice.emitStatus(EngineStatus.paused);
+      await pumpEventQueue();
+
+      // Nothing rolled back, nothing to explain: it is waiting out a call.
+      expect(t.controller.isVoiceActive, isTrue);
+      expect(t.controller.activePhrases, PhraseSet.single(phrase));
+      expect(t.controller.voiceStop, isNull);
+      expect(t.voice.disposed, isFalse);
+
+      t.controller.dispose();
+    });
+
+    test('resuming asks the engine', () async {
+      final t = build();
+      await t.controller.startVoiceSession(PhraseSet.single(phrase));
+
+      await t.controller.resumeVoice();
+
+      expect(t.voice.resumes, 1);
+      t.controller.dispose();
+    });
+  });
+
+  group('a connection that cannot be recovered', () {
+    test('says so calmly, keeping the phrase to resume with', () async {
+      final t = build();
+      await t.controller.startVoiceSession(PhraseSet.single(phrase));
+      await pumpEventQueue();
+
+      t.voice.emitStatus(EngineStatus.reconnecting);
+      t.voice.emitStatus(EngineStatus.error);
+      await pumpEventQueue();
+
+      expect(t.controller.voiceStop, VoiceStop.connectionLost);
+      expect(t.controller.isVoiceActive, isFalse);
+      expect(t.controller.activePhrases, PhraseSet.single(phrase));
+
+      t.controller.dispose();
+    });
+
+    test('a start that fails is not reported as a lost connection', () async {
+      final t = build(voiceStatus: EngineStatus.error);
+
+      await t.controller.startVoiceSession(PhraseSet.single(phrase));
+      await pumpEventQueue();
+
+      // The setup sheet explains that one, where the user is.
+      expect(t.controller.voiceStop, isNull);
+      t.controller.dispose();
     });
   });
 

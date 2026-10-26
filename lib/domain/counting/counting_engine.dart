@@ -13,6 +13,11 @@ enum EngineStatus {
   connecting,
   live,
   reconnecting,
+
+  /// Something else has the microphone — usually a phone call — so nothing
+  /// is streamed or paid for. The session is intact and picks up again by
+  /// itself when the microphone comes back.
+  paused,
   degraded,
   exhausted,
   error,
@@ -215,4 +220,10 @@ abstract class CountingEngine {
 
   /// Removes the most recent manual count, flooring at zero.
   void decrementManual();
+
+  /// Picks a [EngineStatus.paused] session back up. Engines resume by
+  /// themselves when they are told the microphone is free; this is for when
+  /// that signal never comes — the app is back in front and the user is
+  /// ready. Does nothing in any other state.
+  Future<void> resume();
 }

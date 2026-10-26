@@ -175,8 +175,8 @@ class _CounterScreenState extends ConsumerState<CounterScreen>
     );
   }
 
-  void _dismissOutOfMinutes(SessionController sessionController) {
-    sessionController.dismissOutOfMinutes();
+  void _dismissVoiceStop(SessionController sessionController) {
+    sessionController.dismissVoiceStop();
     // Its receipt would otherwise appear in the same place a moment later,
     // for a session the user has just waved away.
     ref.read(voiceMinutesProvider.notifier).clearLastUsage();
@@ -192,7 +192,12 @@ class _CounterScreenState extends ConsumerState<CounterScreen>
       dismissLabel: 'Keep counting by tapping',
     );
     if (resume != true || !mounted) return;
+    await _resumeVoice(sessionController);
+  }
 
+  /// Starts voice counting again on the session's own phrases, from a notice
+  /// that says it stopped.
+  Future<void> _resumeVoice(SessionController sessionController) async {
     final phrases = sessionController.activePhrases;
     if (phrases == null) {
       _openPhraseSetup(context, sessionController);
@@ -297,14 +302,18 @@ class _CounterScreenState extends ConsumerState<CounterScreen>
                 diagnostic: sessionController.lastDiagnostic,
                 minutesLeft: minutes.available ? minutes.left : null,
                 minutesLow: minutes.isLow,
+                onResume: sessionController.resumeVoice,
                 onStop: () => _stopVoiceSession(sessionController),
               )
-            else if (sessionController.outOfMinutes)
+            else if (sessionController.voiceStop case final stop?)
               VoicePausedBanner(
+                reason: stop,
                 voiceCount: sessionController.voiceCount,
                 manualCount: sessionController.manualCount,
-                onGetMinutes: () => _getMinutesAndResume(sessionController),
-                onDismiss: () => _dismissOutOfMinutes(sessionController),
+                onAction: () => stop == VoiceStop.outOfMinutes
+                    ? _getMinutesAndResume(sessionController)
+                    : _resumeVoice(sessionController),
+                onDismiss: () => _dismissVoiceStop(sessionController),
               )
             else if (minutes.lastUsage case final usage?)
               VoiceUsageStrip(

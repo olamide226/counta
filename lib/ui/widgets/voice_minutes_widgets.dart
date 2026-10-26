@@ -2,6 +2,7 @@ import 'dart:async';
 
 import 'package:flutter/material.dart';
 
+import '../../state/providers/session_controller.dart';
 import '../../state/providers/voice_minutes_provider.dart';
 import 'voice_session_banner.dart';
 
@@ -127,23 +128,29 @@ class NoVoiceMinutesNotice extends StatelessWidget {
   }
 }
 
-/// Takes the voice banner's place when a running session ran out of minutes.
+/// Takes the voice banner's place when a running session stopped by itself:
+/// out of minutes, or a connection that could not be brought back.
 ///
-/// The banner used to just disappear, which left the user wondering whether
-/// the count had gone with it. This says what stopped, that the count is
-/// safe, and what to do next.
+/// The banner used to just disappear, or sit red over a session that had
+/// already ended, which left the user wondering whether the count had gone
+/// with it. This says what stopped, that the count is safe, and what to do
+/// next.
 class VoicePausedBanner extends StatelessWidget {
   const VoicePausedBanner({
     super.key,
+    this.reason = VoiceStop.outOfMinutes,
     required this.voiceCount,
     required this.manualCount,
-    required this.onGetMinutes,
+    required this.onAction,
     required this.onDismiss,
   });
 
+  final VoiceStop reason;
   final int voiceCount;
   final int manualCount;
-  final VoidCallback onGetMinutes;
+
+  /// Get minutes, or resume, depending on [reason].
+  final VoidCallback onAction;
   final VoidCallback onDismiss;
 
   @override
@@ -191,8 +198,14 @@ class VoicePausedBanner extends StatelessWidget {
                             ),
                             const SizedBox(height: 2),
                             Text(
-                              "You're out of voice minutes. Your count is "
-                              'safe, and tapping still works.',
+                              switch (reason) {
+                                VoiceStop.outOfMinutes =>
+                                  "You're out of voice minutes. Your count is "
+                                      'safe, and tapping still works.',
+                                VoiceStop.connectionLost =>
+                                  "Voice counting couldn't reconnect. Your "
+                                      'count is safe, and tapping still works.',
+                              },
                               style: theme.textTheme.bodyMedium?.copyWith(
                                 color: scheme.onSurfaceVariant,
                               ),
@@ -234,9 +247,18 @@ class VoicePausedBanner extends StatelessWidget {
                     ),
                     const SizedBox(width: 8),
                     FilledButton.icon(
-                      onPressed: onGetMinutes,
-                      icon: const Icon(Icons.add_rounded, size: 18),
-                      label: const Text('Get minutes'),
+                      onPressed: onAction,
+                      icon: Icon(
+                        reason == VoiceStop.outOfMinutes
+                            ? Icons.add_rounded
+                            : Icons.mic_rounded,
+                        size: 18,
+                      ),
+                      label: Text(
+                        reason == VoiceStop.outOfMinutes
+                            ? 'Get minutes'
+                            : 'Resume',
+                      ),
                       style: FilledButton.styleFrom(
                         padding: const EdgeInsets.symmetric(horizontal: 14),
                         visualDensity: VisualDensity.compact,

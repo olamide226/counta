@@ -1,4 +1,5 @@
 import 'package:counta/domain/counting/counting_engine.dart';
+import 'package:counta/state/providers/session_controller.dart';
 import 'package:counta/state/providers/voice_minutes_provider.dart';
 import 'package:counta/ui/widgets/voice_minutes_widgets.dart';
 import 'package:counta/ui/widgets/voice_session_banner.dart';
@@ -94,7 +95,7 @@ void main() {
         VoicePausedBanner(
           voiceCount: 214,
           manualCount: 3,
-          onGetMinutes: () => getMinutes++,
+          onAction: () => getMinutes++,
           onDismiss: () => dismissed++,
         ),
       );
@@ -114,6 +115,81 @@ void main() {
       await tester.tap(find.byTooltip('Dismiss'));
       expect(getMinutes, 1);
       expect(dismissed, 1);
+    });
+  });
+
+  testWidgets('a lost connection offers to resume, not to buy', (tester) async {
+    var resumed = 0;
+    await pump(
+      tester,
+      VoicePausedBanner(
+        reason: VoiceStop.connectionLost,
+        voiceCount: 40,
+        manualCount: 0,
+        onAction: () => resumed++,
+        onDismiss: () {},
+      ),
+    );
+
+    expect(find.textContaining("couldn't reconnect"), findsOneWidget);
+    expect(find.textContaining('count is safe'), findsOneWidget);
+    expect(find.text('Get minutes'), findsNothing);
+
+    await tester.tap(find.text('Resume'));
+    expect(resumed, 1);
+  });
+
+  group('a session waiting out a call', () {
+    Future<void> pumpStatus(
+      WidgetTester tester,
+      EngineStatus status, {
+      VoidCallback? onResume,
+    }) => pump(
+      tester,
+      VoiceSessionBanner(
+        status: status,
+        phrases: const ["I'm rich in wisdom"],
+        voiceCount: 12,
+        manualCount: 0,
+        diagnostic: 'Paused while your phone uses the microphone.',
+        onResume: onResume,
+        onStop: () {},
+      ),
+    );
+
+    Color? bannerColor(WidgetTester tester) => tester
+        .widget<Material>(
+          find
+              .descendant(
+                of: find.byType(VoiceSessionBanner),
+                matching: find.byType(Material),
+              )
+              .first,
+        )
+        .color;
+
+    testWidgets('reads as paused, not as an error', (tester) async {
+      var resumed = 0;
+      await pumpStatus(tester, EngineStatus.paused, onResume: () => resumed++);
+      final scheme = Theme.of(
+        tester.element(find.byType(VoiceSessionBanner)),
+      ).colorScheme;
+
+      expect(find.text('Paused'), findsOneWidget);
+      expect(bannerColor(tester), isNot(scheme.errorContainer));
+
+      await tester.tap(find.text('Resume now'));
+      expect(resumed, 1);
+    });
+
+    testWidgets('reconnecting is not red either', (tester) async {
+      await pumpStatus(tester, EngineStatus.reconnecting);
+      final scheme = Theme.of(
+        tester.element(find.byType(VoiceSessionBanner)),
+      ).colorScheme;
+
+      expect(bannerColor(tester), isNot(scheme.errorContainer));
+      expect(find.text('Resume now'), findsNothing);
     });
   });
 
