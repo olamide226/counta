@@ -135,8 +135,37 @@ class SessionController extends ChangeNotifier {
 
   bool get outOfMinutes => _voiceStop == VoiceStop.outOfMinutes;
 
-  /// Picks a session paused by a call back up. See [CountingEngine.resume].
-  Future<void> resumeVoice() => _engine.resume();
+  /// Picks a session paused by a call back up, or starts a waiting one now.
+  /// See [CountingEngine.resume].
+  ///
+  /// If the engine cannot get going again, this stops it and starts a fresh
+  /// one on the same phrases, keeping the count: what stopping and starting
+  /// by hand did after a call, when resuming did not.
+  Future<void> resumeVoice() async {
+    try {
+      await _engine.resume().timeout(const Duration(seconds: 10));
+    } on TimeoutException {
+      // Falls through to the fresh start below.
+    }
+    // Let the engine's last status land before reading it.
+    await Future<void>.delayed(Duration.zero);
+
+    final phrases = _activePhrases;
+    if (_status != EngineStatus.paused || phrases == null) return;
+    await stopVoiceSession();
+    try {
+      final outcome = await startVoiceSession(phrases);
+      if (terminalStatuses.contains(outcome)) {
+        _voiceStop = outcome == EngineStatus.exhausted
+            ? VoiceStop.outOfMinutes
+            : VoiceStop.connectionLost;
+        notifyListeners();
+      }
+    } catch (_) {
+      _voiceStop = VoiceStop.connectionLost;
+      notifyListeners();
+    }
+  }
 
   /// Voice minutes this counting session has been charged, across every
   /// voice run in it. Saved with the record.

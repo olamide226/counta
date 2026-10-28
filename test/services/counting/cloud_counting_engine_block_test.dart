@@ -1143,6 +1143,70 @@ void main() {
         expect(blocks.acquiredSessionIds, hasLength(1));
       });
 
+      test('a recorder that never answers the resume is rebuilt', () async {
+        // Regression: the resume waited on the recorder for ever, and
+        // "Resume now" was ignored behind it. Stopping and starting worked.
+        final blocks = FakeBlockService();
+        final engine = await liveEngine(blocks);
+        audio.beginInterruption();
+        await pumpEventQueue();
+        final startsBefore = audio.startCount;
+
+        audio.resumeHangs = true;
+        await engine.resume();
+        await pumpEventQueue();
+
+        expect(audio.startCount, startsBefore + 1);
+        expect(engine.currentStatus, EngineStatus.live);
+      });
+
+      test(
+        'a resume that brings back no audio is rebuilt, not trusted',
+        () async {
+          // Regression: after a call the session went back to "Listening" on
+          // the recorder's word, heard nothing for minutes, and counted
+          // nothing until the user stopped and started again.
+          final blocks = FakeBlockService();
+          final engine = await liveEngine(blocks);
+          audio.beginInterruption();
+          await pumpEventQueue();
+          final startsBefore = audio.startCount;
+
+          audio.resumeDeliversAudio = false;
+          await engine.resume();
+          await pumpEventQueue();
+
+          expect(audio.startCount, startsBefore + 1);
+          expect(engine.currentStatus, EngineStatus.live);
+        },
+      );
+
+      test(
+        'a microphone that will not come back stays paused, calmly',
+        () async {
+          // In the background, iOS may not hand the microphone back at all.
+          // That is a wait, not a failure: nothing bought, nothing ended.
+          final blocks = FakeBlockService();
+          final engine = await liveEngine(blocks);
+          audio.beginInterruption();
+          await pumpEventQueue();
+
+          audio.resumeSucceeds = false;
+          audio.silent = true;
+          await engine.resume();
+          await pumpEventQueue();
+
+          expect(engine.currentStatus, EngineStatus.paused);
+          expect(blocks.acquiredSessionIds, hasLength(1));
+
+          // Back in the app, the microphone answers, and it carries on.
+          audio.silent = false;
+          await engine.resume();
+          await pumpEventQueue();
+          expect(engine.currentStatus, EngineStatus.live);
+        },
+      );
+
       test('stopping while paused ends cleanly', () async {
         final blocks = FakeBlockService();
         final engine = await liveEngine(blocks);
