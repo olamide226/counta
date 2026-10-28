@@ -6,6 +6,7 @@ import 'package:counta/domain/counting/block_service.dart';
 import 'package:counta/domain/counting/counting_engine.dart';
 import 'package:counta/domain/counting/speech_socket.dart';
 
+import '../../helpers/open_block_store.dart';
 import '../../helpers/voice_fakes.dart';
 
 /// 16 kHz mono PCM16: what the engine uses to place a connection's timeline on
@@ -25,6 +26,7 @@ void main() {
 
     CloudCountingEngine engineWith(
       FakeBlockService blocks, {
+      InMemoryOpenBlockStore? openBlocks,
       Duration renewalOverlap = const Duration(seconds: 3),
       Duration renewalRetryDelay = const Duration(seconds: 10),
       Duration maxReconnectBackoff = const Duration(milliseconds: 20),
@@ -39,6 +41,7 @@ void main() {
       // would fire a reconnect in the middle of an elapse().
       transcriptionSilenceTimeout: const Duration(days: 1),
       transcriptionWatchdogInterval: const Duration(days: 1),
+      openBlocks: openBlocks,
     );
 
     setUp(() {
@@ -840,6 +843,65 @@ void main() {
       });
     });
 
+    group('blocks held on the device', () {
+      test(
+        'a block is noted while it is held, and forgotten once handed back',
+        () async {
+          final store = InMemoryOpenBlockStore();
+          final blocks = FakeBlockService();
+          final engine = engineWith(blocks, openBlocks: store);
+          addTearDown(engine.dispose);
+
+          await engine.start(testPhraseSet);
+          await pumpEventQueue();
+          expect(store.held.keys, ['block-1']);
+
+          await engine.stop();
+          await pumpEventQueue();
+          expect(store.held, isEmpty);
+        },
+      );
+
+      test('a hand-back that fails is kept, as of when it stopped', () async {
+        final store = InMemoryOpenBlockStore();
+        final engine = engineWith(_FailingReleaseService(), openBlocks: store);
+        addTearDown(engine.dispose);
+
+        await engine.start(testPhraseSet);
+        await pumpEventQueue();
+        final noted = store.held['block-1']!;
+
+        await engine.stop();
+        await pumpEventQueue();
+
+        // Still there for the next launch, stamped with the stop rather
+        // than with the moment it was bought.
+        expect(store.held.keys, ['block-1']);
+        expect(store.held['block-1']!.isBefore(noted), isFalse);
+      });
+
+      test('a renewed block is not kept: the server has settled it', () {
+        fakeAsync((async) {
+          final store = InMemoryOpenBlockStore();
+          final blocks = FakeBlockService(blockSeconds: 10);
+          final engine = engineWith(blocks, openBlocks: store);
+
+          engine.start(testPhraseSet);
+          async.flushMicrotasks();
+          async.elapse(const Duration(seconds: 9));
+          async.flushMicrotasks();
+          async.elapse(const Duration(seconds: 4));
+          async.flushMicrotasks();
+
+          expect(blocks.acquiredSessionIds, hasLength(2));
+          expect(store.held.keys, ['block-2']);
+
+          engine.dispose();
+          async.flushTimers();
+        });
+      });
+    });
+
     group('a phone call', () {
       Future<CloudCountingEngine> liveEngine(FakeBlockService blocks) async {
         final engine = engineWith(blocks);
@@ -1296,6 +1358,7 @@ class _FailingReleaseService extends FakeBlockService {
     required int streamedSecs,
     required int detections,
     required bool eligibleForRefund,
+    DateTime? endedAt,
   }) async {
     throw const BlockProviderUnavailable();
   }

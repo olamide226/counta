@@ -240,6 +240,18 @@ async function release(req: Request, deps: Deps, userId: string): Promise<Respon
   // The client's own assertion is recorded for observability but never trusted.
   const clientClaimsRefund = body?.eligible_for_refund === true;
 
+  // When streaming actually stopped, sent only by an app handing back a block
+  // its previous run was killed holding: it never got to release it, and
+  // without this the whole block was kept, unused part and all.
+  const rawEndedAt = body?.ended_at;
+  let claimedEnd: Date | null = null;
+  if (rawEndedAt !== undefined && rawEndedAt !== null) {
+    claimedEnd = typeof rawEndedAt === "string" ? new Date(rawEndedAt) : null;
+    if (!claimedEnd || Number.isNaN(claimedEnd.getTime())) {
+      return json(400, { error: "invalid_ended_at" });
+    }
+  }
+
   const block = await blocks.findById(blockId, userId);
   if (!block) {
     return json(404, { error: "block_not_found" });
@@ -254,15 +266,34 @@ async function release(req: Request, deps: Deps, userId: string): Promise<Respon
   // grant to the first time a release was asked for. The stamp is written
   // once and read back on every attempt, so a release that is retried after a
   // failed refund works out the same amount as the attempt that failed.
-  // Nothing the client reports about its own streaming time is used.
-  const releasedAt = await blocks.markReleased(block.id, now);
+  //
+  // A claimed end is the one thing the client says that is used, kept inside
+  // what the server knows — after the grant, before now and before the block
+  // ran out — and it is stamped in place of now, so a retry still agrees.
   const grantedMs = new Date(block.granted_at).getTime();
+  const end = claimedEnd === null ? now : new Date(
+    Math.max(
+      grantedMs,
+      Math.min(
+        claimedEnd.getTime(),
+        now.getTime(),
+        new Date(block.expires_at).getTime(),
+      ),
+    ),
+  );
+  const releasedAt = await blocks.markReleased(block.id, end);
   const ageMs = Math.max(0, releasedAt.getTime() - grantedMs);
 
   // 3.11: a session that never really started costs nothing. An absent
   // `detections` is not "zero detections" — it is no report at all — so this
   // full refund still needs a count that was actually reported as zero.
-  const neverStarted = ageMs <= config.refundWindowSeconds * 1000 &&
+  //
+  // Never on a claimed end. Trusting the client's clock is what makes a
+  // killed run fair, and that trust is bounded by charging at least one
+  // minute for it: a modified app claiming every block stopped at once pays
+  // one minute in five, not nothing.
+  const neverStarted = claimedEnd === null &&
+    ageMs <= config.refundWindowSeconds * 1000 &&
     detections === 0;
 
   // Otherwise the block is charged for the minutes it ran, rounded up, and
@@ -298,6 +329,12 @@ async function release(req: Request, deps: Deps, userId: string): Promise<Respon
     streamed_secs: streamedSecs,
     detections,
     client_claimed_refund: clientClaimsRefund,
+    // Every claimed end is logged with how early it was, so an account that
+    // always claims early stands out.
+    claimed_end: claimedEnd?.toISOString() ?? null,
+    claimed_early_seconds: claimedEnd === null
+      ? null
+      : Math.round((now.getTime() - releasedAt.getTime()) / 1000),
     refunded: balanceAfter !== undefined,
     used_credits: usedCredits,
     refunded_credits: refundCredits,

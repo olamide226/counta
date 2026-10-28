@@ -1,7 +1,9 @@
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../data/hive/hive_init.dart';
+import '../../data/repositories/open_block_repository.dart';
 import '../../data/repositories/settings_repository.dart';
+import '../../domain/counting/open_block_store.dart';
 import '../../data/repositories/phrase_history_repository.dart';
 import '../../data/repositories/session_checkpoint_repository.dart';
 import '../../data/repositories/sessions_repository.dart';
@@ -33,4 +35,11 @@ final phraseHistoryRepositoryProvider = Provider<PhraseHistoryRepository>((
 ) {
   ref.watch(hiveInitProvider);
   return createPhraseHistoryRepository();
+});
+
+/// Paid voice blocks this device holds, so a run killed mid-session can be
+/// settled when the app next opens.
+final openBlockStoreProvider = Provider<OpenBlockStore>((ref) {
+  ref.watch(hiveInitProvider);
+  return createOpenBlockStore();
 });

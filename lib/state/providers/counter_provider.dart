@@ -9,6 +9,7 @@ import '../../core/services/counting/tap_counting_engine.dart';
 import '../../domain/counting/counting_engine.dart';
 import '../../domain/models/count_session.dart';
 import '../../domain/models/counter_state.dart';
+import 'hive_providers.dart';
 import 'services_provider.dart';
 import 'settings_provider.dart';
 import 'supabase_providers.dart';
@@ -88,8 +89,12 @@ final voiceEngineFactoryProvider = Provider<CountingEngine Function()>((ref) {
   final devToken = blocks == null
       ? ref.read(deepgramTokenProviderProvider)
       : null;
-  return () =>
-      CloudCountingEngine(blockService: blocks, tokenProvider: devToken);
+  return () => CloudCountingEngine(
+    blockService: blocks,
+    tokenProvider: devToken,
+    // Read when a session starts, by which point storage is open.
+    openBlocks: ref.read(openBlockStoreProvider),
+  );
 });
 
 /// Builds the engine used when no voice session is running.

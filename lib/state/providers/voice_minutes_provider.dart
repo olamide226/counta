@@ -4,7 +4,9 @@ import 'dart:math';
 import 'package:flutter/foundation.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
+import '../../core/services/counting/abandoned_blocks.dart';
 import '../../domain/counting/block_service.dart';
+import 'hive_providers.dart';
 import 'supabase_providers.dart';
 
 /// What the session that just ended cost.
@@ -303,7 +305,29 @@ final voiceMinutesProvider =
       // The first read waits for sign-in: before it there is no user to have
       // a balance, and asking would only earn a 401.
       ref.listen(supabaseSessionProvider, (_, next) {
-        if (next.hasValue && next.value != null) unawaited(notifier.refresh());
+        if (next.hasValue && next.value != null) {
+          unawaited(_settleThenRefresh(ref, notifier));
+        }
       }, fireImmediately: true);
       return notifier;
     });
+
+/// Settles blocks a killed run was holding, then reads the balance, so the
+/// minutes that come back are in the first number shown.
+Future<void> _settleThenRefresh(Ref ref, VoiceMinutesNotifier notifier) async {
+  final service = ref.read(blockServiceProvider);
+  if (service != null) {
+    try {
+      await ref.read(hiveInitProvider.future);
+      final settled = await settleAbandonedBlocks(
+        ref.read(openBlockStoreProvider),
+        service,
+      );
+      if (settled > 0) debugPrint('Settled $settled abandoned voice block(s).');
+    } catch (error) {
+      // The balance still matters more than the settling.
+      debugPrint('Abandoned blocks not settled: $error');
+    }
+  }
+  await notifier.refresh();
+}
