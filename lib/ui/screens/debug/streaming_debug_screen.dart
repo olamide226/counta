@@ -202,7 +202,10 @@ class _StreamingDebugScreenState extends State<StreamingDebugScreen> {
     _streamedPhrases = phrases;
 
     try {
-      await _speechSocket!.connect(apiKeyOrToken: apiKey, phrases: phrases);
+      await _speechSocket!.connect(
+        credential: SpeechCredential.apiKey(apiKey),
+        phrases: phrases,
+      );
 
       final audioStream = _audioSource!.start();
       _audioSubscription = audioStream.listen(

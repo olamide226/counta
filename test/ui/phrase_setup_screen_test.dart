@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:counta/domain/counting/block_service.dart';
 import 'package:counta/domain/counting/counting_engine.dart';
 import 'package:counta/domain/models/phrase_history_entry.dart';
@@ -12,6 +14,7 @@ void main() {
     List<String>? initialPhrases,
     List<PhraseHistoryEntry> recentPhrases = const [],
     Object? throws,
+    Future<void>? until,
   }) async {
     final started = _StartedSet();
     await tester.pumpWidget(
@@ -22,6 +25,7 @@ void main() {
               initialPhrases: initialPhrases,
               recentPhrases: recentPhrases,
               onStartSession: (phrases) async {
+                if (until != null) await until;
                 if (throws != null) throw throws;
                 started.value = phrases;
               },
@@ -262,6 +266,29 @@ void main() {
     // Popping on a failed start told the user the session had begun.
     expect(find.byType(PhraseSetupScreen), findsOneWidget);
     expect(find.text('Voice counting is not available.'), findsOneWidget);
+  });
+
+  testWidgets('a start in progress says so', (tester) async {
+    // Starting takes a moment and the sheet waits for it. A button that only
+    // went grey looked like the tap had done nothing.
+    final started = Completer<void>();
+    await pumpSetup(tester, until: started.future);
+    await tester.pumpAndSettle();
+
+    await tester.tap(find.text('Start Voice Session'));
+    await tester.pump();
+
+    expect(find.text('Starting…'), findsOneWidget);
+    expect(find.byType(CircularProgressIndicator), findsOneWidget);
+    // Still not tappable: one start at a time.
+    expect(
+      tester.widget<ElevatedButton>(find.byType(ElevatedButton)).onPressed,
+      isNull,
+    );
+
+    started.complete();
+    await tester.pumpAndSettle();
+    expect(find.byType(PhraseSetupScreen), findsNothing);
   });
 
   testWidgets('running out of minutes is explained in plain words', (

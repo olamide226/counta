@@ -148,7 +148,18 @@ class BlockClient implements BlockService {
   }
 
   Future<_Body> _post(Uri url, Map<String, dynamic> payload) async {
-    final token = await _accessToken();
+    final String? token;
+    try {
+      // Getting a token can itself be a network call: signing in, or
+      // refreshing a session. It gets the same deadline and the same
+      // classification as the request it is for. Left outside both, a
+      // sign-in the network dropped reached the screen as a raw
+      // `AuthRetryableFetchException`, and one that never answered would
+      // have hung the start with nothing to end it.
+      token = await _accessToken().timeout(timeout);
+    } catch (error) {
+      throw BlockUnreachable(error);
+    }
     if (token == null || token.isEmpty) {
       // The function would answer 401 anyway; saying so without the round trip
       // keeps a signed-out build from hammering it.

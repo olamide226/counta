@@ -20,6 +20,11 @@ class FakeSpeechSocket implements SpeechSocket {
 
   /// Every credential the engine handed to [connect], in order.
   final List<String> tokensSeen = [];
+
+  /// Every credential this socket was asked to connect with, kind included.
+  /// A provider refuses a temporary token presented as an API key, so which
+  /// kind the engine sends is behaviour, not detail.
+  final List<SpeechCredential> credentialsSeen = [];
   final _segmentsController = StreamController<TranscriptSegment>.broadcast();
   final _stateController = StreamController<SocketState>.broadcast();
   final _activityController = StreamController<void>.broadcast();
@@ -46,11 +51,12 @@ class FakeSpeechSocket implements SpeechSocket {
 
   @override
   Future<void> connect({
-    required String apiKeyOrToken,
+    required SpeechCredential credential,
     PhraseSet? phrases,
   }) async {
     connectCount++;
-    tokensSeen.add(apiKeyOrToken);
+    tokensSeen.add(credential.value);
+    credentialsSeen.add(credential);
     _currentState = SocketState.connected;
     _stateController.add(_currentState);
   }

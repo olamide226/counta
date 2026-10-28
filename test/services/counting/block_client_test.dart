@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'dart:convert';
 
 import 'package:flutter_test/flutter_test.dart';
@@ -252,6 +253,55 @@ void main() {
         );
       },
     );
+
+    test('a sign-in that fails is unreachable, not a raw exception', () async {
+      // Getting the token is a network call too. A dropped sign-in reached
+      // the screen as "AuthRetryableFetchException(... Connection closed
+      // before full header was received ...)".
+      var requests = 0;
+      final client = BlockClient(
+        functionUrl: functionUrl,
+        accessToken: () async => throw const _Offline(),
+        httpClient: MockClient((_) async {
+          requests++;
+          return http.Response('{}', 200);
+        }),
+      );
+      addTearDown(client.dispose);
+
+      await expectLater(
+        client.acquire(sessionId),
+        throwsA(
+          isA<BlockUnreachable>().having(
+            (e) => e.cause,
+            'cause',
+            isA<_Offline>(),
+          ),
+        ),
+      );
+      // Nothing was sent: there was no token to send it with.
+      expect(requests, 0);
+    });
+
+    test('a sign-in that never answers cannot hang the request', () async {
+      final client = BlockClient(
+        functionUrl: functionUrl,
+        accessToken: () => Completer<String?>().future,
+        httpClient: MockClient((_) async => http.Response('{}', 200)),
+        timeout: const Duration(milliseconds: 50),
+      );
+      addTearDown(client.dispose);
+
+      await expectLater(
+        client
+            .acquire(sessionId)
+            .timeout(
+              const Duration(seconds: 5),
+              onTimeout: () => fail('acquire never returned'),
+            ),
+        throwsA(isA<BlockUnreachable>()),
+      );
+    });
 
     test('a 200 that is not a grant is not treated as one', () async {
       final client = clientAnswering(200, {'block_id': blockId});

@@ -3,6 +3,7 @@ import 'package:flutter_test/flutter_test.dart';
 
 import 'package:counta/core/services/counting/cloud_counting_engine.dart';
 import 'package:counta/domain/counting/counting_engine.dart';
+import 'package:counta/domain/counting/speech_socket.dart';
 import 'package:counta/domain/counting/transcript_segment.dart';
 
 import '../../helpers/voice_fakes.dart';
@@ -147,6 +148,14 @@ void main() {
       await engine.start(testPhraseSet);
 
       expect(fakeSocket.tokensSeen, [testToken]);
+    });
+
+    test('the dev fallback presents its credential as an API key', () async {
+      // With no block service the engine holds a developer's own key, which
+      // the provider expects in a different form from a temporary token.
+      await engine.start(testPhraseSet);
+
+      expect(fakeSocket.credentialsSeen.single.isTemporary, isFalse);
     });
 
     test(
@@ -469,14 +478,14 @@ class _FailingReconnectSocket extends FakeSpeechSocket {
 
   @override
   Future<void> connect({
-    required String apiKeyOrToken,
+    required SpeechCredential credential,
     PhraseSet? phrases,
   }) async {
     connectAttempts++;
     if (failConnects) {
       throw const SocketException('network unreachable');
     }
-    return super.connect(apiKeyOrToken: apiKeyOrToken, phrases: phrases);
+    return super.connect(credential: credential, phrases: phrases);
   }
 
   @override
