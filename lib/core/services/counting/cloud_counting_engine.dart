@@ -1,5 +1,7 @@
 import 'dart:async';
 import 'dart:math' as math;
+
+import 'package:flutter/foundation.dart' show debugPrint;
 import 'dart:typed_data';
 
 import 'package:uuid/uuid.dart';
@@ -199,10 +201,12 @@ _CredentialAction _actionFor(BlockFailure failure, _CredentialPhase phase) {
           prefixed(),
           expiresAt?.difference(DateTime.now()),
         ),
+        // `error`, not `degraded`: degraded is a running status, and a
+        // session that has ended must not go on showing as one.
         _CredentialPhase.reconnect => const _EndSession(
-          EngineStatus.degraded,
-          'Voice counting stopped: its streaming time belongs to another '
-          'session now. Your count is safe and tapping still works.',
+          EngineStatus.error,
+          'Voice counting moved to another session. Your count is safe and '
+          'tapping still works.',
         ),
       };
 
@@ -214,9 +218,9 @@ _CredentialAction _actionFor(BlockFailure failure, _CredentialPhase phase) {
         // caller's. No credential can be minted against it, so retrying for
         // the rest of the window would only burn the session down slowly.
         _CredentialPhase.reconnect => const _EndSession(
-          EngineStatus.degraded,
-          'Voice counting stopped: its streaming time is no longer valid. '
-          'Your count is safe and tapping still works.',
+          EngineStatus.error,
+          "Voice counting couldn't reconnect. Your count is safe and tapping "
+          'still works.',
         ),
       };
 
@@ -303,6 +307,23 @@ class CloudCountingEngine implements CountingEngine {
       StreamController<String>.broadcast();
 
   StreamSubscription<Uint8List>? _audioSubscription;
+
+  /// The microphone was taken by a call: nothing is streamed or held.
+  bool _paused = false;
+
+  /// A fresh block and connection are being set up by [_restartStreaming].
+  bool _restarting = false;
+
+  /// Bumped whenever the streaming in hand is abandoned — a pause, a restart.
+  /// Work that awaited across one compares it to know it is now stale.
+  int _streamGeneration = 0;
+
+  /// The paid block ran out while its renewal was still in flight, which is
+  /// what an overdue pair of timers looks like after iOS suspended the app.
+  /// The renewal decides: if it fails, streaming restarts on a fresh block.
+  bool _expiredWhileRenewing = false;
+
+  StreamSubscription<void>? _interruptionEndedSubscription;
 
   /// The connection currently carrying the session, and the incoming one
   /// during a renewal seam.
@@ -506,6 +527,14 @@ class CloudCountingEngine implements CountingEngine {
     _blocksUsed = 0;
     _outOfCredit = false;
     _renewalInFlight = false;
+    _paused = false;
+    _restarting = false;
+    _expiredWhileRenewing = false;
+    _streamGeneration++;
+    // The call ending is what resumes a paused session, wherever the app is.
+    _interruptionEndedSubscription ??= _audioSource.interruptionEnded.listen(
+      (_) => unawaited(resume()),
+    );
     _sessionId = const Uuid().v4();
     _startTime = DateTime.now();
     _phrases = targetPhrases;
@@ -709,7 +738,7 @@ class CloudCountingEngine implements CountingEngine {
           // A disconnect we did not ask for means the session died mid-count.
           // Reporting `idle` here (as this used to) made the UI quietly drop
           // out of voice mode with no explanation.
-          if (!_stopped) {
+          if (!_stopped && !_paused && !_restarting) {
             _report(
               connection.socket.closeDescription ??
                   'Transcription connection closed unexpectedly.',
@@ -719,7 +748,7 @@ class CloudCountingEngine implements CountingEngine {
           break;
         case SocketState.error:
           _stopTranscriptionWatchdog();
-          if (!_stopped) {
+          if (!_stopped && !_paused && !_restarting) {
             _report(
               connection.socket.closeDescription ??
                   'Transcription connection errored.',
@@ -786,11 +815,20 @@ class CloudCountingEngine implements CountingEngine {
     if (_renewalInFlight || _outOfCredit) return;
 
     _renewalInFlight = true;
+    final generation = _streamGeneration;
+    var renewed = false;
     try {
       // The same session id is what tells the server this is a renewal rather
       // than a second concurrent session, so it grants and supersedes instead
       // of answering 409.
       final block = _pendingBlock ??= await service.acquire(sessionId);
+      if (generation != _streamGeneration && !_stopped) {
+        // Paused or restarted while the grant was in flight: whatever replaced
+        // this streaming owns its own block, so this one goes straight back.
+        if (identical(_pendingBlock, block)) _pendingBlock = null;
+        await _reportUsage(service, block, streamedSecs: 0, detections: 0);
+        return;
+      }
       if (_stopped) {
         // The teardown that set `_stopped` released whatever was live before
         // this grant landed, so this one has to hand itself back.
@@ -801,7 +839,14 @@ class CloudCountingEngine implements CountingEngine {
       final next = await _connect(block.deepgramToken, asPrimary: false);
       _pendingBlock = null;
       _adoptBlock(block);
-      _startOverlap(next);
+      renewed = true;
+      // A primary that outlived its block has nothing to hand over: the new
+      // connection carries the session from now.
+      if (_expiredWhileRenewing) {
+        unawaited(_retireOutgoing(next));
+      } else {
+        _startOverlap(next);
+      }
     } on BlockFailure catch (e) {
       // Honours a window the server named — coming back sooner only earns
       // another 429. It does not always name one, and `_retryRenewalLater`
@@ -816,6 +861,12 @@ class CloudCountingEngine implements CountingEngine {
       _retryRenewalLater();
     } finally {
       _renewalInFlight = false;
+      if (_expiredWhileRenewing) {
+        _expiredWhileRenewing = false;
+        if (!renewed && !_outOfCredit) {
+          unawaited(_restartStreaming(forgetBlock: true));
+        }
+      }
     }
   }
 
@@ -912,22 +963,175 @@ class CloudCountingEngine implements CountingEngine {
   }
 
   void _onBlockExpired(_ActiveBlock active) {
-    if (_stopped || !identical(_active, active)) return;
+    if (_stopped || _paused || !identical(_active, active)) return;
     // Nothing succeeded it before the paid time ran out. Streaming past that
     // would be using time nobody paid for.
-    unawaited(
-      _outOfCredit
-          ? _endStreaming(
-              EngineStatus.exhausted,
-              'Voice minutes have run out. Your count is safe — keep tapping, '
-              'or add minutes to carry on.',
-            )
-          : _endStreaming(
-              EngineStatus.degraded,
-              'Voice counting paused: the app could not renew its streaming '
-              'time. Your count is safe and tapping still works.',
-            ),
+    if (_outOfCredit) {
+      unawaited(
+        _endStreaming(
+          EngineStatus.exhausted,
+          'Voice minutes have run out. Your count is safe — keep tapping, '
+          'or add minutes to carry on.',
+        ),
+      );
+      return;
+    }
+    if (_renewalInFlight) {
+      // Both timers overdue at once: the app was suspended through the
+      // renewal point. Let the renewal in hand finish rather than buy twice.
+      _expiredWhileRenewing = true;
+      return;
+    }
+    // The renewal never landed — no signal at the 90% mark, a server that
+    // was briefly down. That used to end the session with a red banner.
+    // Nothing about it is final: buy a fresh block and carry on. The spent
+    // one is reported on first, by its own clock rather than this one.
+    unawaited(_restartStreaming(forgetBlock: true));
+  }
+
+  // --- Pausing and restarting ------------------------------------------------
+
+  /// A call took the microphone. Stops streaming and hands back what is left
+  /// of the paid block, so the call costs nothing, and waits.
+  Future<void> _pauseForInterruption() async {
+    if (_stopped || _paused) return;
+    _paused = true;
+    _restarting = false;
+    _streamGeneration++;
+    _expiredWhileRenewing = false;
+    _cancelTimers();
+    _reconnectAttempts = 0;
+    _recoveringSince = null;
+    _setStatus(EngineStatus.paused);
+    _report(
+      'Paused while your phone uses the microphone. Voice counting picks up '
+      'again by itself.',
     );
+    try {
+      await _closeConnections();
+    } catch (_) {
+      // Closing is best effort; the pause stands either way.
+    }
+    await _releaseBlock();
+  }
+
+  @override
+  Future<void> resume() async {
+    if (_stopped || !_paused || _restarting) return;
+    _restarting = true;
+    try {
+      // Resuming the paused recorder is what iOS lets an app in the
+      // background do. Failing that, start capture again, which works once
+      // the app is in front.
+      if (!await _audioSource.resumeAfterInterruption()) {
+        if (_stopped || !_paused) return;
+        await _abandonCapture();
+        if (!await _startConfirmedCapture()) {
+          await _endStreaming(
+            EngineStatus.error,
+            "Couldn't get the microphone back. Your count is safe — tap "
+            'Resume to try again.',
+          );
+          return;
+        }
+      }
+    } finally {
+      _restarting = false;
+    }
+    if (_stopped || !_paused) return;
+    _paused = false;
+    await _restartStreaming();
+  }
+
+  /// Streams again on a fresh connection, buying a fresh block if the one in
+  /// hand is gone: after a pause, after a block ran out unrenewed, after the
+  /// server forgot a block mid-reconnect.
+  ///
+  /// Retries for [reconnectWindow] like any other recovery. Only running out
+  /// of minutes, or the window itself, ends the session.
+  Future<void> _restartStreaming({bool forgetBlock = false}) async {
+    if (_stopped || _paused || _restarting) return;
+    _restarting = true;
+    final generation = ++_streamGeneration;
+    bool stale() => _stopped || generation != _streamGeneration;
+    try {
+      _cancelTimers();
+      _recoveringSince ??= DateTime.now();
+      _setStatus(EngineStatus.reconnecting);
+      _report('Reconnecting voice counting…');
+      await _closeConnections();
+      // The block is spent, or the server has said it no longer knows it;
+      // asking for a token on it would only earn a refusal.
+      if (forgetBlock) await _releaseBlock();
+
+      while (!stale()) {
+        try {
+          final token = await _restartCredential();
+          if (stale()) return;
+          await _connect(token, asPrimary: true);
+          return;
+        } on BlockInsufficientCredit {
+          await _endStreaming(
+            EngineStatus.exhausted,
+            'Voice minutes have run out. Your count is safe — keep tapping, '
+            'or add minutes to carry on.',
+          );
+          return;
+        } on BlockInFlight {
+          // Another session holds the user's streaming time. Waiting will
+          // not change whose it is.
+          await _endStreaming(
+            EngineStatus.error,
+            'Voice counting moved to another session. Your count is safe and '
+            'tapping still works.',
+          );
+          return;
+        } catch (e) {
+          debugPrint('Voice restart attempt failed: $e');
+        }
+
+        final waited = DateTime.now().difference(_recoveringSince!);
+        if (waited >= reconnectWindow) {
+          await _endStreaming(
+            EngineStatus.error,
+            "Couldn't reconnect voice counting. Your count is safe and "
+            'tapping still works.',
+          );
+          return;
+        }
+        _reconnectAttempts++;
+        await Future<void>.delayed(_backoffFor(_reconnectAttempts));
+      }
+    } finally {
+      if (generation == _streamGeneration) _restarting = false;
+    }
+  }
+
+  /// The credential a restart connects with: a fresh token on the block in
+  /// hand while it still has time on it, otherwise a newly bought block.
+  Future<String> _restartCredential() async {
+    final service = blockService;
+    if (service == null) return tokenProvider!();
+
+    final active = _active;
+    if (active != null) {
+      if (DateTime.now().isBefore(active.block.expiresAt)) {
+        try {
+          final token = await service.refreshToken(active.block.id);
+          // The block's timers were cancelled with the old connection.
+          _scheduleRenewal(active);
+          return token;
+        } on BlockNotFound {
+          // Gone server-side: fall through and buy a fresh one.
+        }
+      }
+      // Spent or forgotten either way; report what it was used for.
+      await _releaseBlock();
+    }
+
+    final block = await service.acquire(_sessionId!);
+    _adoptBlock(block);
+    return block.deepgramToken;
   }
 
   /// Ends streaming without ending the session: the count stands, the tap
@@ -956,6 +1160,9 @@ class CloudCountingEngine implements CountingEngine {
     // run we are ending.
     _stopped = true;
     _running = false;
+    _paused = false;
+    _restarting = false;
+    _streamGeneration++;
     if (reason != null) _report(reason);
     _cancelTimers();
     _preConnectFrames.clear();
@@ -1021,7 +1228,7 @@ class CloudCountingEngine implements CountingEngine {
     required int detections,
   }) async {
     try {
-      final release = await service
+      await service
           .release(
             block.id,
             streamedSecs: streamedSecs,
@@ -1033,11 +1240,10 @@ class CloudCountingEngine implements CountingEngine {
                 detections == 0 && streamedSecs <= refundWindow.inSeconds,
           )
           .timeout(releaseTimeout);
-      if (release.refunded) {
-        _report(
-          'That block was too short to charge for; your minutes are back.',
-        );
-      }
+      // Nothing is reported from here. Every early stop now returns the
+      // unused minutes, so "that block was too short to charge for" was wrong
+      // for most refunds and noise on all of them. What a stop cost is shown
+      // from the release itself, by whoever observes the block service.
     } catch (_) {
       // Best effort by design (requirement 15.3): a block nobody reported on
       // is left unreconciled server-side. Ending a session must not wait on a
@@ -1183,6 +1389,11 @@ class CloudCountingEngine implements CountingEngine {
         }
 
         if (_stopped) return;
+        if (error is AudioSourceInterrupted) {
+          unawaited(_pauseForInterruption());
+          return;
+        }
+        if (_paused) return;
         // iOS pauses capture on an audio-session interruption and never
         // resumes it, so a restart is the only way back — and an unknown
         // error gets the same treatment, because a microphone that is not
@@ -1234,7 +1445,7 @@ class CloudCountingEngine implements CountingEngine {
   /// audio and risks re-triggering the iOS interruption path, so we only do it
   /// when the microphone is the thing that failed.
   void _scheduleReconnect({required bool restartAudio}) {
-    if (_stopped) return;
+    if (_stopped || _paused || _restarting) return;
     if (_reconnectTimer != null || _reconnectInFlight) return;
 
     _stopTranscriptionWatchdog();
@@ -1291,6 +1502,13 @@ class CloudCountingEngine implements CountingEngine {
         if (restartAudio || _audioSubscription == null) {
           _attachAudio();
         }
+      } on BlockNotFound {
+        // The block is gone server-side. Ending the session for that cost the
+        // user their voice counting over a server's bookkeeping; buying a
+        // fresh block is what they would do by hand.
+        _reconnectInFlight = false;
+        unawaited(_restartStreaming(forgetBlock: true));
+        return;
       } on BlockFailure catch (e) {
         await _applyCredentialAction(
           _actionFor(e, _CredentialPhase.reconnect),
@@ -1445,6 +1663,8 @@ class CloudCountingEngine implements CountingEngine {
   @override
   Future<void> dispose() async {
     await stop();
+    await _interruptionEndedSubscription?.cancel();
+    _interruptionEndedSubscription = null;
     for (final socket in _ownedSockets.toList()) {
       await socket.dispose();
     }

@@ -2,6 +2,7 @@ import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
+import '../../domain/counting/counting_engine.dart';
 import 'counter_provider.dart';
 import 'services_provider.dart';
 
@@ -91,9 +92,15 @@ class AppLifecycleNotifier extends StateNotifier<AppLifecycleState> {
     notificationService.cancelAllNotifications();
 
     // Back in the foreground with a session still running: hold the screen
-    // awake again so it does not sleep mid-chant.
-    if (_ref.read(sessionControllerProvider).isVoiceActive) {
+    // awake again so it does not sleep mid-session.
+    final session = _ref.read(sessionControllerProvider);
+    if (session.isVoiceActive) {
       _ref.read(screenWakeServiceProvider).acquire();
+    }
+    // Paused by a call whose end iOS never announced: being back in the app
+    // is the sign the user is ready again.
+    if (session.status == EngineStatus.paused) {
+      unawaited(session.resumeVoice());
     }
   }
 

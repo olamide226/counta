@@ -101,6 +101,10 @@ function deps(): Deps {
       intEnv("TOKEN_MINT_MAX", 20),
       intEnv("TOKEN_MINT_WINDOW_MINUTES", 5) * 60_000,
     ),
+    balanceLimiter: new MemoryRateLimiter(
+      intEnv("BALANCE_READ_MAX", 30),
+      intEnv("BALANCE_READ_WINDOW_MINUTES", 5) * 60_000,
+    ),
     trials: new SupabaseTrialStore(admin),
     vouchers: new SupabaseVoucherStore(admin),
     attestors: buildAttestors(env),

@@ -1,4 +1,5 @@
 import 'dart:async';
+import 'package:audio_session/audio_session.dart';
 import 'package:flutter/foundation.dart';
 import 'package:record/record.dart';
 
@@ -17,6 +18,21 @@ class AudioSourceStalled implements Exception {
   @override
   String toString() =>
       'AudioSourceStalled: no microphone frames for ${silentFor.inSeconds}s';
+}
+
+/// Raised on the audio stream when the system takes the microphone away for
+/// a while — a phone or FaceTime call, Siri, an alarm.
+///
+/// Not a failure. No app may record during a call, so there is nothing to
+/// retry: the session waits, and [AudioSource.interruptionEnded] says when
+/// the microphone is free again. Told apart from [AudioSourceStalled], which
+/// it would otherwise look like three seconds later, so a call pauses the
+/// session instead of sending it into a reconnect loop it cannot win.
+class AudioSourceInterrupted implements Exception {
+  const AudioSourceInterrupted();
+
+  @override
+  String toString() => 'AudioSourceInterrupted: the system took the microphone';
 }
 
 /// Raised on the audio stream when the user has not granted microphone access.
@@ -46,6 +62,18 @@ class AudioSource {
 
   Timer? _stallTimer;
   DateTime? _lastFrameAt;
+
+  /// iOS's interruption notifications, through audio_session. Only listened
+  /// to: this class never calls `configure` or `setActive` on it, so the
+  /// audio-session policy stays the one [recordConfig] gives `record`.
+  StreamSubscription<AudioInterruptionEvent>? _interruptions;
+  bool _interrupted = false;
+  final _interruptionEnded = StreamController<void>.broadcast();
+
+  /// Fires when the system hands the microphone back after an
+  /// [AudioSourceInterrupted]. iOS does not promise to send it — a caller
+  /// that needs certainty also resumes when the app comes back to the front.
+  Stream<void> get interruptionEnded => _interruptionEnded.stream;
 
   /// How long the microphone may go without delivering a frame before we treat
   /// capture as stalled. Real capture delivers frames continuously, so a gap
@@ -85,7 +113,56 @@ class AudioSource {
     _controller = StreamController<Uint8List>.broadcast(onCancel: () => stop());
 
     _startCapture(sampleRate);
+    unawaited(_watchInterruptions());
     return _controller!.stream;
+  }
+
+  Future<void> _watchInterruptions() async {
+    // Android reports a call as silence, which the stall path already
+    // handles; audio_session's Android events depend on requesting audio
+    // focus, which this app does not do.
+    if (defaultTargetPlatform != TargetPlatform.iOS || _interruptions != null) {
+      return;
+    }
+    try {
+      final session = await AudioSession.instance;
+      _interruptions = session.interruptionEventStream.listen(_onInterruption);
+    } catch (error) {
+      // Without it a call still ends the stream as a stall, as before.
+      debugPrint('Audio interruptions not observed: $error');
+    }
+  }
+
+  void _onInterruption(AudioInterruptionEvent event) {
+    if (event.begin) {
+      // `record` has already paused itself (its own observer) and will not
+      // resume. Silence the stall watchdog so this reads as what it is.
+      if (_controller == null || _controller!.isClosed || _interrupted) return;
+      _interrupted = true;
+      _stallTimer?.cancel();
+      _stallTimer = null;
+      _controller?.addError(const AudioSourceInterrupted());
+    } else if (_interrupted) {
+      _interruptionEnded.add(null);
+    }
+  }
+
+  /// Restarts capture after an interruption, on the recorder that was
+  /// paused. Resuming is what iOS allows an app in the background to do, and
+  /// starting afresh is not, so this is tried first. Answers whether frames
+  /// are flowing again.
+  Future<bool> resumeAfterInterruption() async {
+    if (!_interrupted) return true;
+    try {
+      await _recorder.resume();
+      _interrupted = false;
+      _lastFrameAt = DateTime.now();
+      _startStallWatchdog();
+      return true;
+    } catch (error) {
+      debugPrint('Microphone did not resume: $error');
+      return false;
+    }
   }
 
   /// The capture configuration, exposed so the audio-session policy is
@@ -189,6 +266,7 @@ class AudioSource {
     _stallTimer?.cancel();
     _stallTimer = null;
     _lastFrameAt = null;
+    _interrupted = false;
 
     final recordSubscription = _recordSubscription;
     _recordSubscription = null;
@@ -211,6 +289,9 @@ class AudioSource {
   /// Dispose resources.
   Future<void> dispose() async {
     await stop();
+    await _interruptions?.cancel();
+    _interruptions = null;
+    await _interruptionEnded.close();
     await _recorder.dispose();
   }
 }

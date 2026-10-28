@@ -118,12 +118,35 @@ export class SupabaseBlockStore implements BlockStore {
     const { data, error } = await this.table()
       // expires_at is read as well as granted_at: /release decides on the
       // grant time and /token on the expiry, and both go through this row.
-      .select("id,credits,granted_at,expires_at,reconciled")
+      .select("id,credits,granted_at,expires_at,reconciled,released_at")
       .eq("id", blockId)
       .eq("user_id", userId)
       .maybeSingle();
     if (error) throw new Error(`counta.voice_blocks select: ${error.message}`);
     return (data as VoiceBlockRow | null) ?? null;
+  }
+
+  async markReleased(blockId: string, at: Date): Promise<Date> {
+    // Write only where nothing is written yet, then read back whatever is
+    // there. Two statements rather than one upsert because the answer wanted
+    // is "the first stamp", which the write alone cannot report when it
+    // matched no row.
+    const { error } = await this.table()
+      .update({ released_at: at.toISOString() })
+      .eq("id", blockId)
+      .is("released_at", null);
+    if (error) {
+      throw new Error(`counta.voice_blocks mark released: ${error.message}`);
+    }
+    const { data, error: readError } = await this.table()
+      .select("released_at")
+      .eq("id", blockId)
+      .maybeSingle();
+    if (readError) {
+      throw new Error(`counta.voice_blocks released_at: ${readError.message}`);
+    }
+    const stamped = (data as { released_at: string | null } | null)?.released_at;
+    return stamped ? new Date(stamped) : at;
   }
 
   async reconcile(

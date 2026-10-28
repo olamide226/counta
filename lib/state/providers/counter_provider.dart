@@ -4,6 +4,7 @@ import 'session_controller.dart';
 import '../../core/config/build_config.dart';
 import '../../core/config/dev_secrets.dart';
 import '../../core/services/counting/cloud_counting_engine.dart';
+import '../../core/services/counting/observed_block_service.dart';
 import '../../core/services/counting/tap_counting_engine.dart';
 import '../../domain/counting/counting_engine.dart';
 import '../../domain/models/count_session.dart';
@@ -11,14 +12,25 @@ import '../../domain/models/counter_state.dart';
 import 'services_provider.dart';
 import 'settings_provider.dart';
 import 'supabase_providers.dart';
+import 'voice_minutes_provider.dart';
 
-final sessionControllerProvider = ChangeNotifierProvider<SessionController>(
-  (ref) => SessionController(
+final sessionControllerProvider = ChangeNotifierProvider<SessionController>((
+  ref,
+) {
+  final controller = SessionController(
     liveActivityService: ref.watch(liveActivityServiceProvider),
     voiceEngineFactory: ref.watch(voiceEngineFactoryProvider),
     tapEngineFactory: ref.watch(tapEngineFactoryProvider),
-  ),
-);
+  );
+  // What the session has cost is saved with it. The controller is told the
+  // running figure rather than reading the voice service for it.
+  ref.listen(
+    voiceMinutesProvider.select((minutes) => minutes.consumed),
+    (_, consumed) => controller.reportVoiceMinutes(consumed),
+    fireImmediately: true,
+  );
+  return controller;
+});
 
 /// Supplies the Deepgram credential when there is no block service.
 ///
@@ -57,7 +69,19 @@ final deepgramTokenProviderProvider = Provider<DeepgramTokenProvider>(
 /// themselves — that made the counter screen untestable and put platform
 /// wiring in the UI layer.
 final voiceEngineFactoryProvider = Provider<CountingEngine Function()>((ref) {
-  final blocks = ref.watch(blockServiceProvider);
+  final service = ref.watch(blockServiceProvider);
+  // The engine is handed a wrapper that reports each grant and release to the
+  // minutes notifier. It decides nothing by a balance, so it is not taught
+  // about one; the screens that show minutes learn them from its own calls.
+  final minutes = ref.watch(voiceMinutesProvider.notifier);
+  final blocks = service == null
+      ? null
+      : ObservedBlockService(
+          service,
+          onGranted: minutes.onGranted,
+          onReleased: minutes.onReleased,
+          onInsufficient: minutes.onInsufficient,
+        );
   // Exactly one credential source. A configured build pays for its streaming
   // time; falling back to a dev key when the block service is present would
   // be a way to stream without paying — so the fallback is not even built.

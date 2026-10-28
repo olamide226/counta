@@ -11,7 +11,8 @@ class VoiceBlock {
     required this.blockSeconds,
     required this.expiresAt,
     required this.balanceAfter,
-  });
+    int? credits,
+  }) : _credits = credits;
 
   /// Server-assigned id, and the key every ledger movement for this block is
   /// made under. Reported back on release.
@@ -31,6 +32,13 @@ class VoiceBlock {
   /// Credit balance after the block was debited.
   final int balanceAfter;
 
+  final int? _credits;
+
+  /// Credits this block cost. Usually a full block's worth, but the last
+  /// block on a short balance is only what was left. Derived from its length,
+  /// a minute a credit, when the server did not say.
+  int get credits => _credits ?? (blockSeconds / 60).ceil();
+
   @override
   String toString() =>
       'VoiceBlock(id: $id, seconds: $blockSeconds, balanceAfter: $balanceAfter)';
@@ -38,19 +46,94 @@ class VoiceBlock {
 
 /// What the service did with a released block.
 class BlockRelease {
-  const BlockRelease({required this.refunded, this.balance});
+  const BlockRelease({
+    required this.refunded,
+    this.balance,
+    this.usedCredits,
+    this.refundedCredits,
+  });
 
-  /// True when the server judged the block refundable and credited it back.
-  /// The client may *assert* eligibility, but this is the only answer that
-  /// counts: the server validates against its own record of the grant time.
+  /// Whether any credit came back.
   final bool refunded;
 
-  /// Balance after a refund. Null when nothing moved — the server does not
-  /// spend a ledger round trip echoing an unchanged number.
+  /// The balance after the release, when it moved.
   final int? balance;
 
+  /// What the block was charged for, in credits. A block is bought whole and
+  /// stopping early returns the unused part, so this is what the session's
+  /// last block really cost. Null from a server that does not report it.
+  final int? usedCredits;
+
+  /// What came back. Zero when the block ran to its end.
+  final int? refundedCredits;
+
   @override
-  String toString() => 'BlockRelease(refunded: $refunded, balance: $balance)';
+  String toString() =>
+      'BlockRelease(refunded: $refunded, balance: $balance, '
+      'used: $usedCredits, returned: $refundedCredits)';
+}
+
+/// What the user has to spend, and what starting a session costs.
+///
+/// One credit is one minute of voice counting, which is the word every screen
+/// uses. The port keeps the server's word so it reads the same as the wire.
+class VoiceBalance {
+  const VoiceBalance({required this.balance, required this.required});
+
+  final int balance;
+
+  /// Credits a session needs before it can start: one block's worth.
+  final int required;
+
+  bool get canStart => balance >= required;
+
+  @override
+  String toString() => 'VoiceBalance($balance, needs $required)';
+}
+
+/// How the voice service answered a voucher code.
+///
+/// A refusal is an answer, not a failure: the code was read and the answer is
+/// no. Transport problems still surface as a [BlockFailure], because retrying
+/// those can help and retrying a refused code cannot.
+sealed class VoucherOutcome {
+  const VoucherOutcome();
+}
+
+/// The code was good and its credits are now on the balance.
+class VoucherRedeemed extends VoucherOutcome {
+  const VoucherRedeemed({required this.credits, this.balance});
+
+  final int credits;
+  final int? balance;
+}
+
+/// This user had already redeemed this code. Nothing moved.
+class VoucherAlreadyRedeemed extends VoucherOutcome {
+  const VoucherAlreadyRedeemed({this.balance});
+
+  final int? balance;
+
+  String get message => "You've already used that code.";
+}
+
+/// Why a code was refused.
+enum VoucherRefusal { invalid, expired, usedUp }
+
+/// The code was refused. [message] is written for the person who typed it.
+class VoucherRefused extends VoucherOutcome {
+  const VoucherRefused(this.reason);
+
+  final VoucherRefusal reason;
+
+  String get message => switch (reason) {
+    // Unknown and disabled codes answer identically on purpose, so this says
+    // nothing about which it was.
+    VoucherRefusal.invalid =>
+      "That code didn't work. Check the spelling and try again.",
+    VoucherRefusal.expired => 'That code has expired.',
+    VoucherRefusal.usedUp => 'That code has been used up.',
+  };
 }
 
 /// Every way a block request can fail, as a type rather than a status code.
@@ -237,6 +320,12 @@ abstract class BlockService {
     required int detections,
     required bool eligibleForRefund,
   });
+
+  /// What the user has, and what a session needs. Moves nothing.
+  Future<VoiceBalance> readBalance();
+
+  /// Redeems a voucher code for credits.
+  Future<VoucherOutcome> redeem(String code);
 
   Future<void> dispose();
 }

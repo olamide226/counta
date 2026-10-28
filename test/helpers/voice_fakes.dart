@@ -144,6 +144,30 @@ class FakeAudioSource implements AudioSource {
     _controller?.addError(const AudioSourceStalled(Duration(seconds: 3)));
   }
 
+  final _interruptionEnded = StreamController<void>.broadcast();
+  int resumes = 0;
+
+  /// What [resumeAfterInterruption] answers.
+  bool resumeSucceeds = true;
+
+  @override
+  Stream<void> get interruptionEnded => _interruptionEnded.stream;
+
+  /// A phone call takes the microphone.
+  void beginInterruption() {
+    _controller?.addError(const AudioSourceInterrupted());
+  }
+
+  /// The call ends and iOS says so.
+  void endInterruption() => _interruptionEnded.add(null);
+
+  @override
+  Future<bool> resumeAfterInterruption() async {
+    resumes++;
+    if (resumeSucceeds) scheduleMicrotask(() => emitFrame());
+    return resumeSucceeds;
+  }
+
   void emitFrame([int bytes = 320]) {
     _controller?.add(Uint8List(bytes));
   }
@@ -254,7 +278,62 @@ class FakeBlockService implements BlockService {
         eligibleForRefund: eligibleForRefund,
       ),
     );
+    final answer = releaseAnswer;
+    if (answer != null) {
+      final refunded = answer.refundedCredits ?? 0;
+      balance += refunded;
+      return BlockRelease(
+        refunded: refunded > 0,
+        balance: refunded > 0 ? balance : null,
+        usedCredits: answer.usedCredits,
+        refundedCredits: answer.refundedCredits,
+      );
+    }
     return const BlockRelease(refunded: false);
+  }
+
+  /// What a release reports as used and returned. Null keeps the old plain
+  /// "nothing refunded" answer the lifecycle tests were written against.
+  BlockRelease? releaseAnswer;
+
+  /// Credits a session needs to start.
+  /// One, as the server now asks: a short balance buys a short block.
+  int required = 1;
+
+  /// Failure for the next [readBalance], if any.
+  BlockFailure? balanceFailure;
+  int balanceReads = 0;
+
+  @override
+  Future<VoiceBalance> readBalance() async {
+    balanceReads++;
+    final failure = balanceFailure;
+    if (failure != null) throw failure;
+    return VoiceBalance(balance: balance, required: required);
+  }
+
+  /// Codes this service accepts, and what each is worth.
+  final Map<String, int> vouchers = {};
+  final Set<String> _redeemedCodes = {};
+  final List<String> redeemAttempts = [];
+
+  /// Failure for the next [redeem], if any.
+  BlockFailure? redeemFailure;
+
+  @override
+  Future<VoucherOutcome> redeem(String code) async {
+    final key = code.trim().toUpperCase();
+    redeemAttempts.add(key);
+    final failure = redeemFailure;
+    if (failure != null) throw failure;
+
+    final credits = vouchers[key];
+    if (credits == null) return const VoucherRefused(VoucherRefusal.invalid);
+    if (!_redeemedCodes.add(key)) {
+      return VoucherAlreadyRedeemed(balance: balance);
+    }
+    balance += credits;
+    return VoucherRedeemed(credits: credits, balance: balance);
   }
 
   @override

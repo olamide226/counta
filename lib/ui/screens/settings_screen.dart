@@ -5,6 +5,9 @@ import '../../core/theme/sound_mode_presentation.dart';
 
 import '../../domain/models/enums.dart';
 import '../../state/providers/settings_provider.dart';
+import '../../state/providers/voice_minutes_provider.dart';
+import '../sheets/voice_minutes_sheet.dart';
+import '../widgets/voice_minutes_widgets.dart';
 
 class SettingsScreen extends ConsumerWidget {
   const SettingsScreen({super.key});
@@ -12,11 +15,21 @@ class SettingsScreen extends ConsumerWidget {
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     final settings = ref.watch(settingsProvider);
+    final hasVoiceMinutes = ref.watch(
+      voiceMinutesProvider.select((minutes) => minutes.available),
+    );
 
     return Scaffold(
       appBar: AppBar(title: const Text('Settings'), centerTitle: true),
       body: ListView(
         children: [
+          // First, because it is the one setting that runs out. Somewhere to
+          // check the number without starting a voice session to see it.
+          if (hasVoiceMinutes) ...[
+            _buildSectionHeader(context, 'Voice counting'),
+            const _VoiceMinutesTile(),
+            const Divider(),
+          ],
           _buildSectionHeader(context, 'Appearance'),
           ListTile(
             leading: const Icon(Icons.brightness_6),
@@ -260,6 +273,37 @@ class SettingsScreen extends ConsumerWidget {
           ),
         ],
       ),
+    );
+  }
+}
+
+/// The voice minutes row. Its own widget so it can ask for a fresh balance
+/// when Settings opens: minutes can be added from outside the app.
+class _VoiceMinutesTile extends ConsumerStatefulWidget {
+  const _VoiceMinutesTile();
+
+  @override
+  ConsumerState<_VoiceMinutesTile> createState() => _VoiceMinutesTileState();
+}
+
+class _VoiceMinutesTileState extends ConsumerState<_VoiceMinutesTile> {
+  @override
+  void initState() {
+    super.initState();
+    ref.read(voiceMinutesProvider.notifier).refresh();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final left = ref.watch(voiceMinutesProvider.select((m) => m.left));
+    return ListTile(
+      leading: const Icon(Icons.timer_outlined),
+      title: const Text('Voice minutes'),
+      subtitle: Text(
+        left == null ? 'Tap to check' : '${minutesCount(left)} left',
+      ),
+      trailing: const Icon(Icons.chevron_right_rounded),
+      onTap: () => showVoiceMinutesSheet(context),
     );
   }
 }

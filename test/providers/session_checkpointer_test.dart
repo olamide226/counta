@@ -259,6 +259,23 @@ void main() {
       });
     });
 
+    test('what the session has cost is content, and is written', () {
+      fakeAsync((async) {
+        build();
+        controller.incrementManual();
+        async.flushMicrotasks();
+        expect(store.current?.creditsConsumed, isNull);
+
+        // No count changed: the charge alone has to earn the write, or a
+        // crash would recover a session that looks like it cost nothing.
+        controller.reportVoiceMinutes(5);
+        async.elapse(const Duration(seconds: 11));
+
+        expect(store.writes, 2);
+        expect(store.current?.creditsConsumed, 5);
+      });
+    });
+
     test('clear() leaves a later status change alone', () {
       fakeAsync((async) {
         build();

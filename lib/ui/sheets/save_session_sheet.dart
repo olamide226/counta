@@ -156,6 +156,7 @@ class _SaveSessionSheetState extends ConsumerState<SaveSessionSheet> {
       voiceCountsByPhrase: controller.voiceCountsByPhrase,
       endedAt: DateTime.now(),
       notes: notes.isNotEmpty ? notes : null,
+      voiceMinutesUsed: controller.voiceMinutesUsed,
     );
 
     await ref.read(sessionsProvider.notifier).saveSession(session);
