@@ -267,6 +267,57 @@ void main() {
       t.controller.dispose();
     });
 
+    test(
+      'an engine that stays paused is replaced, keeping the count',
+      () async {
+        // What stopping and starting by hand did after a call, when resuming
+        // did not: a fresh engine, the same phrase, the same count.
+        final voices = <FakeCountingEngine>[];
+        final controller = SessionController(
+          engine: FakeCountingEngine(),
+          voiceEngineFactory: () {
+            final engine = FakeCountingEngine();
+            voices.add(engine);
+            return engine;
+          },
+          tapEngineFactory: FakeCountingEngine.new,
+        );
+        await controller.startVoiceSession(PhraseSet.single(phrase));
+        await pumpEventQueue();
+        voices.first.emitVoiceCount(phrase: phrase.raw);
+        controller.incrementManual();
+        voices.first.emitStatus(EngineStatus.paused);
+        await pumpEventQueue();
+
+        // The fake's resume does nothing, so it is still paused afterwards.
+        await controller.resumeVoice();
+        await pumpEventQueue();
+
+        expect(voices, hasLength(2));
+        expect(voices.first.disposed, isTrue);
+        expect(voices.last.lastPhrases, PhraseSet.single(phrase));
+        expect(controller.status, EngineStatus.live);
+        expect(controller.total, 2);
+        expect(controller.voiceStop, isNull);
+
+        controller.dispose();
+      },
+    );
+
+    test('a resume that works needs no fresh start', () async {
+      final t = build();
+      await t.controller.startVoiceSession(PhraseSet.single(phrase));
+      await pumpEventQueue();
+      t.voice.emitStatus(EngineStatus.live);
+      await pumpEventQueue();
+
+      await t.controller.resumeVoice();
+
+      expect(t.voice.resumes, 1);
+      expect(t.voice.disposed, isFalse);
+      t.controller.dispose();
+    });
+
     test('resuming asks the engine', () async {
       final t = build();
       await t.controller.startVoiceSession(PhraseSet.single(phrase));

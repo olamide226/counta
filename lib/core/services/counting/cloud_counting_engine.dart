@@ -1101,26 +1101,23 @@ class CloudCountingEngine implements CountingEngine {
     }
     if (_stopped || !_paused || _restarting) return;
     _restarting = true;
+    var micBack = false;
     try {
-      // Resuming the paused recorder is what iOS lets an app in the
-      // background do. Failing that, start capture again, which works once
-      // the app is in front.
-      if (!await _audioSource.resumeAfterInterruption()) {
-        if (_stopped || !_paused) return;
-        await _abandonCapture();
-        if (!await _startConfirmedCapture()) {
-          await _endStreaming(
-            EngineStatus.error,
-            "Couldn't get the microphone back. Your count is safe — tap "
-            'Resume to try again.',
-          );
-          return;
-        }
-      }
+      micBack = await _microphoneBack();
     } finally {
       _restarting = false;
     }
     if (_stopped || !_paused) return;
+    if (!micBack) {
+      // Not an ending: iOS will not hand an app in the background its
+      // microphone back after a call. Coming back to the app tries again,
+      // and so does "Resume now".
+      _report(
+        "The microphone isn't back yet. Voice counting picks up when you're "
+        'back in the app.',
+      );
+      return;
+    }
     _paused = false;
     // A call that came before the user had said anything: go back to
     // waiting for them, rather than buying time for more silence.
@@ -1129,6 +1126,57 @@ class CloudCountingEngine implements CountingEngine {
       return;
     }
     await _restartStreaming(firstConnect: _awaitingFirstConnect);
+  }
+
+  /// How long each step of getting the microphone back may take. Without a
+  /// limit, a recorder that never answered left a resume waiting for ever,
+  /// and "Resume now" was ignored behind it.
+  static const Duration _micStepTimeout = Duration(seconds: 3);
+
+  /// Gets the microphone back after a call, and proves it: audio has to
+  /// actually arrive. Going back to "Listening" on the recorder's word alone
+  /// left a session after a call listening to nothing, until the user
+  /// stopped it and started again.
+  ///
+  /// Resuming the paused recorder first, because that is what iOS lets an
+  /// app in the background do. Failing that, capture built afresh — what
+  /// stopping and starting again did, and what worked.
+  Future<bool> _microphoneBack() async {
+    final asked = DateTime.now();
+    final resumed = await _audioSource.resumeAfterInterruption().timeout(
+      _micStepTimeout,
+      onTimeout: () => false,
+    );
+    if (resumed && await _audioSince(asked, within: _micStepTimeout)) {
+      return true;
+    }
+    if (_stopped || !_paused) return false;
+
+    await _abandonCapture();
+    final confirmation = Completer<bool>();
+    _captureConfirmed = confirmation;
+    _attachAudio();
+    final started = await confirmation.future.timeout(
+      _micStepTimeout,
+      onTimeout: () => false,
+    );
+    if (identical(_captureConfirmed, confirmation)) _captureConfirmed = null;
+    // Handed back rather than left half-open: the next attempt starts clean.
+    if (!started) await _abandonCapture();
+    return started;
+  }
+
+  /// Completed by the next frame of audio, for whoever is waiting on one.
+  Completer<void>? _nextFrame;
+
+  /// Whether a frame has arrived since [since], waiting up to [within].
+  Future<bool> _audioSince(DateTime since, {required Duration within}) async {
+    final last = _lastAudioFrameAt;
+    if (last != null && !last.isBefore(since)) return true;
+    final next = _nextFrame ??= Completer<void>();
+    return next.future
+        .then((_) => true)
+        .timeout(within, onTimeout: () => false);
   }
 
   void _armVoiceGate() {
@@ -1472,6 +1520,11 @@ class CloudCountingEngine implements CountingEngine {
     _audioSubscription = pcmStream.listen(
       (data) {
         _lastAudioFrameAt = DateTime.now();
+        final waiting = _nextFrame;
+        if (waiting != null) {
+          _nextFrame = null;
+          waiting.complete();
+        }
 
         // A frame is the only proof capture actually works: permission may be
         // granted and the microphone still be taken by another app.
@@ -1531,6 +1584,12 @@ class CloudCountingEngine implements CountingEngine {
       },
       onError: (Object error) {
         final confirmation = _captureConfirmed;
+        if (confirmation != null && !confirmation.isCompleted && _paused) {
+          // Getting the microphone back after a call, not starting a session:
+          // the resume decides what to say, and the session stays paused.
+          confirmation.complete(false);
+          return;
+        }
         if (confirmation != null && !confirmation.isCompleted) {
           // Failed before a socket was ever opened, which is the whole point
           // of starting capture first.
