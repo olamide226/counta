@@ -72,6 +72,10 @@ class TapCountingEngine implements CountingEngine {
     }
   }
 
+  /// Tapping has no microphone to lose, so it is never paused.
+  @override
+  Future<void> resume() async {}
+
   @override
   Future<SessionSummary> stop() async {
     final now = DateTime.now();

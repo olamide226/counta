@@ -390,8 +390,24 @@ void main() {
       expect(find.text('Start Voice Session'), findsNothing);
     });
 
+    testWidgets('a couple of minutes left can still be spent', (tester) async {
+      // Regression: "You have 2 voice minutes left, and the session needs
+      // 5" stranded the end of every pack.
+      await pumpSetup(tester, service: FakeBlockService(balance: 2));
+      await tester.pumpAndSettle();
+
+      expect(find.text('2 voice minutes'), findsOneWidget);
+      expect(find.text('Start Voice Session'), findsOneWidget);
+      expect(find.text('Not enough voice minutes'), findsNothing);
+    });
+
     testWidgets('too few to start says how many are needed', (tester) async {
-      await pumpSetup(tester, service: FakeBlockService(balance: 3));
+      // Only if the server ever asks for more than it has: today it asks for
+      // one minute, and zero is the only "too few".
+      await pumpSetup(
+        tester,
+        service: FakeBlockService(balance: 3)..required = 5,
+      );
       await tester.pumpAndSettle();
 
       expect(find.text('Not enough voice minutes'), findsOneWidget);

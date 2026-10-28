@@ -181,6 +181,7 @@ class BlockClient implements BlockService {
       // timing actually depends on.
       expiresAt: expiresAt ?? DateTime.now().add(Duration(seconds: seconds)),
       balanceAfter: _asInt(json['balance_after']) ?? 0,
+      credits: _asInt(json['credits']),
     );
   }
 

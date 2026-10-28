@@ -803,7 +803,7 @@ void main() {
         });
       });
 
-      test('a renewal that never succeeds pauses rather than exhausts', () {
+      test('a renewal that never lands recovers on a fresh block', () {
         fakeAsync((async) {
           final blocks = FakeBlockService(
             blockSeconds: 10,
@@ -822,14 +822,140 @@ void main() {
           async.flushMicrotasks();
           async.elapse(const Duration(seconds: 10));
           async.flushMicrotasks();
+          async.elapse(const Duration(seconds: 1));
 
-          // Out of paid time but not out of credit: the user has minutes left,
-          // so this is a pause to recover from, not a paywall.
-          expect(engine.currentStatus, EngineStatus.degraded);
+          // Regression: this ended the session with "the app could not renew
+          // its streaming time" — a red banner over a session the user still
+          // had minutes for. Out of paid time is not out of credit: it buys
+          // a fresh block and carries on.
+          expect(engine.currentStatus, EngineStatus.live);
+          expect(blocks.acquiredSessionIds, hasLength(4));
+          expect(engine.currentBlock?.id, 'block-2');
+          // The spent block was reported on before the new one was bought.
+          expect(blocks.releases.map((r) => r.blockId), contains('block-1'));
 
           engine.dispose();
           async.flushTimers();
         });
+      });
+    });
+
+    group('a phone call', () {
+      Future<CloudCountingEngine> liveEngine(FakeBlockService blocks) async {
+        final engine = engineWith(blocks);
+        addTearDown(engine.dispose);
+        await engine.start(testPhraseSet);
+        await pumpEventQueue();
+        expect(engine.currentStatus, EngineStatus.live);
+        return engine;
+      }
+
+      test('pauses, streams nothing, and hands the block back', () async {
+        final blocks = FakeBlockService();
+        final engine = await liveEngine(blocks);
+
+        audio.beginInterruption();
+        await pumpEventQueue();
+
+        expect(engine.currentStatus, EngineStatus.paused);
+        // The call costs nothing: the block goes back for its unused part.
+        expect(blocks.releases.single.blockId, 'block-1');
+        expect(engine.currentBlock, isNull);
+        expect(sockets.single.closeCount, greaterThanOrEqualTo(1));
+        // Not a stall, so no reconnect loop it could never win.
+        expect(sockets.single.connectCount, 1);
+      });
+
+      test('picks up by itself when the call ends', () async {
+        final blocks = FakeBlockService();
+        final engine = await liveEngine(blocks);
+        audio.beginInterruption();
+        await pumpEventQueue();
+
+        audio.endInterruption();
+        await Future<void>.delayed(const Duration(milliseconds: 50));
+
+        expect(engine.currentStatus, EngineStatus.live);
+        expect(audio.resumes, 1);
+        // A fresh block on the same session, on a new connection.
+        expect(engine.currentBlock?.id, 'block-2');
+        expect(blocks.acquiredSessionIds.toSet(), hasLength(1));
+        expect(sockets, hasLength(2));
+      });
+
+      test(
+        'picks up when asked, if the end of the call was never said',
+        () async {
+          final blocks = FakeBlockService();
+          final engine = await liveEngine(blocks);
+          audio.beginInterruption();
+          await pumpEventQueue();
+
+          await engine.resume();
+          await pumpEventQueue();
+
+          expect(engine.currentStatus, EngineStatus.live);
+        },
+      );
+
+      test(
+        'starts capture afresh when the paused recorder will not resume',
+        () async {
+          final blocks = FakeBlockService();
+          final engine = await liveEngine(blocks);
+          audio.beginInterruption();
+          await pumpEventQueue();
+          final startsBefore = audio.startCount;
+
+          audio.resumeSucceeds = false;
+          await engine.resume();
+          await pumpEventQueue();
+
+          expect(audio.startCount, startsBefore + 1);
+          expect(engine.currentStatus, EngineStatus.live);
+        },
+      );
+
+      test('a call that outlasts the minutes ends as out of minutes', () async {
+        final blocks = FakeBlockService(
+          failures: const [
+            null,
+            BlockInsufficientCredit(balance: 0, required: 1),
+          ],
+        );
+        final engine = await liveEngine(blocks);
+        audio.beginInterruption();
+        await pumpEventQueue();
+
+        audio.endInterruption();
+        await Future<void>.delayed(const Duration(milliseconds: 50));
+
+        expect(engine.currentStatus, EngineStatus.exhausted);
+      });
+
+      test('resume does nothing to a session that is not paused', () async {
+        final blocks = FakeBlockService();
+        final engine = await liveEngine(blocks);
+
+        await engine.resume();
+        await pumpEventQueue();
+
+        expect(audio.resumes, 0);
+        expect(blocks.acquiredSessionIds, hasLength(1));
+      });
+
+      test('stopping while paused ends cleanly', () async {
+        final blocks = FakeBlockService();
+        final engine = await liveEngine(blocks);
+        audio.beginInterruption();
+        await pumpEventQueue();
+
+        await engine.stop();
+        audio.endInterruption();
+        await pumpEventQueue();
+
+        expect(engine.currentStatus, EngineStatus.idle);
+        expect(blocks.acquiredSessionIds, hasLength(1));
       });
     });
 
@@ -886,7 +1012,7 @@ void main() {
         ]);
       });
 
-      test('a block the server no longer knows ends the session', () async {
+      test('a block the server no longer knows is replaced', () async {
         final blocks = FakeBlockService(
           blockSeconds: 300,
           refreshFailures: const [BlockNotFound()],
@@ -901,12 +1027,13 @@ void main() {
         await Future<void>.delayed(const Duration(milliseconds: 300));
 
         // 404 means the block is gone — expired, reconciled, or never ours.
-        // Nothing can be minted against it, so retrying for the whole
-        // five-minute window would only hold the microphone open for nothing.
-        expect(engine.currentStatus, EngineStatus.degraded);
+        // Nothing can be minted against it, but that is the server's
+        // bookkeeping, not a reason to end the user's session: it buys a
+        // fresh block, as the user would by tapping Resume.
+        expect(engine.currentStatus, EngineStatus.live);
         expect(blocks.refreshedBlockIds, hasLength(1));
-        expect(audio.stopCount, greaterThanOrEqualTo(1));
         expect(blocks.releases.single.blockId, 'block-1');
+        expect(engine.currentBlock?.id, 'block-2');
       });
 
       test('a reconnect refused for credit ends, it does not retry', () async {
@@ -955,7 +1082,9 @@ void main() {
         await Future<void>.delayed(const Duration(milliseconds: 300));
 
         // The block is another session's now; this one cannot get it back.
-        expect(engine.currentStatus, EngineStatus.degraded);
+        // Ended, not `degraded`: a running status left the banner up over a
+        // session that had already stopped.
+        expect(engine.currentStatus, EngineStatus.error);
         expect(blocks.refreshedBlockIds, hasLength(1));
       });
 

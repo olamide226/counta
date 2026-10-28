@@ -144,6 +144,30 @@ class FakeAudioSource implements AudioSource {
     _controller?.addError(const AudioSourceStalled(Duration(seconds: 3)));
   }
 
+  final _interruptionEnded = StreamController<void>.broadcast();
+  int resumes = 0;
+
+  /// What [resumeAfterInterruption] answers.
+  bool resumeSucceeds = true;
+
+  @override
+  Stream<void> get interruptionEnded => _interruptionEnded.stream;
+
+  /// A phone call takes the microphone.
+  void beginInterruption() {
+    _controller?.addError(const AudioSourceInterrupted());
+  }
+
+  /// The call ends and iOS says so.
+  void endInterruption() => _interruptionEnded.add(null);
+
+  @override
+  Future<bool> resumeAfterInterruption() async {
+    resumes++;
+    if (resumeSucceeds) scheduleMicrotask(() => emitFrame());
+    return resumeSucceeds;
+  }
+
   void emitFrame([int bytes = 320]) {
     _controller?.add(Uint8List(bytes));
   }
@@ -273,7 +297,8 @@ class FakeBlockService implements BlockService {
   BlockRelease? releaseAnswer;
 
   /// Credits a session needs to start.
-  int required = 5;
+  /// One, as the server now asks: a short balance buys a short block.
+  int required = 1;
 
   /// Failure for the next [readBalance], if any.
   BlockFailure? balanceFailure;
