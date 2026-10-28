@@ -1,5 +1,6 @@
 import 'dart:async';
 
+import 'package:counta/domain/counting/block_service.dart';
 import 'package:counta/domain/counting/counting_engine.dart';
 import 'package:counta/domain/models/phrase_history_entry.dart';
 import 'package:counta/ui/screens/phrase_setup_screen.dart';
@@ -288,6 +289,48 @@ void main() {
     started.complete();
     await tester.pumpAndSettle();
     expect(find.byType(PhraseSetupScreen), findsNothing);
+  });
+
+  testWidgets('running out of minutes is explained in plain words', (
+    tester,
+  ) async {
+    // Regression: the screen interpolated the exception itself, and a tester
+    // read "Could not start voice counting: BlockInsufficientCredit(balance:
+    // 0, required: 5)".
+    await pumpSetup(
+      tester,
+      throws: const BlockInsufficientCredit(balance: 0, required: 5),
+    );
+    await tester.pumpAndSettle();
+
+    await tester.tap(find.text('Start Voice Session'));
+    await tester.pumpAndSettle();
+
+    expect(
+      find.text(
+        'You have no voice minutes left. You can still count by tapping.',
+      ),
+      findsOneWidget,
+    );
+    expect(find.textContaining('BlockInsufficientCredit'), findsNothing);
+    expect(find.textContaining('balance'), findsNothing);
+    // The sheet stays open: the session did not start.
+    expect(find.byType(PhraseSetupScreen), findsOneWidget);
+  });
+
+  testWidgets('an unexpected failure still reads as a sentence', (
+    tester,
+  ) async {
+    await pumpSetup(tester, throws: StateError('socket closed'));
+    await tester.pumpAndSettle();
+
+    await tester.tap(find.text('Start Voice Session'));
+    await tester.pumpAndSettle();
+
+    expect(
+      find.textContaining("Couldn't start voice counting. Please try again."),
+      findsOneWidget,
+    );
   });
 
   testWidgets('a successful start closes the sheet', (tester) async {
