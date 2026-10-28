@@ -278,6 +278,36 @@ void main() {
     });
   });
 
+  group('waiting to hear the user', () {
+    test('a session waiting for a voice has started', () async {
+      final t = build(voiceStatus: EngineStatus.ready);
+
+      final outcome = await t.controller.startVoiceSession(
+        PhraseSet.single(phrase),
+      );
+
+      // The sheet closes and the phrase is kept: nothing to roll back.
+      expect(outcome, EngineStatus.ready);
+      expect(t.controller.isVoiceActive, isTrue);
+      expect(t.controller.activePhrases, PhraseSet.single(phrase));
+      t.controller.dispose();
+    });
+
+    test('a connect that fails after waiting is told calmly', () async {
+      final t = build(voiceStatus: EngineStatus.ready);
+      await t.controller.startVoiceSession(PhraseSet.single(phrase));
+      await pumpEventQueue();
+
+      t.voice.emitStatus(EngineStatus.connecting);
+      t.voice.emitStatus(EngineStatus.error);
+      await pumpEventQueue();
+
+      // The sheet had already closed, so this is where it is explained.
+      expect(t.controller.voiceStop, VoiceStop.connectionLost);
+      t.controller.dispose();
+    });
+  });
+
   group('a connection that cannot be recovered', () {
     test('says so calmly, keeping the phrase to resume with', () async {
       final t = build();

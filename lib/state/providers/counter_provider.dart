@@ -88,8 +88,12 @@ final voiceEngineFactoryProvider = Provider<CountingEngine Function()>((ref) {
   final devToken = blocks == null
       ? ref.read(deepgramTokenProviderProvider)
       : null;
-  return () =>
-      CloudCountingEngine(blockService: blocks, tokenProvider: devToken);
+  return () => CloudCountingEngine(
+    blockService: blocks,
+    tokenProvider: devToken,
+    // Nothing is bought until the user speaks.
+    startOnVoice: true,
+  );
 });
 
 /// Builds the engine used when no voice session is running.

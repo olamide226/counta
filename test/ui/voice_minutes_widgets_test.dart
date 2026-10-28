@@ -131,7 +131,7 @@ void main() {
       ),
     );
 
-    expect(find.textContaining("couldn't reconnect"), findsOneWidget);
+    expect(find.textContaining("couldn't connect"), findsOneWidget);
     expect(find.textContaining('count is safe'), findsOneWidget);
     expect(find.text('Get minutes'), findsNothing);
 
@@ -180,6 +180,15 @@ void main() {
 
       await tester.tap(find.text('Resume now'));
       expect(resumed, 1);
+    });
+
+    testWidgets('waiting for a voice offers to start now', (tester) async {
+      var started = 0;
+      await pumpStatus(tester, EngineStatus.ready, onResume: () => started++);
+
+      expect(find.text('Ready'), findsOneWidget);
+      await tester.tap(find.text('Start now'));
+      expect(started, 1);
     });
 
     testWidgets('reconnecting is not red either', (tester) async {

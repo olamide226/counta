@@ -203,7 +203,7 @@ class VoicePausedBanner extends StatelessWidget {
                                   "You're out of voice minutes. Your count is "
                                       'safe, and tapping still works.',
                                 VoiceStop.connectionLost =>
-                                  "Voice counting couldn't reconnect. Your "
+                                  "Voice counting couldn't connect. Your "
                                       'count is safe, and tapping still works.',
                               },
                               style: theme.textTheme.bodyMedium?.copyWith(
