@@ -124,7 +124,8 @@ void main() {
         // The microphone is handed straight back rather than held open behind
         // a paywall.
         expect(audio.stopCount, greaterThanOrEqualTo(1));
-        expect(diagnostics.first, contains('2 left'));
+        // The balance is reported, in the sentence a person is shown.
+        expect(diagnostics.first, contains('2 voice minutes left'));
         await sub.cancel();
       });
 

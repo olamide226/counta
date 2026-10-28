@@ -169,11 +169,13 @@ _CredentialAction _actionFor(BlockFailure failure, _CredentialPhase phase) {
   };
 
   switch (failure) {
-    case BlockInsufficientCredit(:final balance, :final required):
+    case BlockInsufficientCredit(:final balance):
       return switch (phase) {
+        // The failure's own sentence, so the status line and the setup screen
+        // cannot say two different things about the same refusal.
         _CredentialPhase.start => _EndSession(
           EngineStatus.exhausted,
-          'Out of voice minutes: $balance left, and a session needs $required.',
+          failure.message,
         ),
         _CredentialPhase.renewal => _RunOutTheBlock(
           'Voice minutes have run out ($balance left). Counting continues '

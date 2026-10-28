@@ -1,5 +1,7 @@
 import 'package:flutter/material.dart';
 
+import '../../core/config/build_config.dart';
+import '../../domain/counting/block_service.dart';
 import '../../domain/counting/counting_engine.dart';
 import '../../domain/models/phrase_history_entry.dart';
 import '../../domain/validation/phrase_validator.dart';
@@ -177,11 +179,29 @@ class _PhraseSetupScreenState extends State<PhraseSetupScreen> {
         });
       }
       return;
+    } on BlockFailure catch (failure) {
+      // The voice service said no, and each refusal carries a sentence
+      // written for the person reading it. The exception itself must never be
+      // interpolated here: several of them print as debugging labels, which
+      // is how "Block insufficient credit. Balance zero, required five"
+      // reached a user's screen.
+      if (mounted) {
+        setState(() {
+          _starting = false;
+          _startError = failure.message;
+        });
+      }
+      return;
     } catch (error) {
       if (mounted) {
         setState(() {
           _starting = false;
-          _startError = 'Could not start voice counting: $error';
+          // Unknown failures get a plain sentence. The raw error is only
+          // useful to someone who can act on it, so it is shown in dev builds
+          // alone.
+          _startError = BuildConfig.showDebugTools
+              ? "Couldn't start voice counting. Please try again.\n\n$error"
+              : "Couldn't start voice counting. Please try again.";
         });
       }
       return;
