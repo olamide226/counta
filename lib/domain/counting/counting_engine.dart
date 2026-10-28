@@ -11,6 +11,12 @@ enum EngineStatus {
   notConfigured,
   requestingBlock,
   connecting,
+
+  /// Listening on the phone for the user to start speaking. Nothing has been
+  /// bought and nothing leaves the device until they do; then the session
+  /// connects, with the moment before they spoke held back so their first
+  /// repetition still counts.
+  ready,
   live,
   reconnecting,
 
@@ -221,9 +227,10 @@ abstract class CountingEngine {
   /// Removes the most recent manual count, flooring at zero.
   void decrementManual();
 
-  /// Picks a [EngineStatus.paused] session back up. Engines resume by
-  /// themselves when they are told the microphone is free; this is for when
-  /// that signal never comes — the app is back in front and the user is
-  /// ready. Does nothing in any other state.
+  /// Picks a [EngineStatus.paused] session back up, or starts a
+  /// [EngineStatus.ready] one now without waiting to hear the user. Engines
+  /// do both by themselves — when the microphone is free, when speech is
+  /// heard — so this is for when that never comes: the app is back in front,
+  /// or a voice was too quiet to notice. Does nothing in any other state.
   Future<void> resume();
 }

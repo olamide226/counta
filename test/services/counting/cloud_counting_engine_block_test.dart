@@ -27,6 +27,7 @@ void main() {
     CloudCountingEngine engineWith(
       FakeBlockService blocks, {
       InMemoryOpenBlockStore? openBlocks,
+      bool startOnVoice = false,
       Duration renewalOverlap = const Duration(seconds: 3),
       Duration renewalRetryDelay = const Duration(seconds: 10),
       Duration maxReconnectBackoff = const Duration(milliseconds: 20),
@@ -42,6 +43,7 @@ void main() {
       transcriptionSilenceTimeout: const Duration(days: 1),
       transcriptionWatchdogInterval: const Duration(days: 1),
       openBlocks: openBlocks,
+      startOnVoice: startOnVoice,
     );
 
     setUp(() {
@@ -899,6 +901,141 @@ void main() {
           engine.dispose();
           async.flushTimers();
         });
+      });
+    });
+
+    group('starting on the voice', () {
+      Future<CloudCountingEngine> waiting(FakeBlockService blocks) async {
+        final engine = engineWith(blocks, startOnVoice: true);
+        addTearDown(engine.dispose);
+        await engine.start(testPhraseSet);
+        await pumpEventQueue();
+        return engine;
+      }
+
+      int bytesSent(FakeSpeechSocket socket) =>
+          socket.sentFrames.fold(0, (sum, f) => sum + f.lengthInBytes);
+
+      test('starting buys nothing and connects nothing', () async {
+        final blocks = FakeBlockService();
+        final engine = await waiting(blocks);
+
+        expect(engine.currentStatus, EngineStatus.ready);
+        expect(blocks.acquiredSessionIds, isEmpty);
+        expect(sockets, isEmpty);
+      });
+
+      test('silence keeps it waiting, for free', () async {
+        final blocks = FakeBlockService();
+        final engine = await waiting(blocks);
+
+        for (var i = 0; i < 100; i++) {
+          audio.emitFrame(3200);
+        }
+        await pumpEventQueue();
+
+        expect(engine.currentStatus, EngineStatus.ready);
+        expect(blocks.acquiredSessionIds, isEmpty);
+      });
+
+      test('speaking buys a block and connects', () async {
+        final blocks = FakeBlockService();
+        final engine = await waiting(blocks);
+
+        audio.emitSpeech();
+        audio.emitSpeech();
+        await pumpEventQueue();
+
+        expect(blocks.acquiredSessionIds, hasLength(1));
+        expect(sockets.single.connectCount, 1);
+        expect(engine.currentStatus, EngineStatus.live);
+      });
+
+      test(
+        'only the moment before speech is sent, not the whole wait',
+        () async {
+          final blocks = FakeBlockService();
+          await waiting(blocks);
+
+          // Ten seconds of silence, then a voice.
+          for (var i = 0; i < 100; i++) {
+            audio.emitFrame(3200);
+          }
+          audio.emitSpeech();
+          audio.emitSpeech();
+          await pumpEventQueue();
+
+          // 1.5 s of lead-in and the 200 ms that was heard, give or take a
+          // frame: nowhere near the ten seconds of silence.
+          final sent = bytesSent(sockets.single);
+          expect(sent, lessThanOrEqualTo(bytesPerSecond * 2));
+          expect(sent, greaterThanOrEqualTo(bytesPerSecond));
+        },
+      );
+
+      test('a click is not enough', () async {
+        final blocks = FakeBlockService();
+        final engine = await waiting(blocks);
+
+        audio.emitSpeech(bytes: 640, amplitude: 9000);
+        for (var i = 0; i < 5; i++) {
+          audio.emitFrame(3200);
+        }
+        await pumpEventQueue();
+
+        expect(engine.currentStatus, EngineStatus.ready);
+        expect(blocks.acquiredSessionIds, isEmpty);
+      });
+
+      test('"Start now" starts without waiting to hear anyone', () async {
+        final blocks = FakeBlockService();
+        final engine = await waiting(blocks);
+
+        await engine.resume();
+        await pumpEventQueue();
+
+        expect(engine.currentStatus, EngineStatus.live);
+        expect(blocks.acquiredSessionIds, hasLength(1));
+      });
+
+      test('a call before anyone spoke goes back to waiting', () async {
+        final blocks = FakeBlockService();
+        final engine = await waiting(blocks);
+
+        audio.beginInterruption();
+        await pumpEventQueue();
+        expect(engine.currentStatus, EngineStatus.paused);
+
+        audio.endInterruption();
+        await pumpEventQueue();
+
+        // Not buying time for more silence after the call.
+        expect(engine.currentStatus, EngineStatus.ready);
+        expect(blocks.acquiredSessionIds, isEmpty);
+      });
+
+      test('stopping before speaking costs nothing', () async {
+        final blocks = FakeBlockService();
+        final engine = await waiting(blocks);
+
+        await engine.stop();
+
+        expect(engine.currentStatus, EngineStatus.idle);
+        expect(blocks.acquiredSessionIds, isEmpty);
+        expect(blocks.releases, isEmpty);
+      });
+
+      test('no minutes left is found out when they speak', () async {
+        final blocks = FakeBlockService(
+          failures: const [BlockInsufficientCredit(balance: 0, required: 1)],
+        );
+        final engine = await waiting(blocks);
+
+        audio.emitSpeech();
+        audio.emitSpeech();
+        await pumpEventQueue();
+
+        expect(engine.currentStatus, EngineStatus.exhausted);
       });
     });
 

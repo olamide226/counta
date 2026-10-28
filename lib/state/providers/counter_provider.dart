@@ -94,6 +94,8 @@ final voiceEngineFactoryProvider = Provider<CountingEngine Function()>((ref) {
     tokenProvider: devToken,
     // Read when a session starts, by which point storage is open.
     openBlocks: ref.read(openBlockStoreProvider),
+    // Nothing is bought until the user speaks.
+    startOnVoice: true,
   );
 });
 
