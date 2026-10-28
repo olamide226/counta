@@ -53,7 +53,8 @@ class VoiceSessionBanner extends StatefulWidget {
   final bool minutesLow;
 
   /// Picks a paused session back up by hand, for when the call has ended but
-  /// the phone never said so.
+  /// the phone never said so — or starts a waiting one, for a voice too
+  /// quiet to have been noticed.
   final VoidCallback? onResume;
 
   @override
@@ -86,6 +87,7 @@ class _VoiceSessionBannerState extends State<VoiceSessionBanner> {
     EngineStatus.connecting => 'Connecting…',
     EngineStatus.reconnecting => 'Reconnecting…',
     EngineStatus.paused => 'Paused',
+    EngineStatus.ready => 'Ready',
     EngineStatus.requestingBlock => 'Preparing…',
     EngineStatus.degraded => 'Poor connection',
     EngineStatus.exhausted => 'Out of voice minutes',
@@ -228,13 +230,17 @@ class _VoiceSessionBannerState extends State<VoiceSessionBanner> {
                   ],
                 ),
               ],
-              if (status == EngineStatus.paused && widget.onResume != null)
+              if ((status == EngineStatus.paused ||
+                      status == EngineStatus.ready) &&
+                  widget.onResume != null)
                 Align(
                   alignment: Alignment.centerLeft,
                   child: TextButton.icon(
                     onPressed: widget.onResume,
                     icon: const Icon(Icons.mic_rounded, size: 18),
-                    label: const Text('Resume now'),
+                    label: Text(
+                      status == EngineStatus.ready ? 'Start now' : 'Resume now',
+                    ),
                     style: TextButton.styleFrom(foregroundColor: onContainer),
                   ),
                 ),

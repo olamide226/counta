@@ -172,6 +172,12 @@ class FakeAudioSource implements AudioSource {
     _controller?.add(Uint8List(bytes));
   }
 
+  /// A frame loud enough to be someone speaking: a square wave at
+  /// [amplitude] of 32767. 3200 bytes is 100 ms at 16 kHz mono.
+  void emitSpeech({int bytes = 3200, int amplitude = 3000}) {
+    _controller?.add(loudFrame(bytes: bytes, amplitude: amplitude));
+  }
+
   @override
   Future<void> stop() async {
     stopCount++;
@@ -359,4 +365,13 @@ class ReleaseCall {
   String toString() =>
       'ReleaseCall($blockId, streamed: $streamedSecs, detections: $detections, '
       'eligible: $eligibleForRefund)';
+}
+
+/// Little-endian PCM16 at a steady [amplitude], alternating sign.
+Uint8List loudFrame({int bytes = 3200, int amplitude = 3000}) {
+  final data = ByteData(bytes);
+  for (var i = 0; i + 1 < bytes; i += 2) {
+    data.setInt16(i, (i ~/ 2).isEven ? amplitude : -amplitude, Endian.little);
+  }
+  return data.buffer.asUint8List();
 }

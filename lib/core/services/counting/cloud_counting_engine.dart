@@ -13,6 +13,7 @@ import '../../../domain/counting/counting_engine.dart';
 import '../../../domain/counting/phrase_matcher.dart';
 import '../../../domain/counting/speech_socket.dart';
 import '../../../domain/counting/transcript_segment.dart';
+import '../../../domain/counting/voice_activity_detector.dart';
 
 /// Supplies the credential for the next Deepgram connection.
 ///
@@ -299,6 +300,11 @@ class CloudCountingEngine implements CountingEngine {
   /// How often the silent-connection watchdog checks the latest activity.
   final Duration transcriptionWatchdogInterval;
 
+  /// Waits to hear the user before buying streaming time and connecting.
+  /// The app turns it on; tests and the debug screen want a session that
+  /// connects the moment it starts.
+  final bool startOnVoice;
+
   final StreamController<CountEvent> _countsController =
       StreamController<CountEvent>.broadcast();
   final StreamController<EngineStatus> _statusController =
@@ -396,6 +402,18 @@ class CloudCountingEngine implements CountingEngine {
   /// than this has bigger problems than a gap in the audio.
   static const int _maxPreConnectFrames = 500;
 
+  /// Session byte offset of the first frame in [_preConnectFrames]. Zero
+  /// when the buffer runs from the start of capture; later when the wait for
+  /// a voice has dropped the silence before it.
+  int _preConnectStartByte = 0;
+  int _preConnectBytes = 0;
+
+  /// Listening for the user to start speaking, when [startOnVoice] is on.
+  VoiceActivityDetector? _voiceGate;
+
+  /// Audio kept from before speech was heard, so the first word is whole.
+  static const Duration _preRoll = Duration(milliseconds: 1500);
+
   /// Total audio captured this session, in bytes.
   int _capturedBytes = 0;
 
@@ -447,6 +465,7 @@ class CloudCountingEngine implements CountingEngine {
     this.maxReconnectBackoff = const Duration(seconds: 15),
     this.transcriptionSilenceTimeout = const Duration(seconds: 20),
     this.transcriptionWatchdogInterval = const Duration(seconds: 5),
+    this.startOnVoice = false,
   }) : assert(
          tokenProvider != null || blockService != null,
          'A voice session needs a credential source: a block service in '
@@ -519,6 +538,9 @@ class CloudCountingEngine implements CountingEngine {
     _lastSocketActivityAt = null;
     _lastAudioFrameAt = null;
     _preConnectFrames.clear();
+    _preConnectStartByte = 0;
+    _preConnectBytes = 0;
+    _voiceGate = null;
     _awaitingFirstConnect = true;
     _capturedBytes = 0;
     _streamSeq = 0;
@@ -550,6 +572,13 @@ class CloudCountingEngine implements CountingEngine {
     // question raced the first and could answer for a different moment.
     if (!await _startConfirmedCapture()) return;
     if (_stopped) return;
+
+    if (startOnVoice) {
+      // Nothing is bought until the user speaks. The silence before that
+      // used to be paid for, by them and by us.
+      _armVoiceGate();
+      return;
+    }
 
     // Tears the whole session down itself before it throws; the caller still
     // gets the reason.
@@ -999,6 +1028,9 @@ class CloudCountingEngine implements CountingEngine {
     _restarting = false;
     _streamGeneration++;
     _expiredWhileRenewing = false;
+    // Re-armed on resume if it never got as far as hearing anyone.
+    _voiceGate = null;
+    _clearPreConnect();
     _cancelTimers();
     _reconnectAttempts = 0;
     _recoveringSince = null;
@@ -1017,6 +1049,13 @@ class CloudCountingEngine implements CountingEngine {
 
   @override
   Future<void> resume() async {
+    // Waiting to hear the user, and asked to start anyway: a voice too quiet
+    // to notice should not leave them stuck.
+    if (!_stopped && _voiceGate != null && !_paused) {
+      _voiceGate = null;
+      await _restartStreaming(firstConnect: true);
+      return;
+    }
     if (_stopped || !_paused || _restarting) return;
     _restarting = true;
     try {
@@ -1040,7 +1079,27 @@ class CloudCountingEngine implements CountingEngine {
     }
     if (_stopped || !_paused) return;
     _paused = false;
-    await _restartStreaming();
+    // A call that came before the user had said anything: go back to
+    // waiting for them, rather than buying time for more silence.
+    if (startOnVoice && _awaitingFirstConnect) {
+      _armVoiceGate();
+      return;
+    }
+    await _restartStreaming(firstConnect: _awaitingFirstConnect);
+  }
+
+  void _armVoiceGate() {
+    _clearPreConnect();
+    _voiceGate = VoiceActivityDetector(
+      bytesPerSecond: _audioSource.bytesPerSecond,
+    );
+    _setStatus(EngineStatus.ready);
+    _report('Ready when you are. Voice minutes start when you start speaking.');
+  }
+
+  void _clearPreConnect() {
+    _preConnectFrames.clear();
+    _preConnectBytes = 0;
   }
 
   /// Streams again on a fresh connection, buying a fresh block if the one in
@@ -1049,16 +1108,27 @@ class CloudCountingEngine implements CountingEngine {
   ///
   /// Retries for [reconnectWindow] like any other recovery. Only running out
   /// of minutes, or the window itself, ends the session.
-  Future<void> _restartStreaming({bool forgetBlock = false}) async {
+  Future<void> _restartStreaming({
+    bool forgetBlock = false,
+    bool firstConnect = false,
+  }) async {
     if (_stopped || _paused || _restarting) return;
     _restarting = true;
     final generation = ++_streamGeneration;
     bool stale() => _stopped || generation != _streamGeneration;
     try {
       _cancelTimers();
-      _recoveringSince ??= DateTime.now();
-      _setStatus(EngineStatus.reconnecting);
-      _report('Reconnecting voice counting…');
+      // A first connect is not a recovery: nothing was lost, so there is no
+      // downtime to bank and nothing to announce as "reconnected".
+      final since = firstConnect
+          ? DateTime.now()
+          : (_recoveringSince ??= DateTime.now());
+      if (firstConnect) {
+        _setStatus(EngineStatus.connecting);
+      } else {
+        _setStatus(EngineStatus.reconnecting);
+        _report('Reconnecting voice counting…');
+      }
       await _closeConnections();
       // The block is spent, or the server has said it no longer knows it;
       // asking for a token on it would only earn a refusal.
@@ -1086,15 +1156,18 @@ class CloudCountingEngine implements CountingEngine {
             'tapping still works.',
           );
           return;
+        } on VoiceUnavailable catch (e) {
+          await _endStreaming(EngineStatus.notConfigured, e.message);
+          return;
         } catch (e) {
           debugPrint('Voice restart attempt failed: $e');
         }
 
-        final waited = DateTime.now().difference(_recoveringSince!);
+        final waited = DateTime.now().difference(since);
         if (waited >= reconnectWindow) {
           await _endStreaming(
             EngineStatus.error,
-            "Couldn't reconnect voice counting. Your count is safe and "
+            "Couldn't connect voice counting. Your count is safe and "
             'tapping still works.',
           );
           return;
@@ -1160,6 +1233,7 @@ class CloudCountingEngine implements CountingEngine {
     // run we are ending.
     _stopped = true;
     _running = false;
+    _voiceGate = null;
     _paused = false;
     _restarting = false;
     _streamGeneration++;
@@ -1309,16 +1383,17 @@ class CloudCountingEngine implements CountingEngine {
     if (primary == null) return;
     _awaitingFirstConnect = false;
 
-    // The buffer starts at the first captured frame, so its first byte is the
-    // session's byte zero. (Overflow drops the newest frames, which leaves a
-    // gap in the middle of the flush — only reachable on a connect that takes
-    // more than ten seconds.)
-    var byte = 0;
+    // The buffer starts at [_preConnectStartByte]: the first captured frame,
+    // or the start of the lead-in kept from before a voice was heard.
+    // (Overflow drops the newest frames, which leaves a gap in the middle of
+    // the flush — only reachable on a connect that takes more than ten
+    // seconds.)
+    var byte = _preConnectStartByte;
     for (final frame in _preConnectFrames) {
       _sendFrame(primary, frame, byte);
       byte += frame.lengthInBytes;
     }
-    _preConnectFrames.clear();
+    _clearPreConnect();
   }
 
   /// Hands one frame to one connection, registering where that connection's
@@ -1358,8 +1433,29 @@ class CloudCountingEngine implements CountingEngine {
         _capturedBytes += data.lengthInBytes;
 
         if (_awaitingFirstConnect) {
+          if (_paused) return;
+          if (_preConnectFrames.isEmpty) _preConnectStartByte = frameStartByte;
           if (_preConnectFrames.length < _maxPreConnectFrames) {
             _preConnectFrames.add(data);
+            _preConnectBytes += data.lengthInBytes;
+          }
+
+          final gate = _voiceGate;
+          if (gate != null) {
+            // Still waiting to hear them: keep only the lead-in, so the
+            // flush starts just before they spoke, not at Start.
+            final keep =
+                _audioSource.bytesPerSecond * _preRoll.inMilliseconds ~/ 1000;
+            while (_preConnectBytes > keep && _preConnectFrames.length > 1) {
+              final dropped = _preConnectFrames.removeAt(0);
+              _preConnectBytes -= dropped.lengthInBytes;
+              _preConnectStartByte += dropped.lengthInBytes;
+            }
+            if (gate.add(data)) {
+              _voiceGate = null;
+              debugPrint('Voice heard at level ${gate.lastLevel.round()}');
+              unawaited(_restartStreaming(firstConnect: true));
+            }
           }
           return;
         }

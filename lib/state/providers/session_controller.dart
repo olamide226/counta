@@ -35,6 +35,9 @@ class SessionController extends ChangeNotifier {
   /// [EngineStatus.notConfigured] as a success. Ask what a session *is*, not
   /// what it is not, and a status added later cannot land on the wrong side.
   static const runningStatuses = {
+    // Listening for the user to start speaking: the session has begun, it
+    // just has not bought anything yet.
+    EngineStatus.ready,
     EngineStatus.connecting,
     EngineStatus.live,
     EngineStatus.reconnecting,
@@ -243,6 +246,9 @@ class SessionController extends ChangeNotifier {
       _voiceRan = true;
       _voiceStop = null;
     }
+    // Waiting for a voice is a session that has started: the sheet has
+    // closed, so a failure after this is told on the counter screen.
+    if (newStatus == EngineStatus.ready) _voiceRan = true;
     if (_voiceRan && isVoiceActive) {
       // Only a session that was running, ending without being asked to.
       if (newStatus == EngineStatus.exhausted) {
