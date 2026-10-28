@@ -9,6 +9,7 @@ import 'package:uuid/uuid.dart';
 import 'audio_source.dart';
 import 'deepgram_socket.dart';
 import '../../../domain/counting/block_service.dart';
+import '../../../domain/counting/open_block_store.dart';
 import '../../../domain/counting/counting_engine.dart';
 import '../../../domain/counting/phrase_matcher.dart';
 import '../../../domain/counting/speech_socket.dart';
@@ -300,6 +301,36 @@ class CloudCountingEngine implements CountingEngine {
   /// How often the silent-connection watchdog checks the latest activity.
   final Duration transcriptionWatchdogInterval;
 
+  /// Where held blocks are noted, so a run killed holding one can be settled
+  /// by the next (see [OpenBlockStore]). Null in tests that do not care.
+  final OpenBlockStore? openBlocks;
+
+  /// How often a held block's "still streaming" moment is refreshed.
+  static const Duration _aliveEvery = Duration(seconds: 10);
+  DateTime? _lastAliveNoted;
+
+  void _noteAlive(String blockId, [DateTime? at]) {
+    final store = openBlocks;
+    if (store == null) return;
+    // A note that cannot be written costs at most a killed run's refund;
+    // it must never cost the session.
+    unawaited(
+      store.remember(blockId, at ?? DateTime.now()).catchError((Object e) {
+        debugPrint('Held block not noted: $e');
+      }),
+    );
+  }
+
+  void _forgetBlock(String blockId) {
+    final store = openBlocks;
+    if (store == null) return;
+    unawaited(
+      store.forget(blockId).catchError((Object e) {
+        debugPrint('Settled block not forgotten: $e');
+      }),
+    );
+  }
+
   /// Waits to hear the user before buying streaming time and connecting.
   /// The app turns it on; tests and the debug screen want a session that
   /// connects the moment it starts.
@@ -465,6 +496,7 @@ class CloudCountingEngine implements CountingEngine {
     this.maxReconnectBackoff = const Duration(seconds: 15),
     this.transcriptionSilenceTimeout = const Duration(seconds: 20),
     this.transcriptionWatchdogInterval = const Duration(seconds: 5),
+    this.openBlocks,
     this.startOnVoice = false,
   }) : assert(
          tokenProvider != null || blockService != null,
@@ -812,7 +844,15 @@ class CloudCountingEngine implements CountingEngine {
   // --- Block lifecycle -----------------------------------------------------
 
   void _adoptBlock(VoiceBlock block) {
-    _active?.cancel();
+    final previous = _active;
+    previous?.cancel();
+    // A renewal supersedes the block it replaces server-side, so there is
+    // nothing left to settle for it.
+    if (previous != null && previous.block.id != block.id) {
+      _forgetBlock(previous.block.id);
+    }
+    _noteAlive(block.id);
+    _lastAliveNoted = DateTime.now();
     final active = _ActiveBlock(block);
     _active = active;
     _blocksUsed++;
@@ -851,6 +891,9 @@ class CloudCountingEngine implements CountingEngine {
       // than a second concurrent session, so it grants and supersedes instead
       // of answering 409.
       final block = _pendingBlock ??= await service.acquire(sessionId);
+      // Held from this moment, even before it carries anything: a run killed
+      // mid-renewal must still hand it back.
+      _noteAlive(block.id);
       if (generation != _streamGeneration && !_stopped) {
         // Paused or restarted while the grant was in flight: whatever replaced
         // this streaming owns its own block, so this one goes straight back.
@@ -1301,6 +1344,10 @@ class CloudCountingEngine implements CountingEngine {
     required int streamedSecs,
     required int detections,
   }) async {
+    // Noted with the moment streaming stopped, so a release that fails here
+    // — offline, the app killed mid-request — is settled by the next run as
+    // ending now, not when it gets round to it.
+    _noteAlive(block.id);
     try {
       await service
           .release(
@@ -1314,10 +1361,14 @@ class CloudCountingEngine implements CountingEngine {
                 detections == 0 && streamedSecs <= refundWindow.inSeconds,
           )
           .timeout(releaseTimeout);
+      _forgetBlock(block.id);
       // Nothing is reported from here. Every early stop now returns the
       // unused minutes, so "that block was too short to charge for" was wrong
       // for most refunds and noise on all of them. What a stop cost is shown
       // from the release itself, by whoever observes the block service.
+    } on BlockNotFound {
+      // Nothing for the server to settle, so nothing to keep.
+      _forgetBlock(block.id);
     } catch (_) {
       // Best effort by design (requirement 15.3): a block nobody reported on
       // is left unreconciled server-side. Ending a session must not wait on a
@@ -1467,6 +1518,16 @@ class CloudCountingEngine implements CountingEngine {
         if (primary != null) _sendFrame(primary, data, frameStartByte);
         final pending = _pending;
         if (pending != null) _sendFrame(pending, data, frameStartByte);
+
+        final active = _active;
+        final noted = _lastAliveNoted;
+        if (active != null &&
+            primary != null &&
+            (noted == null ||
+                DateTime.now().difference(noted) >= _aliveEvery)) {
+          _lastAliveNoted = DateTime.now();
+          _noteAlive(active.block.id);
+        }
       },
       onError: (Object error) {
         final confirmation = _captureConfirmed;

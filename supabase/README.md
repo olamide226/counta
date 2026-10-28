@@ -131,6 +131,8 @@ figure. The one exception is a session that never got going: released inside
 `REFUND_WINDOW_SECONDS` with `detections` present and zero, it costs nothing.
 An omitted count is no report at all, not a report of zero.
 
+**A block handed back late.** An app killed mid-session never releases its block, and the server cannot tell when it stopped, so the whole block was kept. The next run of the app hands such a block back with `ended_at` (ISO 8601): the last moment it was known to be streaming. The server charges up to that moment instead of up to now, kept between the grant and both now and the block's expiry, and stamps it as `released_at` so retries agree. It is the one thing a client says that affects the charge, so a release carrying it is **never** the free never-started refund: at least one credit is charged. A modified client claiming every block stopped early therefore pays one credit in five, not nothing, and every claim is logged on `block_released` with `claimed_end` and `claimed_early_seconds`. Anything other than a time is a 400 `invalid_ended_at`.
+
 The answer says what happened — `used_credits`, `refunded_credits`, and
 `balance` when it changed. A second release of the same block answers
 `refunded: false` and moves nothing.

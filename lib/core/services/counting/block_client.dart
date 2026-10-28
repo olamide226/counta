@@ -80,6 +80,7 @@ class BlockClient implements BlockService {
     required int streamedSecs,
     required int detections,
     required bool eligibleForRefund,
+    DateTime? endedAt,
   }) async {
     final body = await _post(_releaseUrl, {
       'block_id': blockId,
@@ -89,6 +90,7 @@ class BlockClient implements BlockService {
       'streamed_secs': streamedSecs < 0 ? 0 : streamedSecs,
       'detections': detections < 0 ? 0 : detections,
       'eligible_for_refund': eligibleForRefund,
+      if (endedAt != null) 'ended_at': endedAt.toUtc().toIso8601String(),
     });
 
     if (body.status != 200) throw _commonFailure(body);

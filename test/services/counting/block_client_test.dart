@@ -445,6 +445,41 @@ void main() {
       });
     });
 
+    test('a late hand-back says when streaming stopped', () async {
+      final client = clientAnswering(200, {
+        'refunded': true,
+        'balance': 12,
+        'used_credits': 2,
+        'refunded_credits': 3,
+      });
+      addTearDown(client.dispose);
+
+      await client.release(
+        blockId,
+        streamedSecs: 0,
+        detections: 0,
+        eligibleForRefund: false,
+        // Local time on the phone; the server is sent UTC.
+        endedAt: DateTime.utc(2026, 10, 28, 11, 43, 20).toLocal(),
+      );
+
+      expect(sent.single.body['ended_at'], '2026-10-28T11:43:20.000Z');
+    });
+
+    test('an ordinary release sends no end time', () async {
+      final client = clientAnswering(200, {'refunded': false});
+      addTearDown(client.dispose);
+
+      await client.release(
+        blockId,
+        streamedSecs: 40,
+        detections: 3,
+        eligibleForRefund: false,
+      );
+
+      expect((sent.single.body as Map).containsKey('ended_at'), isFalse);
+    });
+
     test('a used block reports no refund and no balance', () async {
       final client = clientAnswering(200, {'refunded': false});
       addTearDown(client.dispose);

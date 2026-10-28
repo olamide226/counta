@@ -54,12 +54,14 @@ class ObservedBlockService implements BlockService {
     required int streamedSecs,
     required int detections,
     required bool eligibleForRefund,
+    DateTime? endedAt,
   }) async {
     final release = await _inner.release(
       blockId,
       streamedSecs: streamedSecs,
       detections: detections,
       eligibleForRefund: eligibleForRefund,
+      endedAt: endedAt,
     );
     onReleased(release);
     return release;

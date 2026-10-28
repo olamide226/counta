@@ -9,6 +9,7 @@ import '../../core/services/counting/tap_counting_engine.dart';
 import '../../domain/counting/counting_engine.dart';
 import '../../domain/models/count_session.dart';
 import '../../domain/models/counter_state.dart';
+import 'hive_providers.dart';
 import 'services_provider.dart';
 import 'settings_provider.dart';
 import 'supabase_providers.dart';
@@ -91,6 +92,8 @@ final voiceEngineFactoryProvider = Provider<CountingEngine Function()>((ref) {
   return () => CloudCountingEngine(
     blockService: blocks,
     tokenProvider: devToken,
+    // Read when a session starts, by which point storage is open.
+    openBlocks: ref.read(openBlockStoreProvider),
     // Nothing is bought until the user speaks.
     startOnVoice: true,
   );

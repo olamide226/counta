@@ -124,6 +124,89 @@ Deno.test("grant: a renewal on a short balance is short too", async () => {
   assertEquals(renewal.body.balance_after, 0);
 });
 
+Deno.test("release: a killed run hands its block back with when it stopped", async () => {
+  const h = harness();
+  const grant = await call(h.deps, grantReq());
+
+  // The app died 70 s in and is reopened ten minutes later. Measured from
+  // now, that was the whole block; by when it stopped, two minutes.
+  h.clock.now = new Date("2026-09-07T12:10:00.000Z");
+  const { status, body } = await call(
+    h.deps,
+    releaseReq({
+      block_id: grant.body.block_id,
+      streamed_secs: 0,
+      detections: 0,
+      ended_at: "2026-09-07T12:01:10.000Z",
+    }),
+  );
+
+  assertEquals(status, 200);
+  assertEquals(body.used_credits, 2);
+  assertEquals(body.refunded_credits, 3);
+  const released = h.logs.find((l) => l.event === "block_released");
+  assertEquals(released?.fields.claimed_early_seconds, 530);
+});
+
+Deno.test("release: a claimed end is always charged at least a minute", async () => {
+  const h = harness();
+  const grant = await call(h.deps, grantReq());
+
+  // Claiming it stopped the instant it started, with nothing counted, is
+  // what a never-started session looks like — but on a claim it is not
+  // taken at its word.
+  h.clock.now = new Date("2026-09-07T12:05:00.000Z");
+  const { body } = await call(
+    h.deps,
+    releaseReq({
+      block_id: grant.body.block_id,
+      streamed_secs: 0,
+      detections: 0,
+      eligible_for_refund: true,
+      ended_at: "2026-09-07T12:00:00.000Z",
+    }),
+  );
+
+  assertEquals(body.used_credits, 1);
+  assertEquals(body.refunded_credits, 4);
+});
+
+Deno.test("release: a claimed end is kept inside what the server knows", async () => {
+  const h = harness();
+  const grant = await call(h.deps, grantReq());
+
+  // From the future: no more than the block itself.
+  h.clock.now = new Date("2026-09-07T12:10:00.000Z");
+  const late = await call(
+    h.deps,
+    releaseReq({
+      block_id: grant.body.block_id,
+      streamed_secs: 0,
+      detections: 0,
+      ended_at: "2026-09-07T13:00:00.000Z",
+    }),
+  );
+  assertEquals(late.body.used_credits, 5);
+  assertEquals(late.body.refunded_credits, 0);
+});
+
+Deno.test("release: a claimed end that is not a time is refused", async () => {
+  const h = harness();
+  const grant = await call(h.deps, grantReq());
+  const { status, body } = await call(
+    h.deps,
+    releaseReq({
+      block_id: grant.body.block_id,
+      streamed_secs: 0,
+      detections: 0,
+      ended_at: "yesterday-ish",
+    }),
+  );
+  assertEquals(status, 400);
+  assertEquals(body.error, "invalid_ended_at");
+  assertEquals(h.balance.calls.filter((c) => c.op === "refund").length, 0);
+});
+
 Deno.test("release: a short block refunds against its own size", async () => {
   const h = harness({ initialBalance: 3 });
   const grant = await call(h.deps, grantReq());

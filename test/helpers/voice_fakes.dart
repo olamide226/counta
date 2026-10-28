@@ -275,6 +275,7 @@ class FakeBlockService implements BlockService {
     required int streamedSecs,
     required int detections,
     required bool eligibleForRefund,
+    DateTime? endedAt,
   }) async {
     releases.add(
       ReleaseCall(
@@ -282,6 +283,7 @@ class FakeBlockService implements BlockService {
         streamedSecs: streamedSecs,
         detections: detections,
         eligibleForRefund: eligibleForRefund,
+        endedAt: endedAt,
       ),
     );
     final answer = releaseAnswer;
@@ -354,12 +356,14 @@ class ReleaseCall {
     required this.streamedSecs,
     required this.detections,
     required this.eligibleForRefund,
+    this.endedAt,
   });
 
   final String blockId;
   final int streamedSecs;
   final int detections;
   final bool eligibleForRefund;
+  final DateTime? endedAt;
 
   @override
   String toString() =>

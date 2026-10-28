@@ -8,6 +8,7 @@ const String settingsBoxName = 'settings';
 const String sessionsBoxName = 'sessions';
 const String sessionCheckpointBoxName = 'session_checkpoint';
 const String phraseHistoryBoxName = 'phrase_history';
+const String openBlocksBoxName = 'open_blocks';
 
 Future<void> initHive() async {
   await Hive.initFlutter();
@@ -28,6 +29,8 @@ Future<void> initHive() async {
     // Untyped: entries are stored as JSON strings, so remembering a new shape
     // of setup never needs a type id or an adapter regeneration.
     Hive.openBox(phraseHistoryBoxName),
+    // Paid voice blocks held, so a killed run can be settled by the next.
+    Hive.openBox(openBlocksBoxName),
   ]);
 }
 
@@ -36,3 +39,4 @@ Box<CountSession> getSessionsBox() => Hive.box<CountSession>(sessionsBoxName);
 Box<CountSession> getSessionCheckpointBox() =>
     Hive.box<CountSession>(sessionCheckpointBoxName);
 Box getPhraseHistoryBox() => Hive.box(phraseHistoryBoxName);
+Box getOpenBlocksBox() => Hive.box(openBlocksBoxName);

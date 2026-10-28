@@ -313,12 +313,17 @@ abstract class BlockService {
   /// non-integer count as no report at all rather than as zero, so omitting it
   /// forfeits the refund it might otherwise allow.
   ///
+  /// [endedAt] is for a block handed back late, by a run after the one that
+  /// was killed holding it: when that run actually stopped streaming. The
+  /// server charges up to then (at least a minute) instead of up to now.
+  ///
   /// Throws a [BlockFailure] and nothing else.
   Future<BlockRelease> release(
     String blockId, {
     required int streamedSecs,
     required int detections,
     required bool eligibleForRefund,
+    DateTime? endedAt,
   });
 
   /// What the user has, and what a session needs. Moves nothing.
