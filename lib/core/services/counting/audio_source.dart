@@ -207,7 +207,17 @@ class AudioSource {
       return;
     }
 
-    final recordStream = await _recorder.startStream(recordConfig(sampleRate));
+    final Stream<Uint8List> recordStream;
+    try {
+      recordStream = await _recorder.startStream(recordConfig(sampleRate));
+    } catch (error, stack) {
+      // iOS can refuse to start the microphone — right after a call, or from
+      // the background. Unhandled, the refusal vanished: no frame and no
+      // error ever reached the caller, and a resume waiting on either waited
+      // for ever, with "Resume now" ignored behind it.
+      _controller?.addError(error, stack);
+      return;
+    }
 
     _lastFrameAt = DateTime.now();
     _startStallWatchdog();
@@ -239,8 +249,12 @@ class AudioSource {
 
       final silentFor = DateTime.now().difference(last);
       if (silentFor >= stallTimeout) {
-        _stallTimer?.cancel();
-        _stallTimer = null;
+        // Keeps saying so, every [stallTimeout], for as long as it lasts.
+        // It used to say it once and stop watching, and a stall that landed
+        // while the engine was busy reconnecting was ignored and never
+        // raised again: the session sat on "Listening" with a dead
+        // microphone, counting nothing, until the user stopped it.
+        _lastFrameAt = DateTime.now();
         _controller?.addError(AudioSourceStalled(silentFor));
       }
     });

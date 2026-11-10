@@ -1,3 +1,6 @@
+import 'dart:async';
+import 'dart:typed_data';
+
 import 'package:flutter_test/flutter_test.dart';
 import 'package:record/record.dart';
 
@@ -14,7 +17,65 @@ class _RefusingRecorder implements AudioRecorder {
   dynamic noSuchMethod(Invocation invocation) => super.noSuchMethod(invocation);
 }
 
+/// Grants permission, then [startStream] either throws or hands back a
+/// stream that never delivers.
+class _ScriptedRecorder implements AudioRecorder {
+  _ScriptedRecorder({this.refuseToStart = false});
+
+  final bool refuseToStart;
+  final _frames = StreamController<Uint8List>();
+
+  @override
+  Future<bool> hasPermission() async => true;
+
+  @override
+  Future<Stream<Uint8List>> startStream(RecordConfig config) async {
+    if (refuseToStart) throw StateError('cannot start recording now');
+    return _frames.stream;
+  }
+
+  @override
+  Future<bool> isRecording() async => false;
+
+  @override
+  Future<void> dispose() async {}
+
+  @override
+  dynamic noSuchMethod(Invocation invocation) => super.noSuchMethod(invocation);
+}
+
 void main() {
+  test('a recorder that refuses to start says so on the stream', () async {
+    // Regression: the refusal was thrown nowhere anyone listened, so no
+    // frame and no error ever came, and a resume waiting on either waited
+    // for ever.
+    final source = AudioSource(
+      recorder: _ScriptedRecorder(refuseToStart: true),
+    );
+    await expectLater(source.start(), emitsError(isA<StateError>()));
+  });
+
+  test(
+    'a silent microphone is reported for as long as it stays silent',
+    () async {
+      // Regression: the stall was raised once and the watchdog stopped. One
+      // that landed while the engine was busy was lost, and the session sat
+      // on "Listening" with a dead microphone.
+      final source = AudioSource(recorder: _ScriptedRecorder());
+      final stalls = <Object>[];
+      final sub = source.start().listen((_) {}, onError: stalls.add);
+
+      await Future<void>.delayed(const Duration(milliseconds: 7300));
+
+      expect(
+        stalls.whereType<AudioSourceStalled>().length,
+        greaterThanOrEqualTo(2),
+      );
+      await sub.cancel();
+    },
+    timeout: const Timeout(Duration(seconds: 15)),
+  );
+
   test('a refused microphone is reported as a typed failure', () async {
     // The engine maps AudioSourcePermissionDenied to
     // EngineStatus.permissionDenied, which is what puts the settings link on

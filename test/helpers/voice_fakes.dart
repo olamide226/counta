@@ -150,6 +150,13 @@ class FakeAudioSource implements AudioSource {
   /// What [resumeAfterInterruption] answers.
   bool resumeSucceeds = true;
 
+  /// The recorder never answers the resume at all.
+  bool resumeHangs = false;
+
+  /// The recorder says it resumed, but no audio follows: what a session
+  /// stuck on "Listening" after a call looked like.
+  bool resumeDeliversAudio = true;
+
   @override
   Stream<void> get interruptionEnded => _interruptionEnded.stream;
 
@@ -162,10 +169,13 @@ class FakeAudioSource implements AudioSource {
   void endInterruption() => _interruptionEnded.add(null);
 
   @override
-  Future<bool> resumeAfterInterruption() async {
+  Future<bool> resumeAfterInterruption() {
     resumes++;
-    if (resumeSucceeds) scheduleMicrotask(() => emitFrame());
-    return resumeSucceeds;
+    if (resumeHangs) return Completer<bool>().future;
+    if (resumeSucceeds && resumeDeliversAudio) {
+      scheduleMicrotask(() => emitFrame());
+    }
+    return Future.value(resumeSucceeds);
   }
 
   void emitFrame([int bytes = 320]) {
