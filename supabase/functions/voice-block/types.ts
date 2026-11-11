@@ -71,6 +71,35 @@ export interface BalanceProvider {
    * two sites and not every balance movement.
    */
   grant(userId: string, reference: string, credits: number): Promise<number>;
+  /**
+   * Deletes the user's customer record, ledger and all, for account deletion.
+   *
+   * A customer the ledger never had counts as forgotten: most deleted accounts
+   * are guests who never bought anything, and "nothing to delete" is the
+   * outcome being asked for, not a failure.
+   */
+  forget(userId: string): Promise<void>;
+}
+
+/**
+ * The Supabase Auth users behind the bearer tokens.
+ *
+ * A port rather than reaching into the admin client from a route, for the same
+ * reason the ledger is one: the handler stays a pure function of (request,
+ * deps), and the two questions it asks of Auth are testable without a stack.
+ */
+export interface Accounts {
+  /**
+   * Whether the user exists and signed in anonymously. A user who is gone is
+   * not a guest: /merge must never treat "unknown" as "safe to empty".
+   */
+  isGuest(userId: string): Promise<boolean>;
+  /**
+   * Deletes the Auth user, which cascades to every `counta.*` row keyed on it.
+   * A user who is already gone counts as done, so a retried deletion succeeds;
+   * any other failure rejects with ProviderError.
+   */
+  remove(userId: string): Promise<void>;
 }
 
 export interface TokenMinter {
@@ -185,6 +214,8 @@ export interface HandlerConfig {
 
 export interface Deps {
   auth: Authenticator;
+  /** Guest checks for /merge and deletion for /delete-account. */
+  accounts: Accounts;
   balance: BalanceProvider;
   minter: TokenMinter;
   blocks: BlockStore;

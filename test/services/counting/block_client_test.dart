@@ -717,6 +717,57 @@ void main() {
       }
     });
   });
+  group('BlockClient account calls', () {
+    test('claimGuestMinutes posts the guest token to /merge', () async {
+      final client = clientAnswering(200, {'moved': 30, 'balance': 90});
+
+      expect(await client.claimGuestMinutes('guest-jwt'), 30);
+      expect(sent.single.request.url.path, '/functions/v1/voice-block/merge');
+      expect(sent.single.body, {'guest_token': 'guest-jwt'});
+    });
+
+    test(
+      'a guest the server cannot use moves nothing, without retrying',
+      () async {
+        expect(
+          await clientAnswering(400, {
+            'error': 'invalid_guest',
+          }).claimGuestMinutes('guest-jwt'),
+          0,
+        );
+        expect(
+          await clientAnswering(403, {
+            'error': 'not_a_guest',
+          }).claimGuestMinutes('guest-jwt'),
+          0,
+        );
+      },
+    );
+
+    test('an outage on /merge is a failure the caller can retry', () async {
+      await expectLater(
+        clientAnswering(503, {
+          'error': 'provider_unavailable',
+        }).claimGuestMinutes('guest-jwt'),
+        throwsA(isA<BlockProviderUnavailable>()),
+      );
+    });
+
+    test('deleteAccount posts to /delete-account', () async {
+      await clientAnswering(200, {'deleted': true}).deleteAccount();
+      expect(
+        sent.single.request.url.path,
+        '/functions/v1/voice-block/delete-account',
+      );
+    });
+
+    test('a failed delete throws', () async {
+      await expectLater(
+        clientAnswering(503, {'error': 'provider_unavailable'}).deleteAccount(),
+        throwsA(isA<BlockProviderUnavailable>()),
+      );
+    });
+  });
 }
 
 /// Stands in for a socket that never connects.

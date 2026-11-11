@@ -10,6 +10,7 @@ import { handleVoiceBlock } from "../handler.ts";
 import { MemoryRateLimiter } from "../ratelimit.ts";
 import { BlockConflictError, ProviderError } from "../types.ts";
 import type {
+  Accounts,
   AttemptBudget,
   Authenticator,
   BalanceProvider,
@@ -97,6 +98,10 @@ export class FakeBalanceProvider implements BalanceProvider {
 
   spend(userId: string, blockId: string, credits: number): Promise<number> {
     this.calls.push({ op: "spend", userId, blockId, credits });
+    if (this.failSpends > 0) {
+      this.failSpends--;
+      return Promise.reject(new ProviderError("unavailable", "spend failed"));
+    }
     return this.apply(userId, `spend:${blockId}`, -credits);
   }
 
@@ -111,6 +116,20 @@ export class FakeBalanceProvider implements BalanceProvider {
 
   /** While positive, the next grant rejects and this decrements. */
   failGrants = 0;
+
+  /** While positive, the next spend rejects and this decrements. */
+  failSpends = 0;
+
+  /** When set, forget() rejects with it. */
+  failForgetWith?: Error;
+
+  forget(userId: string): Promise<void> {
+    this.calls.push({ op: "forget", userId });
+    if (this.failForgetWith) return Promise.reject(this.failForgetWith);
+    // The customer is gone, ledger and all; a later read starts from nothing.
+    this.balances.set(userId, 0);
+    return Promise.resolve();
+  }
 
   grant(userId: string, reference: string, credits: number): Promise<number> {
     this.calls.push({ op: "grant", userId, blockId: reference, credits });
@@ -131,6 +150,34 @@ export class FakeBalanceProvider implements BalanceProvider {
 
   private current(userId: string): number {
     return this.balances.get(userId) ?? this.initialBalance;
+  }
+}
+
+/**
+ * Supabase Auth from memory: who is a guest, and who has been deleted. Every
+ * user not listed as a guest is a real account, so a test has to say a source
+ * is a guest before /merge will empty it — the safe default.
+ */
+export class FakeAccounts implements Accounts {
+  readonly guests = new Set<string>();
+  readonly removed: string[] = [];
+  /** When set, remove() rejects with it. */
+  failRemoveWith?: Error;
+
+  constructor(guests: Iterable<string> = []) {
+    for (const id of guests) this.guests.add(id);
+  }
+
+  isGuest(userId: string): Promise<boolean> {
+    return Promise.resolve(
+      this.guests.has(userId) && !this.removed.includes(userId),
+    );
+  }
+
+  remove(userId: string): Promise<void> {
+    if (this.failRemoveWith) return Promise.reject(this.failRemoveWith);
+    this.removed.push(userId);
+    return Promise.resolve();
   }
 }
 
@@ -249,6 +296,7 @@ export const BALANCE_READ = { max: 3, windowMinutes: 5 };
 
 export interface Harness {
   deps: Deps;
+  accounts: FakeAccounts;
   balance: FakeBalanceProvider;
   minter: FakeTokenMinter;
   blocks: MemoryBlockStore;
@@ -291,6 +339,7 @@ export function harness(
   let seq = 0;
   const deps: Deps = {
     auth: new FakeAuth(),
+    accounts: new FakeAccounts(),
     balance,
     minter,
     blocks,
@@ -322,6 +371,7 @@ export function harness(
   // something else simply does not read the field back.
   return {
     deps,
+    accounts: deps.accounts as FakeAccounts,
     balance: deps.balance as FakeBalanceProvider,
     minter: deps.minter as FakeTokenMinter,
     blocks: deps.blocks as MemoryBlockStore,
@@ -655,6 +705,14 @@ export const trialReq = (
   body: unknown = { platform: "ios", device_token: DEVICE_TOKEN },
   token: string | null = GOOD_TOKEN,
 ) => req("/voice-block/trial", body, token);
+
+export const mergeReq = (
+  body: unknown,
+  token: string | null = GOOD_TOKEN,
+) => req("/voice-block/merge", body, token);
+
+export const deleteAccountReq = (token: string | null = GOOD_TOKEN) =>
+  req("/voice-block/delete-account", {}, token);
 
 export const redeemReq = (
   body: unknown = { code: "SPRING24" },

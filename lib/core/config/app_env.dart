@@ -33,6 +33,27 @@ class AppEnv {
     _ => '',
   };
 
+  /// Google OAuth client ids for signing in. The web client is the audience
+  /// Supabase checks Google's tokens against; iOS also needs its own client.
+  static const String googleWebClientId = String.fromEnvironment(
+    'GOOGLE_WEB_CLIENT_ID',
+  );
+  static const String googleIosClientId = String.fromEnvironment(
+    'GOOGLE_IOS_CLIENT_ID',
+  );
+
+  /// Whether this build can offer "Continue with Google".
+  static bool get hasGoogleSignIn =>
+      googleWebClientId.isNotEmpty &&
+      switch (defaultTargetPlatform) {
+        TargetPlatform.android => true,
+        TargetPlatform.iOS => googleIosClientId.isNotEmpty,
+        _ => false,
+      };
+
+  /// Sign in with Apple is offered on iPhone, where it is native.
+  static bool get hasAppleSignIn => defaultTargetPlatform == TargetPlatform.iOS;
+
   /// False when the build was made without Supabase defines; the app then runs
   /// tap-only and skips backend initialisation instead of crashing.
   static bool get hasSupabase =>

@@ -3,9 +3,11 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../domain/counting/block_service.dart';
 import '../../domain/purchases/minute_store.dart';
+import '../../state/providers/account_provider.dart';
 import '../../state/providers/minute_store_provider.dart';
 import '../../state/providers/voice_minutes_provider.dart';
 import '../widgets/voice_minutes_widgets.dart';
+import 'account_sheet.dart';
 import 'counta_sheet.dart';
 
 /// The one place voice minutes are looked at and added to.
@@ -372,6 +374,8 @@ class _VoiceMinutesSheetState extends ConsumerState<VoiceMinutesSheet> {
     final theme = Theme.of(context);
     final scheme = theme.colorScheme;
     final resumeLabel = widget.resumeLabel;
+    final account = ref.watch(accountProvider);
+    final offerSignIn = account.available && account.isGuest;
     final note = _addedConfirmed
         ? widget.successNote
         : 'They can take a moment to show up.';
@@ -416,6 +420,19 @@ class _VoiceMinutesSheetState extends ConsumerState<VoiceMinutesSheet> {
         ),
       ),
       const SizedBox(height: 20),
+      // A guest who just paid has the most to lose, so this is the one place
+      // the app suggests signing in rather than waiting to be asked.
+      if (offerSignIn) ...[
+        OutlinedButton.icon(
+          onPressed: () => showAccountSheet(context),
+          icon: const Icon(Icons.cloud_upload_outlined),
+          label: const Text('Keep them safe: sign in'),
+          style: OutlinedButton.styleFrom(
+            padding: const EdgeInsets.symmetric(vertical: 14),
+          ),
+        ),
+        const SizedBox(height: 10),
+      ],
       if (resumeLabel != null) ...[
         FilledButton.icon(
           onPressed: () => Navigator.of(context).pop(true),
