@@ -225,6 +225,15 @@ void main() {
       );
       expect(
         SupabaseAuthGateway.isAlreadyLinked(
+          const AuthException(
+            'A user with this email address has already been registered',
+            code: 'email_exists',
+          ),
+        ),
+        isTrue,
+      );
+      expect(
+        SupabaseAuthGateway.isAlreadyLinked(
           const AuthException('Invalid id token', code: 'bad_jwt'),
         ),
         isFalse,

@@ -74,9 +74,14 @@ class SupabaseAuthGateway implements AuthGateway {
   };
 
   /// Whether linking failed because the identity is someone's already.
+  ///
+  /// That includes an account that holds the same email under another
+  /// provider: signing in with Apple and later with Google on the same address
+  /// is one person, and the sign-in that follows lands on that account.
   @visibleForTesting
   static bool isAlreadyLinked(AuthException error) =>
       error.code == ErrorCode.identityAlreadyExists.code ||
+      error.code == ErrorCode.emailExists.code ||
       error.message.toLowerCase().contains('already linked') ||
       error.message.toLowerCase().contains('already exists');
 
