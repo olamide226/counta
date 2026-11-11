@@ -10,7 +10,14 @@ class BuildConfig {
   const BuildConfig._();
 
   /// True for debug and profile builds, false for release.
-  static const bool isDev = kDebugMode || kProfileMode;
+  static const bool isDev =
+      (kDebugMode || kProfileMode) && !_storeScreenshots;
+
+  /// Set by `make store-screenshots`, so a debug build in the simulator shows
+  /// the release app: its name, and no debug tools.
+  static const bool _storeScreenshots = bool.fromEnvironment(
+    'STORE_SCREENSHOTS',
+  );
 
   /// Name shown in the app bar. Mirrors the native launcher name.
   static const String appName = isDev ? 'Counta Dev' : 'Counta';

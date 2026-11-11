@@ -1,4 +1,4 @@
-.PHONY: help setup format lint analyze test test-corpus test-coverage build-runner clean build-ios build-ios-ipa build-android build-appbundle release-preflight build-macos build-web run run-ios run-android run-web doctor icons pull-fixtures supabase-start supabase-stop supabase-test supabase-serve supabase-linked supabase-status supabase-preflight supabase-deploy supabase-secrets supabase-smoke
+.PHONY: help store-screenshots setup format lint analyze test test-corpus test-coverage build-runner clean build-ios build-ios-ipa build-android build-appbundle release-preflight build-macos build-web run run-ios run-android run-web doctor icons pull-fixtures supabase-start supabase-stop supabase-test supabase-serve supabase-linked supabase-status supabase-preflight supabase-deploy supabase-secrets supabase-smoke
 
 # Environment Configuration
 # Automatically loads variables from .env file if present, or CLI overrides.
@@ -388,3 +388,12 @@ supabase-smoke: supabase-linked
 pre-commit: format lint test
 	@echo "✅ Ready to commit!"
 
+
+# Store screenshots from the simulators, at App Store sizes, with demo data.
+# IPHONE / IPAD: simulator UDIDs (`xcrun simctl list devices`). Images land in
+# build/store_screenshots/{iphone,ipad}/.
+IPHONE ?= 948FC822-860F-499E-80CC-3D50F486D2CE
+IPAD ?= 5BD50516-0526-465C-AABC-A4D08F409654
+store-screenshots:
+	scripts/store_screenshots.sh $(IPHONE) iphone
+	scripts/store_screenshots.sh $(IPAD) ipad
