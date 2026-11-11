@@ -52,6 +52,9 @@ dependencies:
   http: ^1.6.0
   purchases_flutter: ^10.14.0
   audio_session: ^0.2.4
+  sign_in_with_apple: ^8.2.0
+  google_sign_in: ^7.2.0
+  crypto: ^3.0.8
 
 dev_dependencies:
   flutter_test:

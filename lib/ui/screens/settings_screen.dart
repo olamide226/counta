@@ -4,8 +4,11 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../../core/theme/sound_mode_presentation.dart';
 
 import '../../domain/models/enums.dart';
+import '../../domain/account/account.dart';
+import '../../state/providers/account_provider.dart';
 import '../../state/providers/settings_provider.dart';
 import '../../state/providers/voice_minutes_provider.dart';
+import '../sheets/account_sheet.dart';
 import '../sheets/voice_minutes_sheet.dart';
 import '../widgets/voice_minutes_widgets.dart';
 
@@ -18,6 +21,9 @@ class SettingsScreen extends ConsumerWidget {
     final hasVoiceMinutes = ref.watch(
       voiceMinutesProvider.select((minutes) => minutes.available),
     );
+    final canSignIn = ref.watch(
+      accountProvider.select((account) => account.available),
+    );
 
     return Scaffold(
       appBar: AppBar(title: const Text('Settings'), centerTitle: true),
@@ -28,6 +34,9 @@ class SettingsScreen extends ConsumerWidget {
           if (hasVoiceMinutes) ...[
             _buildSectionHeader(context, 'Voice counting'),
             const _VoiceMinutesTile(),
+            // Beside the minutes, because keeping them is the reason to sign
+            // in at all.
+            if (canSignIn) const _AccountTile(),
             const Divider(),
           ],
           _buildSectionHeader(context, 'Appearance'),
@@ -305,5 +314,32 @@ class _VoiceMinutesTileState extends ConsumerState<_VoiceMinutesTile> {
       trailing: const Icon(Icons.chevron_right_rounded),
       onTap: () => showVoiceMinutesSheet(context),
     );
+  }
+}
+
+class _AccountTile extends ConsumerWidget {
+  const _AccountTile();
+
+  @override
+  Widget build(BuildContext context, WidgetRef ref) {
+    final status = ref.watch(accountProvider.select((a) => a.status));
+    return switch (status) {
+      GuestAccount() => ListTile(
+        leading: const Icon(Icons.cloud_upload_outlined),
+        title: const Text('Keep your minutes safe'),
+        subtitle: const Text('Sign in to use them on any phone'),
+        trailing: const Icon(Icons.chevron_right_rounded),
+        onTap: () => showAccountSheet(context),
+      ),
+      SignedInAccount(:final method) => ListTile(
+        leading: const Icon(Icons.verified_user_outlined),
+        title: Text(
+          method == null ? 'Signed in' : 'Signed in with ${method.label}',
+        ),
+        subtitle: const Text('Your minutes are saved to your account'),
+        trailing: const Icon(Icons.chevron_right_rounded),
+        onTap: () => showAccountSheet(context),
+      ),
+    };
   }
 }

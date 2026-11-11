@@ -3,6 +3,7 @@
 // except as constructor arguments to the adapters that need them.
 
 import { createClient } from "@supabase/supabase-js";
+import { SupabaseAccounts } from "./accounts.ts";
 import { buildAttestors } from "./attestors.ts";
 import { handleVoiceBlock } from "./handler.ts";
 import { json } from "./respond.ts";
@@ -93,6 +94,7 @@ function deps(): Deps {
       client: admin,
       jwksUrl: `${supabaseUrl}/auth/v1/.well-known/jwks.json`,
     }),
+    accounts: new SupabaseAccounts(admin),
     blocks: new SupabaseBlockStore(admin),
     // Read here rather than through HandlerConfig: no handler asks what the
     // mint budget is, only this constructor does, and a config field nothing

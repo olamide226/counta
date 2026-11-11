@@ -1,3 +1,5 @@
+import { deleteAccount } from "./account.ts";
+import { merge } from "./merge.ts";
 import { redeem } from "./redeem.ts";
 import { secondsUntilClear } from "./ratelimit.ts";
 import { isUuid, json, rateLimited, readJson } from "./respond.ts";
@@ -5,7 +7,7 @@ import { mintToken } from "./token.ts";
 import { trial } from "./trial.ts";
 import { BlockConflictError, Deps, ProviderError } from "./types.ts";
 
-// Pure request handler for the five POST routes under /voice-block. No
+// Pure request handler for the POST routes under /voice-block. No
 // Deno.env, no network: everything arrives through `deps`, which is what makes
 // index_test.ts possible without a running stack.
 //
@@ -24,6 +26,8 @@ const ROUTES: Record<
   "/token": mintToken,
   "/trial": trial,
   "/redeem": redeem,
+  "/merge": merge,
+  "/delete-account": deleteAccount,
 };
 
 function bearerToken(req: Request): string | null {

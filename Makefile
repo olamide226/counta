@@ -7,7 +7,8 @@
 # Every key the app reads with String.fromEnvironment. Add one here and both
 # the .env path and the command-line path pick it up.
 DART_DEFINE_KEYS := DEEPGRAM_API_KEY SUPABASE_URL SUPABASE_PUBLISHABLE_KEY \
-	REVENUECAT_IOS_KEY REVENUECAT_ANDROID_KEY
+	REVENUECAT_IOS_KEY REVENUECAT_ANDROID_KEY \
+	GOOGLE_WEB_CLIENT_ID GOOGLE_IOS_CLIENT_ID
 
 # $(call dart_defines,KEY...) -> --dart-define=KEY=<value> for each key that has
 # a value. Values come from .env (via `-include` above), the command line, or

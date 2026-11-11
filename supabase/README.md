@@ -35,15 +35,18 @@ supabase/
     deno.json                       pinned imports; what the deploy bundler reads
     index.ts                        entrypoint: env -> adapters -> handler
     attestors.ts                    which platforms get a trial gate, from env
-    handler.ts                      router; the six POST routes share one JWT check.
+    handler.ts                      router; the eight POST routes share one JWT check.
                                     Grant, release and POST /balance live here
     token.ts                        POST /token   (re-mint for a block you hold)
     trial.ts                        POST /trial   (device-gated free trial)
     redeem.ts                       POST /redeem  (voucher codes)
+    merge.ts                        POST /merge   (a guest's minutes into an account)
+    account.ts                      POST /delete-account (in-app account deletion)
+    accounts.ts                     SupabaseAccounts: guest check and user delete
     respond.ts                      json(), readJson() and isUuid(), shared by every route
     ratelimit.ts                    per-worker sliding window, used by /token
     types.ts                        ports: BalanceProvider, TokenMinter, BlockStore,
-                                    DeviceAttestor, TrialStore, VoucherStore
+                                    DeviceAttestor, TrialStore, VoucherStore, Accounts
     auth.ts                         JWT verification (local JWKS, getUser fallback)
     webcrypto.ts                    the ES256/RS256 table and base64url, shared by
                                     the verifying and the signing halves
@@ -59,6 +62,8 @@ supabase/
     token_test.ts                   POST /token
     trial_test.ts                   requirement 11, attestation faked
     redeem_test.ts                  requirement 12
+    merge_test.ts                   POST /merge, including the partial-failure retry
+    account_test.ts                 POST /delete-account and RevenueCat's DELETE
     attestation_test.ts             the two attestors' wire shape, fetch stubbed
     store_test.ts                   pins every query to the counta schema
     attestors_test.ts               a broken credential costs one platform only
@@ -205,7 +210,7 @@ Injected by the runtime (do not set): `SUPABASE_URL`,
 |---|---|---|
 | `DEEPGRAM_API_KEY` | required | Master key used only to call `/v1/auth/grant` |
 | `DEEPGRAM_TOKEN_TTL_SECONDS` | 30 | TTL of the temporary token (1..3600) |
-| `REVENUECAT_SECRET_KEY` | required | Developer API v2 key, `customer_information:purchases:read_write` |
+| `REVENUECAT_SECRET_KEY` | required | Developer API v2 key, `customer_information:purchases:read_write`; `/delete-account` also needs `customer_information:customers:read_write` |
 | `REVENUECAT_PROJECT_ID` | required | RevenueCat project id |
 | `REVENUECAT_CURRENCY_CODE` | `VOICE` | Virtual currency code for voice credits |
 | `BLOCK_CREDITS` | 5 | Credits debited per full block. A balance short of a full block buys a shorter one of what is left (`BLOCK_SECONDS` scaled to match), so the last minutes of a pack can be spent; only an empty balance is refused |
@@ -399,6 +404,54 @@ select id, voucher_id, user_id, credits, redeemed_at
   above for the SQL.
 - `counta.matcher_config` is created empty. An absent row means "use the compiled
   `MatcherConfig` defaults"; task 14 makes the app fetch it.
+
+## Signing in: merging a guest, deleting an account
+
+Every device starts as an anonymous Supabase user. The first time a guest signs
+in with Apple or Google, the app links that identity to the guest's own user id,
+so the minutes stay where they are and nothing here is involved. Two cases do
+need the server:
+
+```bash
+# The guest signed in with an identity that already belongs to account A. The
+# app is now A ($USER_JWT) and hands over the guest's own access token.
+curl -X POST http://127.0.0.1:54321/functions/v1/voice-block/merge \
+  -H "Authorization: Bearer $USER_JWT" -H "Content-Type: application/json" \
+  -d '{"guest_token":"<the guest session'"'"'s access token>"}'
+# -> {"moved": 7, "balance": 17}
+
+# Apple's in-app account deletion.
+curl -X POST http://127.0.0.1:54321/functions/v1/voice-block/delete-account \
+  -H "Authorization: Bearer $USER_JWT"
+# -> {"deleted": true}
+```
+
+`/merge` answers:
+
+| Status | Body | When |
+|---|---|---|
+| 200 | `{"moved": n, "balance": b}` | `n` minutes moved; `b` is the account's balance after |
+| 200 | `{"moved": 0, "balance": b}` | the guest is empty, or is the caller |
+| 400 | `invalid_request` | no `guest_token` |
+| 400 | `invalid_guest` | the guest token does not verify (an expired one included) |
+| 403 | `not_a_guest` | the source is a real, non-anonymous account — never emptied |
+| 409 | `guest_busy` | the guest holds a live block; stop and release it first |
+| 503 | `provider_unavailable` | RevenueCat or Auth failed; retrying is safe |
+
+The move is a grant to the account and then a spend from the guest, both keyed
+`merge:<guest id>`. A retry re-reads the guest's balance, so a spend that
+failed after the grant finishes on the retry (the grant replays under its
+key) and a spend that landed reads as an empty guest. Grep `minutes_merged`.
+
+`/delete-account` deletes the RevenueCat customer
+(`DELETE /v2/projects/{p}/customers/{c}`, which needs the secret key to carry
+`customer_information:customers:read_write`), then the Auth user. Every
+`counta.*` table references `auth.users` with `on delete cascade`, so the
+blocks, trial grant, redemptions and voucher attempts go with it. The ledger
+goes first so that a failure leaves a user who can still sign in and retry; a
+customer RevenueCat never had, or a user already gone, counts as done. 200
+`{"deleted": true}`, 503 `provider_unavailable` on either failure. Grep
+`account_deleted`.
 
 ## Notes on auth and abuse
 

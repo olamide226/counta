@@ -78,7 +78,8 @@ interface VirtualCurrencyList {
  *   GET  /projects/{p}/customers/{c}/virtual_currencies?include_empty_balances=true
  *   POST /projects/{p}/customers/{c}/virtual_currencies/transactions
  *        { adjustments: { [code]: delta }, reference }
- * Both live in the Virtual Currencies domain, rate limited to 480 req/min.
+ *   DELETE /projects/{p}/customers/{c}   (account deletion; see forget)
+ * The first two live in the Virtual Currencies domain, rate limited to 480 req/min.
  * The transactions response is the same balance list as the GET, so a write
  * reports the balance it produced without a second round trip.
  */
@@ -147,6 +148,28 @@ export class RevenueCatBalanceProvider implements BalanceProvider {
   ): Promise<number> {
     await this.ensureCustomer(userId);
     return this.adjust(userId, Math.abs(credits), reference);
+  }
+
+  /**
+   * Deletes the customer, for account deletion.
+   *
+   * `DELETE /projects/{p}/customers/{c}` (API v2, Customer resources; needs
+   * the `customer_information:customers:read_write` permission). RevenueCat
+   * queues the deletion and answers 200 at once, which is enough: the user is
+   * about to be deleted from Auth too, so nothing will ask for this customer
+   * again. A customer RevenueCat never had is already the outcome wanted, so
+   * its 404 is success; any other 404 (a wrong project id) is still a failure,
+   * for the same reason it is on a read.
+   */
+  async forget(userId: string): Promise<void> {
+    try {
+      await this.request<unknown>("DELETE", this.customerPath(userId), {
+        retries: MAX_WRITE_RETRIES,
+      });
+    } catch (error) {
+      if (error instanceof CustomerMissing) return;
+      throw error;
+    }
   }
 
   /** Creates the customer if RevenueCat does not have them. Safe to repeat. */
@@ -244,7 +267,7 @@ export class RevenueCatBalanceProvider implements BalanceProvider {
   }
 
   private async request<T>(
-    method: "GET" | "POST",
+    method: "GET" | "POST" | "DELETE",
     path: string,
     opts: { body?: unknown; idempotencyKey?: string; retries: number },
   ): Promise<T> {
@@ -281,6 +304,12 @@ export class RevenueCatBalanceProvider implements BalanceProvider {
             "unavailable",
             `revenuecat: ${method} ${BASE_URL}${path} -> 404`,
           );
+        }
+        if (method === "DELETE") {
+          // The answer is the status; the body only says the deletion was
+          // queued, and nothing reads it.
+          await response.body?.cancel();
+          return undefined as T;
         }
         return (await response.json()) as T;
       } catch (error) {

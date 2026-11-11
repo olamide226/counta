@@ -2,6 +2,7 @@ import 'dart:convert';
 
 import 'package:http/http.dart' as http;
 
+import '../../../domain/account/account.dart';
 import '../../../domain/counting/block_service.dart';
 
 /// Talks to the `voice-block` Supabase Edge Function, and is the only thing
@@ -10,7 +11,7 @@ import '../../../domain/counting/block_service.dart';
 /// Every documented status becomes a [BlockFailure] subtype; nothing from
 /// `package:http` and no bare [Exception] escapes. See `supabase/README.md`
 /// for the contract this implements.
-class BlockClient implements BlockService {
+class BlockClient implements BlockService, AccountBackend {
   BlockClient({
     required Uri functionUrl,
     required Future<String?> Function() accessToken,
@@ -151,6 +152,33 @@ class BlockClient implements BlockService {
         throw _commonFailure(body);
     }
   }
+
+  @override
+  Future<int> claimGuestMinutes(String guestAccessToken) async {
+    final body = await _post(_mergeUrl, {'guest_token': guestAccessToken});
+    switch (body.status) {
+      case 200:
+        return _asInt(body.json['moved']) ?? 0;
+      // The guest token is the one the app held a moment ago. If the server
+      // cannot use it, or the guest turns out to be a real account, there is
+      // nothing a retry would change.
+      case 400 || 403:
+        return 0;
+      default:
+        throw _commonFailure(body);
+    }
+  }
+
+  @override
+  Future<void> deleteAccount() async {
+    final body = await _post(_deleteAccountUrl, const {});
+    if (body.status != 200) throw _commonFailure(body);
+  }
+
+  Uri get _mergeUrl => _functionUrl.replace(path: '${_functionUrl.path}/merge');
+
+  Uri get _deleteAccountUrl =>
+      _functionUrl.replace(path: '${_functionUrl.path}/delete-account');
 
   Uri get _balanceUrl =>
       _functionUrl.replace(path: '${_functionUrl.path}/balance');
