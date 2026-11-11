@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
+import 'core/config/build_config.dart';
 import 'core/theme/theme_registry.dart';
 import 'state/providers/counter_provider.dart';
 import 'state/providers/session_recovery.dart';
@@ -32,6 +33,8 @@ class App extends ConsumerWidget {
 
     return MaterialApp(
       title: 'Counta',
+      // Off for store screenshots, which run a debug build in the simulator.
+      debugShowCheckedModeBanner: BuildConfig.isDev,
       navigatorKey: _navigatorKey,
       theme: ThemeRegistry.buildTheme(settings.themeId, Brightness.light),
       darkTheme: ThemeRegistry.buildTheme(settings.themeId, Brightness.dark),
