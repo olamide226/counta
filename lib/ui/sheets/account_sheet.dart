@@ -158,8 +158,8 @@ class _AccountSheetState extends ConsumerState<AccountSheet> {
       ),
       const SizedBox(height: 8),
       Text(
-        'Sign in and your voice minutes are saved to your account, ready on '
-        'any phone.',
+        'Sign in and your voice minutes and saved sessions are kept in your '
+        'account, ready on any phone.',
         textAlign: TextAlign.center,
         style: theme.textTheme.bodyLarge?.copyWith(
           color: scheme.onSurfaceVariant,
@@ -202,7 +202,7 @@ class _AccountSheetState extends ConsumerState<AccountSheet> {
       ],
       const SizedBox(height: 4),
       Text(
-        'Your counts and sessions stay on this phone.',
+        'Nothing changes on this phone. Counting still works offline.',
         textAlign: TextAlign.center,
         style: theme.textTheme.bodySmall?.copyWith(
           color: scheme.onSurfaceVariant,
@@ -238,7 +238,7 @@ class _AccountSheetState extends ConsumerState<AccountSheet> {
                   Text(status.title, style: theme.textTheme.titleMedium),
                   Text(
                     _displayEmail(status.email) ??
-                        'Your voice minutes are saved to this account.',
+                        'Your minutes and sessions are saved to this account.',
                     style: theme.textTheme.bodyMedium?.copyWith(
                       color: scheme.onSurfaceVariant,
                     ),

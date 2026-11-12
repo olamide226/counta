@@ -15,9 +15,9 @@ Future<bool> confirmDeleteAccount(BuildContext context) => _confirm(
   context,
   title: 'Delete your account?',
   body:
-      'This deletes your account and any voice minutes left in it, and '
-      "can't be undone.\n\nYour counts and saved sessions on this phone "
-      'are kept.',
+      'This deletes your account, any voice minutes left in it and its '
+      "backed-up sessions, and can't be undone.\n\nThe sessions saved on this "
+      'phone are kept.',
   action: 'Delete',
   icon: Icons.delete_outline,
   destructive: true,
