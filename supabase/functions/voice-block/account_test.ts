@@ -1,11 +1,11 @@
 import { assertEquals, assertRejects } from "@std/assert";
-import { RevenueCatBalanceProvider } from "./providers/balance.ts";
 import {
   call,
   deleteAccountReq,
   harness,
   jsonResponse,
-  recorder,
+  revenueCat,
+  throttled,
   USER,
 } from "./testing/fakes.ts";
 import { ProviderError } from "./types.ts";
@@ -65,18 +65,6 @@ Deno.test("delete-account: needs a signed-in user", async () => {
   assertEquals(h.accounts.removed, []);
 });
 
-function revenueCat(responses: Parameters<typeof recorder>[0]) {
-  const { sent, fetchFn } = recorder(responses);
-  const provider = new RevenueCatBalanceProvider({
-    secretKey: "test",
-    projectId: "proj",
-    currencyCode: "VOICE",
-    fetch: fetchFn,
-    sleep: () => Promise.resolve(),
-  });
-  return { provider, sent };
-}
-
 Deno.test("RevenueCat provider: forget deletes the customer", async () => {
   const { provider, sent } = revenueCat([
     jsonResponse({ object: "customer", id: USER, deleted_at: 1658399423658 }),
@@ -122,7 +110,7 @@ Deno.test("RevenueCat provider: forget on a wrong project is a failure", async (
 
 Deno.test("RevenueCat provider: forget retries a 429", async () => {
   const { provider, sent } = revenueCat([
-    () => new Response("", { status: 429 }),
+    throttled(),
     jsonResponse({ object: "customer", id: USER, deleted_at: 1 }),
   ]);
 

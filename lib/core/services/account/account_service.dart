@@ -37,23 +37,10 @@ abstract interface class IdentitySource {
   Future<void> signOut();
 }
 
-/// Why linking an identity to the guest failed.
-enum LinkRefusal {
-  /// The identity already belongs to an account: this is a returning user.
-  alreadyLinked,
-
-  /// Anything else.
-  other,
-}
-
-class LinkRefused implements Exception {
-  const LinkRefused(this.reason, [this.detail]);
-
-  final LinkRefusal reason;
-  final Object? detail;
-
-  @override
-  String toString() => 'LinkRefused($reason, $detail)';
+/// Linking failed because the identity (or its email) already belongs to an
+/// account: this is a returning user.
+class IdentityAlreadyLinked implements Exception {
+  const IdentityAlreadyLinked();
 }
 
 /// The parts of Supabase Auth an account needs. Narrow on purpose, so the
@@ -70,7 +57,7 @@ abstract interface class AuthGateway {
   Future<String?> freshAccessToken();
 
   /// Attaches [credential] to the current (guest) account. Throws
-  /// [LinkRefused].
+  /// [IdentityAlreadyLinked] when it is someone's already.
   Future<void> link(IdentityCredential credential);
 
   /// Signs in as the account [credential] belongs to.
@@ -91,7 +78,6 @@ class AccountService {
     required this.auth,
     required this.identity,
     required this.backend,
-    this.moveAttempts = 3,
     Future<void> Function(Duration) pause = _delay,
   }) : _pause = pause;
 
@@ -101,21 +87,14 @@ class AccountService {
   /// Null in a build with no voice backend; there are no minutes to move then.
   final AccountBackend? backend;
 
-  final int moveAttempts;
+  static const _moveAttempts = 3;
   final Future<void> Function(Duration) _pause;
 
   AccountStatus get status => auth.status;
   Stream<AccountStatus> get changes => auth.changes;
 
   /// Signs in with [method].
-  ///
-  /// [guestHasMinutes] skips the move when the guest is known to hold none —
-  /// the usual case on a phone just set up — so a returning user is not kept
-  /// waiting on a call that would move nothing.
-  Future<SignInResult> signIn(
-    SignInMethod method, {
-    bool guestHasMinutes = true,
-  }) async {
+  Future<SignInResult> signIn(SignInMethod method) async {
     final IdentityCredential credential;
     try {
       credential = await identity.credential(method);
@@ -139,11 +118,8 @@ class AccountService {
     try {
       await auth.link(credential);
       return const SignInSucceeded(returning: false);
-    } on LinkRefused catch (refusal) {
-      if (refusal.reason != LinkRefusal.alreadyLinked) {
-        debugPrint('Linking ${method.label} failed: ${refusal.detail}');
-        return const SignInFailed();
-      }
+    } on IdentityAlreadyLinked {
+      // Falls through to signing in as that account.
     } catch (error) {
       debugPrint('Linking ${method.label} failed: $error');
       return const SignInFailed();
@@ -157,17 +133,23 @@ class AccountService {
       return const SignInFailed();
     }
 
+    // Always asked, never decided here: the server knows the guest's balance
+    // and answers "nothing to move" cheaply, while a stale balance on this
+    // phone reading zero would strand the minutes for good.
     final backend = this.backend;
-    if (!guestHasMinutes || backend == null || guestToken == null) {
+    if (backend == null || guestToken == null) {
       return const SignInSucceeded(returning: true);
     }
-    for (var attempt = 1; attempt <= moveAttempts; attempt++) {
+    for (var attempt = 1; attempt <= _moveAttempts; attempt++) {
       try {
         final moved = await backend.claimGuestMinutes(guestToken);
         return SignInSucceeded(returning: true, movedMinutes: moved);
+      } on MergeRefused catch (refusal) {
+        debugPrint('Moving guest minutes refused: $refusal');
+        break;
       } catch (error) {
         debugPrint('Moving guest minutes failed (try $attempt): $error');
-        if (attempt < moveAttempts) await _pause(Duration(seconds: attempt));
+        if (attempt < _moveAttempts) await _pause(Duration(seconds: attempt));
       }
     }
     return const SignInSucceeded(returning: true, moveFailed: true);
@@ -188,8 +170,7 @@ class AccountService {
       throw StateError('No backend to delete the account on.');
     }
     await backend.deleteAccount();
-    await _forgetIdentity();
-    await auth.signOutToGuest();
+    await signOut();
   }
 
   Future<void> _forgetIdentity() async {

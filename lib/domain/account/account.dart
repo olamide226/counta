@@ -12,7 +12,7 @@ enum SignInMethod {
 
   const SignInMethod(this.label);
 
-  /// "Continue with Apple", "Signed in with Google".
+  /// "Apple" or "Google", as in "Signed in with Google".
   final String label;
 }
 
@@ -34,6 +34,21 @@ class SignedInAccount extends AccountStatus {
 
   /// Null, or an Apple relay address, when the user chose to hide it.
   final String? email;
+
+  /// "Signed in with Apple", or just "Signed in" for an unnamed identity.
+  String get title =>
+      method == null ? 'Signed in' : 'Signed in with ${method!.label}';
+
+  // Value equality, so an auth event that changes nothing (a token refresh)
+  // does not rebuild the screens showing it.
+  @override
+  bool operator ==(Object other) =>
+      other is SignedInAccount &&
+      other.method == method &&
+      other.email == email;
+
+  @override
+  int get hashCode => Object.hash(method, email);
 }
 
 sealed class SignInResult {
@@ -66,11 +81,27 @@ class SignInCancelled extends SignInResult {
 }
 
 class SignInFailed extends SignInResult {
-  const SignInFailed([
-    this.message = "Couldn't sign in. Check your connection and try again.",
-  ]);
+  const SignInFailed([this.message = connection]);
+
+  static const connection =
+      "Couldn't sign in. Check your connection and try again.";
 
   final String message;
+}
+
+/// What nothing about the account may change under: a voice session holds a
+/// block bought by the account in use.
+const voiceRunningMessage = 'Stop voice counting first, then try again.';
+
+/// The server refused to move a guest's minutes: the guest token was not
+/// usable, or the guest is not a guest. A retry would change nothing.
+class MergeRefused implements Exception {
+  const MergeRefused(this.reason);
+
+  final String reason;
+
+  @override
+  String toString() => 'MergeRefused($reason)';
 }
 
 /// The two backend calls an account needs beyond Supabase Auth itself.
@@ -80,6 +111,7 @@ class SignInFailed extends SignInResult {
 abstract interface class AccountBackend {
   /// Moves a guest's minutes into the signed-in account. Returns how many
   /// moved. [guestAccessToken] proves the caller held the guest account.
+  /// Throws [MergeRefused] when the server will not move them.
   Future<int> claimGuestMinutes(String guestAccessToken);
 
   /// Deletes the signed-in account and every minute it holds.

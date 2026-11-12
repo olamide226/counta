@@ -277,7 +277,7 @@ class _VoiceMinutesSheetState extends ConsumerState<VoiceMinutesSheet> {
       ),
       if (message != null) ...[
         const SizedBox(height: 10),
-        _Message(text: message, isError: _buyMessageIsError),
+        SheetMessage(text: message, isError: _buyMessageIsError),
       ],
       const SizedBox(height: 12),
       Text(
@@ -365,7 +365,7 @@ class _VoiceMinutesSheetState extends ConsumerState<VoiceMinutesSheet> {
       ),
       if (error != null) ...[
         const SizedBox(height: 10),
-        _Message(text: error, isError: true),
+        SheetMessage(text: error, isError: true),
       ],
     ];
   }
@@ -374,8 +374,9 @@ class _VoiceMinutesSheetState extends ConsumerState<VoiceMinutesSheet> {
     final theme = Theme.of(context);
     final scheme = theme.colorScheme;
     final resumeLabel = widget.resumeLabel;
-    final account = ref.watch(accountProvider);
-    final offerSignIn = account.available && account.isGuest;
+    final offerSignIn = ref.watch(
+      accountProvider.select((a) => a.available && a.isGuest),
+    );
     final note = _addedConfirmed
         ? widget.successNote
         : 'They can take a moment to show up.';
@@ -631,41 +632,6 @@ class _InfoNote extends StatelessWidget {
               style: theme.textTheme.bodyMedium?.copyWith(
                 color: scheme.onSurfaceVariant,
               ),
-            ),
-          ),
-        ],
-      ),
-    );
-  }
-}
-
-class _Message extends StatelessWidget {
-  const _Message({required this.text, required this.isError});
-
-  final String text;
-  final bool isError;
-
-  @override
-  Widget build(BuildContext context) {
-    final theme = Theme.of(context);
-    final color = isError
-        ? theme.colorScheme.error
-        : theme.colorScheme.onSurfaceVariant;
-    return Semantics(
-      liveRegion: true,
-      child: Row(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Icon(
-            isError ? Icons.error_outline : Icons.hourglass_top_rounded,
-            size: 18,
-            color: color,
-          ),
-          const SizedBox(width: 8),
-          Expanded(
-            child: Text(
-              text,
-              style: theme.textTheme.bodyMedium?.copyWith(color: color),
             ),
           ),
         ],

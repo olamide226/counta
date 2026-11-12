@@ -78,7 +78,8 @@ class NativeIdentitySource implements IdentitySource {
     await GoogleSignIn.instance.signOut();
   }
 
-  static String _nonce([int length = 32]) {
+  static String _nonce() {
+    const length = 32;
     const chars =
         '0123456789ABCDEFGHIJKLMNOPQRSTUVXYZabcdefghijklmnopqrstuvwxyz-._';
     final random = Random.secure();

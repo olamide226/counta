@@ -23,7 +23,7 @@ class _FakeIdentity implements IdentitySource {
 
 class _FakeAuth implements AuthGateway {
   String? token = 'guest-token';
-  LinkRefused? refuseLink;
+  Object? refuseLink;
   Object? failSignIn;
   final calls = <String>[];
 
@@ -57,6 +57,7 @@ class _FakeAuth implements AuthGateway {
 class _FakeBackend implements AccountBackend {
   int moves = 0;
   int failMoves = 0;
+  bool refuse = false;
   final guestTokens = <String>[];
   bool deleted = false;
   Object? failDelete;
@@ -64,6 +65,7 @@ class _FakeBackend implements AccountBackend {
   @override
   Future<int> claimGuestMinutes(String guestAccessToken) async {
     guestTokens.add(guestAccessToken);
+    if (refuse) throw const MergeRefused('invalid_guest');
     if (failMoves > 0) {
       failMoves--;
       throw Exception('offline');
@@ -126,7 +128,7 @@ void main() {
       'an identity with an account already switches to it and moves the '
       "guest's minutes using the guest token taken before the switch",
       () async {
-        auth.refuseLink = const LinkRefused(LinkRefusal.alreadyLinked);
+        auth.refuseLink = const IdentityAlreadyLinked();
 
         final result = await service.signIn(SignInMethod.apple);
 
@@ -140,20 +142,18 @@ void main() {
       },
     );
 
-    test('a guest known to hold no minutes skips the move', () async {
-      auth.refuseLink = const LinkRefused(LinkRefusal.alreadyLinked);
+    test('a move the server refuses is not retried, and is said', () async {
+      auth.refuseLink = const IdentityAlreadyLinked();
+      backend.refuse = true;
 
-      final result = await service.signIn(
-        SignInMethod.apple,
-        guestHasMinutes: false,
-      );
+      final result = await service.signIn(SignInMethod.apple);
 
-      expect((result as SignInSucceeded).returning, isTrue);
-      expect(backend.guestTokens, isEmpty);
+      expect((result as SignInSucceeded).moveFailed, isTrue);
+      expect(backend.guestTokens, hasLength(1));
     });
 
     test('a move that fails once is retried', () async {
-      auth.refuseLink = const LinkRefused(LinkRefusal.alreadyLinked);
+      auth.refuseLink = const IdentityAlreadyLinked();
       backend.failMoves = 1;
 
       final result = await service.signIn(SignInMethod.google);
@@ -163,7 +163,7 @@ void main() {
     });
 
     test('a move that keeps failing still signs in, and says so', () async {
-      auth.refuseLink = const LinkRefused(LinkRefusal.alreadyLinked);
+      auth.refuseLink = const IdentityAlreadyLinked();
       backend.failMoves = 99;
 
       final result = await service.signIn(SignInMethod.google);
@@ -174,14 +174,17 @@ void main() {
     });
 
     test('any other link refusal fails without switching accounts', () async {
-      auth.refuseLink = const LinkRefused(LinkRefusal.other);
+      auth.refuseLink = const AuthException(
+        'Invalid id token',
+        code: 'bad_jwt',
+      );
 
       expect(await service.signIn(SignInMethod.apple), isA<SignInFailed>());
       expect(auth.calls, ['link']);
     });
 
     test('a switch that fails moves nothing', () async {
-      auth.refuseLink = const LinkRefused(LinkRefusal.alreadyLinked);
+      auth.refuseLink = const IdentityAlreadyLinked();
       auth.failSignIn = Exception('refused');
 
       expect(await service.signIn(SignInMethod.apple), isA<SignInFailed>());
@@ -238,6 +241,18 @@ void main() {
         ),
         isFalse,
       );
+    });
+
+    test('a signed-in account compares by value and names its provider', () {
+      expect(
+        const SignedInAccount(method: SignInMethod.google, email: 'a@b.c'),
+        const SignedInAccount(method: SignInMethod.google, email: 'a@b.c'),
+      );
+      expect(
+        const SignedInAccount(method: SignInMethod.apple).title,
+        'Signed in with Apple',
+      );
+      expect(const SignedInAccount().title, 'Signed in');
     });
 
     test('an anonymous or missing user is a guest', () {

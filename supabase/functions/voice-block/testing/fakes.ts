@@ -8,6 +8,7 @@
 
 import { handleVoiceBlock } from "../handler.ts";
 import { MemoryRateLimiter } from "../ratelimit.ts";
+import { RevenueCatBalanceProvider } from "../providers/balance.ts";
 import { BlockConflictError, ProviderError } from "../types.ts";
 import type {
   Accounts,
@@ -163,10 +164,6 @@ export class FakeAccounts implements Accounts {
   readonly removed: string[] = [];
   /** When set, remove() rejects with it. */
   failRemoveWith?: Error;
-
-  constructor(guests: Iterable<string> = []) {
-    for (const id of guests) this.guests.add(id);
-  }
 
   isGuest(userId: string): Promise<boolean> {
     return Promise.resolve(
@@ -356,7 +353,8 @@ export function harness(
     attestors: { ios, android },
     config: CONFIG,
     now: () => clock.now,
-    newBlockId: () => `33333333-3333-4333-8333-${String(++seq).padStart(12, "0")}`,
+    newBlockId: () =>
+      `33333333-3333-4333-8333-${String(++seq).padStart(12, "0")}`,
     afterResponse: (work) => {
       pending.push(work);
     },
@@ -527,7 +525,9 @@ export class FakeAttestor implements DeviceAttestor {
       hold?: boolean;
     } = {},
   ) {
-    this.tokenField = gate === "devicecheck" ? "device_token" : "integrity_token";
+    this.tokenField = gate === "devicecheck"
+      ? "device_token"
+      : "integrity_token";
   }
 
   /** Lets a held claim finish; see the `hold` option. */
@@ -574,7 +574,9 @@ export class MemoryTrialStore implements TrialStore {
     return Promise.resolve(this.rows.find((r) => r.user_id === userId) ?? null);
   }
 
-  insert(row: Omit<TrialGrantRow, "granted_at">): Promise<TrialGrantRow | null> {
+  insert(
+    row: Omit<TrialGrantRow, "granted_at">,
+  ): Promise<TrialGrantRow | null> {
     if (this.failInsertWith) return Promise.reject(this.failInsertWith);
     // Mirrors the primary key on user_id, which is what makes a retried grant
     // idempotent (req 11.8).
@@ -614,8 +616,9 @@ export interface MemoryVoucher {
  */
 export class MemoryVoucherStore implements VoucherStore {
   /** What the endpoint asked the transaction for, in order. */
-  readonly calls: Array<{ code: string; user_id: string; budget: AttemptBudget }> =
-    [];
+  readonly calls: Array<
+    { code: string; user_id: string; budget: AttemptBudget }
+  > = [];
   readonly redemptions: Array<
     {
       id: string;
@@ -718,3 +721,29 @@ export const redeemReq = (
   body: unknown = { code: "SPRING24" },
   token: string | null = GOOD_TOKEN,
 ) => req("/voice-block/redeem", body, token);
+
+/** A fresh 429 per attempt: a Response body can only be read once. */
+export const throttled = (retryAfter?: string) => () =>
+  new Response("", {
+    status: 429,
+    ...(retryAfter ? { headers: { "Retry-After": retryAfter } } : {}),
+  });
+
+/** The RevenueCat provider, pointed at a scripted fetch. */
+export function revenueCat(
+  responses: readonly StubResponse[],
+  sleeps?: number[],
+) {
+  const { sent, fetchFn } = recorder(responses);
+  const provider = new RevenueCatBalanceProvider({
+    secretKey: "test",
+    projectId: "proj",
+    currencyCode: "VOICE",
+    fetch: fetchFn,
+    sleep: (ms) => {
+      sleeps?.push(ms);
+      return Promise.resolve();
+    },
+  });
+  return { provider, sent };
+}

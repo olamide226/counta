@@ -380,3 +380,40 @@ class _VoiceUsageStripState extends State<VoiceUsageStrip> {
     );
   }
 }
+
+/// A one-line status under a sheet's controls: an error, or something still
+/// on its way. Announced to screen readers as it appears.
+class SheetMessage extends StatelessWidget {
+  const SheetMessage({super.key, required this.text, required this.isError});
+
+  final String text;
+  final bool isError;
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    final color = isError
+        ? theme.colorScheme.error
+        : theme.colorScheme.onSurfaceVariant;
+    return Semantics(
+      liveRegion: true,
+      child: Row(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Icon(
+            isError ? Icons.error_outline : Icons.hourglass_top_rounded,
+            size: 18,
+            color: color,
+          ),
+          const SizedBox(width: 8),
+          Expanded(
+            child: Text(
+              text,
+              style: theme.textTheme.bodyMedium?.copyWith(color: color),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+}
