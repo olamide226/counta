@@ -5,6 +5,7 @@ import 'core/config/build_config.dart';
 import 'core/theme/theme_registry.dart';
 import 'state/providers/counter_provider.dart';
 import 'state/providers/session_recovery.dart';
+import 'state/providers/session_sync.dart';
 import 'state/providers/settings_provider.dart';
 import 'ui/screens/counter_screen.dart';
 import 'ui/sheets/voice_disclosure_sheet.dart';
@@ -24,6 +25,10 @@ class App extends ConsumerWidget {
     // checkpoint has to be taken out of the store — and the checkpointer
     // attached — before any screen can count. CounterScreen only reacts.
     ref.watch(sessionStartupProvider);
+
+    // Backs up a signed-in account's saved sessions, and restores them on a
+    // new phone. Watched here so it runs from launch, not from first use.
+    ref.watch(sessionSyncProvider);
 
     // The controller owns the voice lifecycle but must not import the UI
     // layer, so the shell hands it the disclosure gate. Assigning on every

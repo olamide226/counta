@@ -332,7 +332,7 @@ class _AccountTile extends ConsumerWidget {
       SignedInAccount() => (
         Icons.verified_user_outlined,
         status.title,
-        'Your minutes are saved to your account',
+        'Your minutes and sessions are saved',
       ),
     };
     return ListTile(
