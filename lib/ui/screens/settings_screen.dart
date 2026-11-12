@@ -323,23 +323,24 @@ class _AccountTile extends ConsumerWidget {
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     final status = ref.watch(accountProvider.select((a) => a.status));
-    return switch (status) {
-      GuestAccount() => ListTile(
-        leading: const Icon(Icons.cloud_upload_outlined),
-        title: const Text('Keep your minutes safe'),
-        subtitle: const Text('Sign in to use them on any phone'),
-        trailing: const Icon(Icons.chevron_right_rounded),
-        onTap: () => showAccountSheet(context),
+    final (icon, title, subtitle) = switch (status) {
+      GuestAccount() => (
+        Icons.cloud_upload_outlined,
+        'Keep your minutes safe',
+        'Sign in to use them on any phone',
       ),
-      SignedInAccount(:final method) => ListTile(
-        leading: const Icon(Icons.verified_user_outlined),
-        title: Text(
-          method == null ? 'Signed in' : 'Signed in with ${method.label}',
-        ),
-        subtitle: const Text('Your minutes are saved to your account'),
-        trailing: const Icon(Icons.chevron_right_rounded),
-        onTap: () => showAccountSheet(context),
+      SignedInAccount() => (
+        Icons.verified_user_outlined,
+        status.title,
+        'Your minutes are saved to your account',
       ),
     };
+    return ListTile(
+      leading: Icon(icon),
+      title: Text(title),
+      subtitle: Text(subtitle),
+      trailing: const Icon(Icons.chevron_right_rounded),
+      onTap: () => showAccountSheet(context),
+    );
   }
 }

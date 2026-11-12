@@ -1,25 +1,22 @@
-import {
-  assertEquals,
-  assertRejects,
-  assertStringIncludes,
-} from "@std/assert";
+import { assertEquals, assertRejects, assertStringIncludes } from "@std/assert";
 import { handleVoiceBlock } from "./handler.ts";
-import { RevenueCatBalanceProvider } from "./providers/balance.ts";
 import { DeepgramTokenMinter } from "./providers/minter.ts";
 import {
+  BALANCE_READ,
+  balanceReq,
   call,
   CONFIG,
   FakeTokenMinter,
   GOOD_TOKEN,
-  BALANCE_READ,
-  balanceReq,
   grantReq,
   harness,
   jsonResponse,
   MemoryBlockStore,
   recorder,
   releaseReq,
+  revenueCat,
   SESSION,
+  throttled,
   USER,
 } from "./testing/fakes.ts";
 import { ProviderError } from "./types.ts";
@@ -27,29 +24,6 @@ import { ProviderError } from "./types.ts";
 const BASE = "http://localhost:54321/functions/v1";
 const BLOCK = "33333333-3333-4333-8333-000000000001";
 const OTHER_SESSION = "55555555-5555-4555-8555-555555555555";
-
-/** A fresh 429 per attempt: a Response body can only be read once. */
-const throttled = (retryAfter?: string) => () =>
-  new Response("", {
-    status: 429,
-    ...(retryAfter ? { headers: { "Retry-After": retryAfter } } : {}),
-  });
-
-/** The provider under test, pointed at a scripted fetch. */
-function revenueCat(responses: Parameters<typeof recorder>[0], sleeps?: number[]) {
-  const { sent, fetchFn } = recorder(responses);
-  const provider = new RevenueCatBalanceProvider({
-    secretKey: "test",
-    projectId: "proj",
-    currencyCode: "VOICE",
-    fetch: fetchFn,
-    sleep: (ms) => {
-      sleeps?.push(ms);
-      return Promise.resolve();
-    },
-  });
-  return { provider, sent };
-}
 
 // ---------------------------------------------------------------------------
 // Grant
@@ -216,7 +190,11 @@ Deno.test("release: a short block refunds against its own size", async () => {
   h.clock.now = new Date("2026-09-07T12:01:10.000Z");
   const { body } = await call(
     h.deps,
-    releaseReq({ block_id: grant.body.block_id, streamed_secs: 70, detections: 9 }),
+    releaseReq({
+      block_id: grant.body.block_id,
+      streamed_secs: 70,
+      detections: 9,
+    }),
   );
 
   assertEquals(body.used_credits, 2);
@@ -294,7 +272,9 @@ Deno.test("grant: an abandoned block stops blocking once it expires", async () =
 });
 
 Deno.test("grant: mint failure refunds the debit and returns 503", async () => {
-  const minter = new FakeTokenMinter(new ProviderError("unavailable", "deepgram down"));
+  const minter = new FakeTokenMinter(
+    new ProviderError("unavailable", "deepgram down"),
+  );
   const h = harness({ minter });
   const { status, body } = await call(h.deps, grantReq());
 
@@ -307,7 +287,9 @@ Deno.test("grant: mint failure refunds the debit and returns 503", async () => {
 });
 
 Deno.test("grant: a failed block insert refunds the debit and returns 503", async () => {
-  const blocks = new MemoryBlockStore(new Error("counta.voice_blocks insert: boom"));
+  const blocks = new MemoryBlockStore(
+    new Error("counta.voice_blocks insert: boom"),
+  );
   const h = harness({ blocks });
   const { status, body } = await call(h.deps, grantReq());
 
@@ -399,7 +381,11 @@ Deno.test("grant: per-user rate limit returns 429", async () => {
     // Reconcile immediately so the next grant is not a 409.
     await call(
       h.deps,
-      releaseReq({ block_id: res.body.block_id, streamed_secs: 10, detections: 3 }),
+      releaseReq({
+        block_id: res.body.block_id,
+        streamed_secs: 10,
+        detections: 3,
+      }),
     );
     h.clock.now = new Date(h.clock.now.getTime() + 30_000);
   }
@@ -417,7 +403,9 @@ Deno.test("grant: per-user rate limit returns 429", async () => {
   assertEquals(limited.headers.get("Retry-After"), String(retryAfter));
 
   // Outside the window the limit lifts.
-  h.clock.now = new Date(h.clock.now.getTime() + CONFIG.rateLimitWindowMinutes * 60_000);
+  h.clock.now = new Date(
+    h.clock.now.getTime() + CONFIG.rateLimitWindowMinutes * 60_000,
+  );
   assertEquals((await call(h.deps, grantReq())).status, 200);
 });
 
@@ -444,7 +432,10 @@ Deno.test("Deepgram minter: returns the access token from a successful grant", a
   const { sent, fetchFn } = recorder([
     jsonResponse({ access_token: "dg-token", expires_in: 30 }),
   ]);
-  const minter = new DeepgramTokenMinter({ apiKey: "master-key", fetch: fetchFn });
+  const minter = new DeepgramTokenMinter({
+    apiKey: "master-key",
+    fetch: fetchFn,
+  });
 
   assertEquals(await minter.mint(30), "dg-token");
   assertStringIncludes(sent[0].url, "https://api.deepgram.com/v1/auth/grant");
@@ -576,7 +567,11 @@ Deno.test("release: is idempotent, a second release never refunds again", async 
   const granted = await call(h.deps, grantReq());
   h.clock.now = new Date("2026-09-07T12:00:05.000Z");
   const req = () =>
-    releaseReq({ block_id: granted.body.block_id, streamed_secs: 5, detections: 0 });
+    releaseReq({
+      block_id: granted.body.block_id,
+      streamed_secs: 5,
+      detections: 0,
+    });
 
   assertEquals((await call(h.deps, req())).body, {
     refunded: true,
@@ -626,7 +621,9 @@ Deno.test("release: a failed refund leaves a retry able to finish it, exactly on
 async function releasedAfter(seconds: number, detections = 3) {
   const h = harness();
   const granted = await call(h.deps, grantReq());
-  h.clock.now = new Date(Date.parse("2026-09-07T12:00:00.000Z") + seconds * 1000);
+  h.clock.now = new Date(
+    Date.parse("2026-09-07T12:00:00.000Z") + seconds * 1000,
+  );
   const { body } = await call(
     h.deps,
     releaseReq({
@@ -678,7 +675,11 @@ Deno.test("release: the client's own streamed_secs decides nothing", async () =>
   h.clock.now = new Date("2026-09-07T12:02:00.000Z");
   const { body } = await call(
     h.deps,
-    releaseReq({ block_id: granted.body.block_id, streamed_secs: 1, detections: 3 }),
+    releaseReq({
+      block_id: granted.body.block_id,
+      streamed_secs: 1,
+      detections: 3,
+    }),
   );
   assertEquals(body.used_credits, 2);
 });
@@ -690,7 +691,11 @@ Deno.test("release: the amount is fixed by the first attempt, however late the r
   const h = harness();
   const granted = await call(h.deps, grantReq());
   const release = () =>
-    releaseReq({ block_id: granted.body.block_id, streamed_secs: 50, detections: 3 });
+    releaseReq({
+      block_id: granted.body.block_id,
+      streamed_secs: 50,
+      detections: 3,
+    });
 
   h.clock.now = new Date("2026-09-07T12:00:50.000Z");
   h.balance.failRefunds = 1;
@@ -741,7 +746,11 @@ Deno.test("release: unknown or foreign block is 404, unauthenticated is 401", as
   const h = harness();
   const unknown = await call(
     h.deps,
-    releaseReq({ block_id: "44444444-4444-4444-8444-444444444444", streamed_secs: 0, detections: 0 }),
+    releaseReq({
+      block_id: "44444444-4444-4444-8444-444444444444",
+      streamed_secs: 0,
+      detections: 0,
+    }),
   );
   assertEquals(unknown.status, 404);
 
@@ -799,7 +808,9 @@ Deno.test("RevenueCat provider: follows the balance cursor rather than reading a
 });
 
 Deno.test("RevenueCat provider: a currency on no page is a zero balance", async () => {
-  const { provider } = revenueCat([jsonResponse({ object: "list", items: [] })]);
+  const { provider } = revenueCat([
+    jsonResponse({ object: "list", items: [] }),
+  ]);
   assertEquals(await provider.getBalance(USER), 0);
 });
 

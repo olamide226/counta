@@ -161,9 +161,10 @@ class BlockClient implements BlockService, AccountBackend {
         return _asInt(body.json['moved']) ?? 0;
       // The guest token is the one the app held a moment ago. If the server
       // cannot use it, or the guest turns out to be a real account, there is
-      // nothing a retry would change.
+      // nothing a retry would change — but the minutes did not move, which is
+      // not the same as there being none.
       case 400 || 403:
-        return 0;
+        throw MergeRefused('${body.json['error'] ?? body.status}');
       default:
         throw _commonFailure(body);
     }

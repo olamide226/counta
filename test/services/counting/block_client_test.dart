@@ -6,6 +6,7 @@ import 'package:http/http.dart' as http;
 import 'package:http/testing.dart';
 
 import 'package:counta/core/services/counting/block_client.dart';
+import 'package:counta/domain/account/account.dart';
 import 'package:counta/domain/counting/block_service.dart';
 
 /// A recorded request, so the tests can assert what actually went out rather
@@ -726,23 +727,26 @@ void main() {
       expect(sent.single.body, {'guest_token': 'guest-jwt'});
     });
 
-    test(
-      'a guest the server cannot use moves nothing, without retrying',
-      () async {
-        expect(
-          await clientAnswering(400, {
-            'error': 'invalid_guest',
-          }).claimGuestMinutes('guest-jwt'),
-          0,
-        );
-        expect(
-          await clientAnswering(403, {
-            'error': 'not_a_guest',
-          }).claimGuestMinutes('guest-jwt'),
-          0,
-        );
-      },
-    );
+    test('a guest the server will not move from is a refusal', () async {
+      await expectLater(
+        clientAnswering(400, {
+          'error': 'invalid_guest',
+        }).claimGuestMinutes('guest-jwt'),
+        throwsA(
+          isA<MergeRefused>().having(
+            (r) => r.reason,
+            'reason',
+            'invalid_guest',
+          ),
+        ),
+      );
+      await expectLater(
+        clientAnswering(403, {
+          'error': 'not_a_guest',
+        }).claimGuestMinutes('guest-jwt'),
+        throwsA(isA<MergeRefused>()),
+      );
+    });
 
     test('an outage on /merge is a failure the caller can retry', () async {
       await expectLater(

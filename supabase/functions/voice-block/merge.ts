@@ -40,9 +40,9 @@ export async function merge(
 
   // Merging into yourself moves nothing. Answered rather than refused, so an
   // app that asks twice around a sign-in it already completed is not an error.
-  if (guestId === userId) {
-    return json(200, { moved: 0, balance: await balance.getBalance(userId) });
-  }
+  const nothingMoved = async () =>
+    json(200, { moved: 0, balance: await balance.getBalance(userId) });
+  if (guestId === userId) return nothingMoved();
 
   // Minutes only ever move out of a guest. A real account is somebody's, and
   // holding one of its tokens is not a reason to empty it into another.
@@ -64,9 +64,7 @@ export async function merge(
   }
 
   const moving = await balance.getBalance(guestId);
-  if (moving <= 0) {
-    return json(200, { moved: 0, balance: await balance.getBalance(userId) });
-  }
+  if (moving <= 0) return nothingMoved();
 
   // Grant first, then spend, both keyed on the guest. The order is what makes
   // a retry after a partial failure safe, because every retry starts by

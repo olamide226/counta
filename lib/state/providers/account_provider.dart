@@ -9,6 +9,7 @@ import '../../core/services/account/account_service.dart';
 import '../../core/services/account/native_identity_source.dart';
 import '../../core/services/account/supabase_auth_gateway.dart';
 import '../../domain/account/account.dart';
+import 'counter_provider.dart';
 import 'minute_store_provider.dart';
 import 'supabase_providers.dart';
 import 'voice_minutes_provider.dart';
@@ -41,6 +42,9 @@ class AccountState {
   );
 }
 
+/// How a sign-out or delete went.
+enum AccountAction { done, failed, voiceRunning }
+
 class AccountController extends StateNotifier<AccountState> {
   AccountController(this._ref, List<SignInMethod> methods)
     : super(AccountState(methods: methods));
@@ -55,46 +59,57 @@ class AccountController extends StateNotifier<AccountState> {
     _service = service;
     state = state.copyWith(status: service.status);
     _changes = service.changes.listen((status) {
-      if (mounted) state = state.copyWith(status: status);
+      // A token refresh reports the same account again; nothing to redraw.
+      if (mounted && status != state.status) {
+        state = state.copyWith(status: status);
+      }
     });
   }
 
-  Future<SignInResult> signIn(SignInMethod method) async {
-    final service = _service;
-    if (service == null || state.busy) return const SignInFailed();
-    state = state.copyWith(busy: true);
-    try {
-      final minutes = _ref.read(voiceMinutesProvider);
-      final result = await service.signIn(
-        method,
-        // Unknown counts as "has some": moving nothing costs one call, while
-        // skipping a move that was needed would lose minutes.
-        guestHasMinutes: (minutes.balance ?? 1) > 0,
-      );
+  Future<SignInResult> signIn(SignInMethod method) => _guarded(
+    unavailable: const SignInFailed(),
+    voiceRunning: const SignInFailed(voiceRunningMessage),
+    action: (service) async {
+      final result = await service.signIn(method);
       if (result is SignInSucceeded && result.returning) _afterSwitch();
       return result;
-    } finally {
-      if (mounted) state = state.copyWith(busy: false);
-    }
-  }
+    },
+  );
 
-  /// Returns false when it could not finish.
-  Future<bool> signOut() => _run((service) => service.signOut());
+  Future<AccountAction> signOut() => _switch((s) => s.signOut());
 
-  /// Returns false when the account could not be deleted; nothing changed then.
-  Future<bool> deleteAccount() => _run((service) => service.deleteAccount());
+  /// Fails, changing nothing, when the server could not delete the account.
+  Future<AccountAction> deleteAccount() => _switch((s) => s.deleteAccount());
 
-  Future<bool> _run(Future<void> Function(AccountService) action) async {
+  Future<AccountAction> _switch(Future<void> Function(AccountService) action) =>
+      _guarded(
+        unavailable: AccountAction.failed,
+        voiceRunning: AccountAction.voiceRunning,
+        action: (service) async {
+          try {
+            await action(service);
+          } catch (error) {
+            debugPrint('Account action failed: $error');
+            return AccountAction.failed;
+          }
+          _afterSwitch();
+          return AccountAction.done;
+        },
+      );
+
+  /// Runs one account action at a time, and none under a running voice
+  /// session: it holds a block bought by the account in use.
+  Future<T> _guarded<T>({
+    required T unavailable,
+    required T voiceRunning,
+    required Future<T> Function(AccountService) action,
+  }) async {
     final service = _service;
-    if (service == null || state.busy) return false;
+    if (service == null || state.busy) return unavailable;
+    if (_ref.read(sessionControllerProvider).isVoiceActive) return voiceRunning;
     state = state.copyWith(busy: true);
     try {
-      await action(service);
-      _afterSwitch();
-      return true;
-    } catch (error) {
-      debugPrint('Account action failed: $error');
-      return false;
+      return await action(service);
     } finally {
       if (mounted) state = state.copyWith(busy: false);
     }
@@ -130,17 +145,19 @@ final accountProvider = StateNotifierProvider<AccountController, AccountState>((
 
   ref.listen(supabaseSessionProvider, (_, next) {
     if (!next.hasValue || next.value == null) return;
-    final backend = ref.read(blockServiceProvider);
     controller.attach(
       AccountService(
-        auth: SupabaseAuthGateway(Supabase.instance.client.auth),
+        auth: SupabaseAuthGateway(
+          Supabase.instance.client.auth,
+          accessToken: () => liveAccessToken(ref),
+        ),
         identity: NativeIdentitySource(
           googleWebClientId: AppEnv.googleWebClientId,
           googleIosClientId: AppEnv.googleIosClientId.isEmpty
               ? null
               : AppEnv.googleIosClientId,
         ),
-        backend: backend is AccountBackend ? backend as AccountBackend : null,
+        backend: ref.read(blockClientProvider),
       ),
     );
   }, fireImmediately: true);

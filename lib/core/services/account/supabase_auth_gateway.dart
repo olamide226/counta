@@ -6,9 +6,16 @@ import 'account_service.dart';
 
 /// [AuthGateway] on Supabase Auth.
 class SupabaseAuthGateway implements AuthGateway {
-  SupabaseAuthGateway(this._auth);
+  SupabaseAuthGateway(
+    this._auth, {
+    required Future<String?> Function() accessToken,
+  }) : _accessToken = accessToken;
 
   final GoTrueClient _auth;
+
+  /// The app's one session resolver (`resolveAccessToken`), shared with the
+  /// voice backend client so both agree on which session is current.
+  final Future<String?> Function() _accessToken;
 
   @override
   AccountStatus get status => statusOf(_auth.currentUser);
@@ -18,14 +25,7 @@ class SupabaseAuthGateway implements AuthGateway {
       _auth.onAuthStateChange.map((event) => statusOf(event.session?.user));
 
   @override
-  Future<String?> freshAccessToken() async {
-    final session = _auth.currentSession;
-    if (session == null) return null;
-    // The server checks this token after the switch, so it must outlive the
-    // few seconds that takes. A guest token near its end is refreshed first.
-    if (!session.isExpired) return session.accessToken;
-    return (await _auth.refreshSession()).session?.accessToken;
-  }
+  Future<String?> freshAccessToken() => _accessToken();
 
   @override
   Future<void> link(IdentityCredential credential) async {
@@ -37,10 +37,8 @@ class SupabaseAuthGateway implements AuthGateway {
         nonce: credential.rawNonce,
       );
     } on AuthException catch (error) {
-      throw LinkRefused(
-        isAlreadyLinked(error) ? LinkRefusal.alreadyLinked : LinkRefusal.other,
-        error,
-      );
+      if (isAlreadyLinked(error)) throw const IdentityAlreadyLinked();
+      rethrow;
     }
   }
 
@@ -81,9 +79,7 @@ class SupabaseAuthGateway implements AuthGateway {
   @visibleForTesting
   static bool isAlreadyLinked(AuthException error) =>
       error.code == ErrorCode.identityAlreadyExists.code ||
-      error.code == ErrorCode.emailExists.code ||
-      error.message.toLowerCase().contains('already linked') ||
-      error.message.toLowerCase().contains('already exists');
+      error.code == ErrorCode.emailExists.code;
 
   /// What the app shows for [user].
   @visibleForTesting

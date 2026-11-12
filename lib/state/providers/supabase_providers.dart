@@ -39,28 +39,38 @@ final supabaseSessionProvider = FutureProvider<Session?>((ref) async {
 ///
 /// Null when the build carries no Supabase configuration, which is what makes
 /// a tap-only build (and every unit test) construct no HTTP client at all.
-final blockServiceProvider = Provider<BlockService?>((ref) {
+/// Voice reads it as [blockServiceProvider]; accounts read it directly for
+/// the account calls it also implements.
+final blockClientProvider = Provider<BlockClient?>((ref) {
   if (!AppEnv.hasSupabase) return null;
 
   final client = BlockClient(
     functionUrl: Uri.parse('${AppEnv.supabaseUrl}/functions/v1/voice-block'),
     anonKey: AppEnv.supabasePublishableKey,
-    accessToken: () {
-      final auth = Supabase.instance.client.auth;
-      return resolveAccessToken(
-        // Waits for anonymous sign-in rather than racing it: a session
-        // started in the first seconds of a cold launch would otherwise look
-        // signed out and be refused a block it is entitled to.
-        startup: ref.read(supabaseSessionProvider.future),
-        currentSession: () => auth.currentSession,
-        refresh: () async => (await auth.refreshSession()).session,
-        signInAnonymously: () async => (await auth.signInAnonymously()).session,
-      );
-    },
+    accessToken: () => liveAccessToken(ref),
   );
   ref.onDispose(client.dispose);
   return client;
 });
+
+final blockServiceProvider = Provider<BlockService?>(
+  (ref) => ref.watch(blockClientProvider),
+);
+
+/// The current session's access token, through [resolveAccessToken]: the one
+/// answer every backend caller uses.
+Future<String?> liveAccessToken(Ref ref) {
+  final auth = Supabase.instance.client.auth;
+  return resolveAccessToken(
+    // Waits for anonymous sign-in rather than racing it: a session started
+    // in the first seconds of a cold launch would otherwise look signed out
+    // and be refused a block it is entitled to.
+    startup: ref.read(supabaseSessionProvider.future),
+    currentSession: () => auth.currentSession,
+    refresh: () async => (await auth.refreshSession()).session,
+    signInAnonymously: () async => (await auth.signInAnonymously()).session,
+  );
+}
 
 /// The JWT to send with a block request, read fresh on every one.
 ///

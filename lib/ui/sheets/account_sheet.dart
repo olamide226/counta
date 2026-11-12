@@ -4,7 +4,6 @@ import 'package:sign_in_with_apple/sign_in_with_apple.dart';
 
 import '../../domain/account/account.dart';
 import '../../state/providers/account_provider.dart';
-import '../../state/providers/counter_provider.dart';
 import '../widgets/account_dialogs.dart';
 import '../widgets/voice_minutes_widgets.dart';
 import 'counta_sheet.dart';
@@ -39,16 +38,7 @@ class _AccountSheetState extends ConsumerState<AccountSheet> {
   /// Which button is working, so only that one shows a spinner.
   SignInMethod? _pending;
 
-  /// Nothing about the account may change under a running voice session: it
-  /// holds a block bought by the account in use.
-  bool _voiceRunning() {
-    if (!ref.read(sessionControllerProvider).isVoiceActive) return false;
-    setState(() => _error = 'Stop voice counting first, then try again.');
-    return true;
-  }
-
   Future<void> _signIn(SignInMethod method) async {
-    if (_voiceRunning()) return;
     setState(() {
       _error = null;
       _pending = method;
@@ -80,28 +70,37 @@ class _AccountSheetState extends ConsumerState<AccountSheet> {
   }
 
   Future<void> _signOut() async {
-    if (_voiceRunning() || !await confirmSignOut(context)) return;
-    final ok = await ref.read(accountProvider.notifier).signOut();
-    if (!mounted) return;
-    if (ok) {
-      Navigator.of(context).pop('Signed out.');
-    } else {
-      setState(() => _error = "Couldn't sign out. Please try again.");
-    }
+    if (!await confirmSignOut(context)) return;
+    _finish(
+      await ref.read(accountProvider.notifier).signOut(),
+      done: 'Signed out.',
+      failed: "Couldn't sign out. Please try again.",
+    );
   }
 
   Future<void> _delete() async {
-    if (_voiceRunning() || !await confirmDeleteAccount(context)) return;
-    final ok = await ref.read(accountProvider.notifier).deleteAccount();
+    if (!await confirmDeleteAccount(context)) return;
+    _finish(
+      await ref.read(accountProvider.notifier).deleteAccount(),
+      done: 'Your account was deleted.',
+      failed:
+          "Couldn't delete your account. Check your connection and try again.",
+    );
+  }
+
+  void _finish(
+    AccountAction outcome, {
+    required String done,
+    required String failed,
+  }) {
     if (!mounted) return;
-    if (ok) {
-      Navigator.of(context).pop('Your account was deleted.');
-    } else {
-      setState(
-        () => _error =
-            "Couldn't delete your account. Check your connection and try "
-            'again.',
-      );
+    switch (outcome) {
+      case AccountAction.done:
+        Navigator.of(context).pop(done);
+      case AccountAction.failed:
+        setState(() => _error = failed);
+      case AccountAction.voiceRunning:
+        setState(() => _error = voiceRunningMessage);
     }
   }
 
@@ -125,11 +124,7 @@ class _AccountSheetState extends ConsumerState<AccountSheet> {
           },
           if (_error case final error?) ...[
             const SizedBox(height: 12),
-            Text(
-              error,
-              textAlign: TextAlign.center,
-              style: TextStyle(color: Theme.of(context).colorScheme.error),
-            ),
+            SheetMessage(text: error, isError: true),
           ],
           const SizedBox(height: 8),
         ],
@@ -223,9 +218,6 @@ class _AccountSheetState extends ConsumerState<AccountSheet> {
   ) {
     final theme = Theme.of(context);
     final scheme = theme.colorScheme;
-    final method = status.method;
-    final idle = !account.busy;
-
     return [
       Text('Account', style: theme.textTheme.headlineSmall),
       const SizedBox(height: 16),
@@ -243,12 +235,7 @@ class _AccountSheetState extends ConsumerState<AccountSheet> {
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  Text(
-                    method == null
-                        ? 'Signed in'
-                        : 'Signed in with ${method.label}',
-                    style: theme.textTheme.titleMedium,
-                  ),
+                  Text(status.title, style: theme.textTheme.titleMedium),
                   Text(
                     _displayEmail(status.email) ??
                         'Your voice minutes are saved to this account.',
@@ -267,7 +254,7 @@ class _AccountSheetState extends ConsumerState<AccountSheet> {
         const Center(child: CircularProgressIndicator())
       else ...[
         OutlinedButton(
-          onPressed: idle ? _signOut : null,
+          onPressed: _signOut,
           style: OutlinedButton.styleFrom(
             padding: const EdgeInsets.symmetric(vertical: 14),
           ),
@@ -275,7 +262,7 @@ class _AccountSheetState extends ConsumerState<AccountSheet> {
         ),
         const SizedBox(height: 4),
         TextButton(
-          onPressed: idle ? _delete : null,
+          onPressed: _delete,
           style: TextButton.styleFrom(foregroundColor: scheme.error),
           child: const Text('Delete account'),
         ),
