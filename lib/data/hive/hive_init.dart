@@ -9,6 +9,7 @@ const String sessionsBoxName = 'sessions';
 const String sessionCheckpointBoxName = 'session_checkpoint';
 const String phraseHistoryBoxName = 'phrase_history';
 const String openBlocksBoxName = 'open_blocks';
+const String sessionSyncBoxName = 'session_sync';
 
 Future<void> initHive() async {
   await Hive.initFlutter();
@@ -31,6 +32,8 @@ Future<void> initHive() async {
     Hive.openBox(phraseHistoryBoxName),
     // Paid voice blocks held, so a killed run can be settled by the next.
     Hive.openBox(openBlocksBoxName),
+    // Saved-session changes not yet backed up to the signed-in account.
+    Hive.openBox(sessionSyncBoxName),
   ]);
 }
 
@@ -40,3 +43,4 @@ Box<CountSession> getSessionCheckpointBox() =>
     Hive.box<CountSession>(sessionCheckpointBoxName);
 Box getPhraseHistoryBox() => Hive.box(phraseHistoryBoxName);
 Box getOpenBlocksBox() => Hive.box(openBlocksBoxName);
+Box getSessionSyncBox() => Hive.box(sessionSyncBoxName);
