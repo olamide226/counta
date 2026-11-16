@@ -6,11 +6,9 @@ import '../../core/services/tap_feedback_service.dart';
 import '../../core/services/notification_service.dart';
 import '../../core/services/live_activity_service.dart';
 
-final tapFeedbackServiceProvider = Provider<TapFeedbackService>((ref) {
-  final service = TapFeedbackService();
-  ref.onDispose(() => service.dispose());
-  return service;
-});
+final tapFeedbackServiceProvider = Provider<TapFeedbackService>(
+  (ref) => TapFeedbackService(),
+);
 
 final alertServiceProvider = Provider<CounterAlertService>((ref) {
   return CounterAlertService();
