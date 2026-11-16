@@ -13,6 +13,10 @@ class TapZone extends StatelessWidget {
       color: colorScheme.primaryContainer.withValues(alpha: 0.3),
       child: InkWell(
         onTap: onTap,
+        // The tap's sound and vibration come from the user's chosen mode
+        // (TapFeedbackService). InkWell's own Android click would sound even
+        // on Mute.
+        enableFeedback: false,
         child: Center(
           child: Icon(
             Icons.touch_app_rounded,

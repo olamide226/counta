@@ -2,7 +2,10 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:counta/domain/models/app_settings.dart';
 import 'package:counta/state/providers/counter_provider.dart';
+import 'package:counta/state/providers/services_provider.dart';
 import 'package:counta/state/providers/settings_provider.dart';
+
+import 'helpers/mock_repositories.dart' show MockTapFeedbackService;
 
 class MockSettingsRepository {
   AppSettings getSettings() => AppSettings.defaults();
@@ -16,6 +19,11 @@ void main() {
         overrides: [
           settingsProvider.overrideWith(
             (ref) => SettingsNotifier(MockSettingsRepository()),
+          ),
+          // The real one talks to the platform, which never answers under
+          // testWidgets' fake clock.
+          tapFeedbackServiceProvider.overrideWithValue(
+            MockTapFeedbackService(),
           ),
         ],
       );
@@ -32,6 +40,11 @@ void main() {
         overrides: [
           settingsProvider.overrideWith(
             (ref) => SettingsNotifier(MockSettingsRepository()),
+          ),
+          // The real one talks to the platform, which never answers under
+          // testWidgets' fake clock.
+          tapFeedbackServiceProvider.overrideWithValue(
+            MockTapFeedbackService(),
           ),
         ],
       );
