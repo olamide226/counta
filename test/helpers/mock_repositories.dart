@@ -42,13 +42,7 @@ class InMemorySessionsRepository {
 
 class MockTapFeedbackService implements TapFeedbackService {
   @override
-  Future<void> init() async {}
-
-  @override
   Future<void> playTapFeedback(SoundMode mode) async {}
-
-  @override
-  void dispose() {}
 }
 
 class MockNotificationService implements NotificationService {

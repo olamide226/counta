@@ -31,45 +31,32 @@ void main() {
   }
 
   const click = 'SystemSound.play SystemSoundType.click';
+  const haptics = {
+    // Android's firm long-press buzz; iPhone's light tap.
+    TargetPlatform.android: 'HapticFeedback.vibrate null',
+    TargetPlatform.iOS: 'HapticFeedback.vibrate HapticFeedbackType.lightImpact',
+  };
 
-  group('Android', () {
-    const android = TargetPlatform.android;
-    const buzz = 'HapticFeedback.vibrate null';
+  for (final MapEntry(key: platform, value: buzz) in haptics.entries) {
+    group(platform.name, () {
+      test('mute makes no sound and no vibration', () async {
+        expect(await play(SoundMode.mute, platform), isEmpty);
+      });
 
-    test('mute makes no sound and no vibration', () async {
-      expect(await play(SoundMode.mute, android), isEmpty);
+      test('sound only clicks', () async {
+        expect(await play(SoundMode.sound, platform), [click]);
+      });
+
+      test('vibrate only vibrates', () async {
+        expect(await play(SoundMode.vibrate, platform), [buzz]);
+      });
+
+      test('sound and vibrate does one of each', () async {
+        expect(
+          await play(SoundMode.soundAndVibrate, platform),
+          unorderedEquals([click, buzz]),
+        );
+      });
     });
-
-    test('sound only clicks', () async {
-      expect(await play(SoundMode.sound, android), [click]);
-    });
-
-    test('vibrate only buzzes', () async {
-      expect(await play(SoundMode.vibrate, android), [buzz]);
-    });
-
-    test('sound and vibrate does one of each', () async {
-      expect(
-        await play(SoundMode.soundAndVibrate, android),
-        unorderedEquals([click, buzz]),
-      );
-    });
-  });
-
-  group('iPhone', () {
-    const ios = TargetPlatform.iOS;
-    const tap = 'HapticFeedback.vibrate HapticFeedbackType.lightImpact';
-
-    test('mute makes no sound and no vibration', () async {
-      expect(await play(SoundMode.mute, ios), isEmpty);
-    });
-
-    test('sound only clicks', () async {
-      expect(await play(SoundMode.sound, ios), [click]);
-    });
-
-    test('vibrate only taps', () async {
-      expect(await play(SoundMode.vibrate, ios), [tap]);
-    });
-  });
+  }
 }

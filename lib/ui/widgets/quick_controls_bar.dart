@@ -43,6 +43,9 @@ class QuickControlsBar extends StatelessWidget {
               ),
               IconButton.outlined(
                 onPressed: onUndo,
+                // Undo changes the count, so its feedback is the sound mode's
+                // alone (TapFeedbackService), never Android's own click.
+                enableFeedback: false,
                 icon: const Icon(Icons.undo),
                 tooltip: 'Undo',
               ),
@@ -78,6 +81,7 @@ class QuickControlsBar extends StatelessWidget {
             ),
             OutlinedButton.icon(
               onPressed: onUndo,
+              style: const ButtonStyle(enableFeedback: false),
               icon: const Icon(Icons.undo),
               label: const Text('Undo'),
             ),
