@@ -229,6 +229,15 @@ class _CounterScreenState extends ConsumerState<CounterScreen>
     // Mirror the screen wakelock to session state here rather than at the call
     // sites, so a session that ends by erroring out releases it too.
     ref.listen<SessionController>(sessionControllerProvider, (prev, next) {
+      // On every change, not just the edges: the first try declines until
+      // the microphone permission is granted, a few statuses into the start.
+      ref
+          .read(backgroundVoiceServiceProvider)
+          .setActive(
+            next.isVoiceActive,
+            title: 'Counting “${next.activePhrases?.label ?? 'your phrase'}”',
+          );
+
       final wasActive = prev?.isVoiceActive ?? false;
       if (wasActive == next.isVoiceActive) return;
 

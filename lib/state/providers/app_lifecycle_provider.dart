@@ -29,12 +29,16 @@ class AppLifecycleNotifier extends StateNotifier<AppLifecycleState> {
     // the audio background mode. Nagging the user to "resume" a session that
     // never stopped would be wrong, so show a live status instead.
     if (session.isVoiceActive) {
-      _ref
-          .read(notificationServiceProvider)
-          .showVoiceSessionNotification(
-            currentCount: session.total,
-            phrase: session.activePhrases?.label ?? 'your phrase',
-          );
+      // On Android the background service already shows the ongoing
+      // "counting" notification; a second one would only repeat it.
+      if (!_ref.read(backgroundVoiceServiceProvider).isHeld) {
+        _ref
+            .read(notificationServiceProvider)
+            .showVoiceSessionNotification(
+              currentCount: session.total,
+              phrase: session.activePhrases?.label ?? 'your phrase',
+            );
+      }
 
       // Drop the wakelock once we are in the background. The audio background
       // mode keeps counting alive on its own, and forcing another app's screen
