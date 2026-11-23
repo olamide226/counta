@@ -1,0 +1,13 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Counta's ring of beads, white on transparent: Android draws the
+     status-bar and Live Update chip icon as a one-colour silhouette, so the
+     full-colour launcher icon came out as a plain circle. -->
+<vector xmlns:android="http://schemas.android.com/apk/res/android"
+    android:width="24dp"
+    android:height="24dp"
+    android:viewportWidth="24"
+    android:viewportHeight="24">
+    <path
+        android:fillColor="#FFFFFFFF"
+        android:pathData="M12.076,3.693a2.15,2.15 0,1 0,4.3,0a2.15,2.15 0,1 0,-4.3,0M16.331,5.919a1.75,1.75 0,1 0,3.5,0a1.75,1.75 0,1 0,-3.5,0M18.557,9.774a1.75,1.75 0,1 0,3.5,0a1.75,1.75 0,1 0,-3.5,0M18.557,14.226a1.75,1.75 0,1 0,3.5,0a1.75,1.75 0,1 0,-3.5,0M16.331,18.081a1.75,1.75 0,1 0,3.5,0a1.75,1.75 0,1 0,-3.5,0M12.476,20.307a1.75,1.75 0,1 0,3.5,0a1.75,1.75 0,1 0,-3.5,0M8.024,20.307a1.75,1.75 0,1 0,3.5,0a1.75,1.75 0,1 0,-3.5,0M4.169,18.081a1.75,1.75 0,1 0,3.5,0a1.75,1.75 0,1 0,-3.5,0M1.943,14.226a1.75,1.75 0,1 0,3.5,0a1.75,1.75 0,1 0,-3.5,0M1.943,9.774a1.75,1.75 0,1 0,3.5,0a1.75,1.75 0,1 0,-3.5,0M4.169,5.919a1.75,1.75 0,1 0,3.5,0a1.75,1.75 0,1 0,-3.5,0M8.024,3.693a1.75,1.75 0,1 0,3.5,0a1.75,1.75 0,1 0,-3.5,0" />
+</vector>

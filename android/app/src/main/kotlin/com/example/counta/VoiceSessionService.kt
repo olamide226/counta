@@ -70,7 +70,7 @@ class VoiceSessionService : Service() {
                 PendingIntent.FLAG_IMMUTABLE or PendingIntent.FLAG_UPDATE_CURRENT,
             )
             val builder = NotificationCompat.Builder(context, CHANNEL_ID)
-                .setSmallIcon(R.mipmap.ic_launcher)
+                .setSmallIcon(R.drawable.ic_stat_counta)
                 .setContentTitle(title)
                 .setContentText(
                     if (count == null) "Voice counting is on · tap to return"
