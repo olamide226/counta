@@ -7,6 +7,7 @@ import '../../core/theme/sound_mode_presentation.dart';
 import '../../domain/models/enums.dart';
 import '../../domain/account/account.dart';
 import '../../state/providers/account_provider.dart';
+import '../../state/providers/live_updates_provider.dart';
 import '../../state/providers/services_provider.dart';
 import '../../state/providers/settings_provider.dart';
 import '../../state/providers/voice_minutes_provider.dart';
@@ -350,49 +351,21 @@ class _AccountTile extends ConsumerWidget {
 
 /// "Count on lock screen": where a user who said "Not now" (or never saw
 /// the offer) turns Live Updates on later. Shown only on phones that have
-/// them, and re-read on return from Settings, where the switch lives.
-class _LiveUpdatesTile extends ConsumerStatefulWidget {
+/// them.
+class _LiveUpdatesTile extends ConsumerWidget {
   const _LiveUpdatesTile();
 
   @override
-  ConsumerState<_LiveUpdatesTile> createState() => _LiveUpdatesTileState();
-}
-
-class _LiveUpdatesTileState extends ConsumerState<_LiveUpdatesTile>
-    with WidgetsBindingObserver {
-  LiveUpdates _state = LiveUpdates.unsupported;
-
-  @override
-  void initState() {
-    super.initState();
-    WidgetsBinding.instance.addObserver(this);
-    _refresh();
-  }
-
-  @override
-  void dispose() {
-    WidgetsBinding.instance.removeObserver(this);
-    super.dispose();
-  }
-
-  @override
-  void didChangeAppLifecycleState(AppLifecycleState state) {
-    if (state == AppLifecycleState.resumed) _refresh();
-  }
-
-  Future<void> _refresh() async {
-    final next = await ref.read(backgroundVoiceServiceProvider).liveUpdates();
-    if (mounted && next != _state) setState(() => _state = next);
-  }
-
-  @override
-  Widget build(BuildContext context) {
-    if (_state == LiveUpdates.unsupported) return const SizedBox.shrink();
+  Widget build(BuildContext context, WidgetRef ref) {
+    final state = ref.watch(liveUpdatesProvider).value;
+    if (state == null || state == LiveUpdates.unsupported) {
+      return const SizedBox.shrink();
+    }
     return ListTile(
       leading: const Icon(Icons.lock_clock),
       title: const Text('Count on Lock Screen'),
       subtitle: Text(
-        _state == LiveUpdates.on
+        state == LiveUpdates.on
             ? 'On · shown while voice counting runs'
             : 'Off · tap to turn on Live Updates',
       ),

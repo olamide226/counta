@@ -31,52 +31,39 @@ class VoiceSessionService : Service() {
     companion object {
         const val EXTRA_TITLE = "title"
         const val EXTRA_COUNT = "count"
+        const val DEFAULT_TITLE = "Voice counting is on"
 
-        // Shared with the notification the Dart side used to show, so the
-        // user keeps one "Voice Session" setting rather than two.
+        // Shared with the notification the Dart side shows on iOS, so the
+        // name and description match NotificationService's.
         private const val CHANNEL_ID = "voice_session_channel"
         private const val NOTIFICATION_ID = 7301
         private const val WAKE_LOCK_TAG = "Counta:VoiceSession"
 
+        /** Whether the service is in the foreground, so updates only go to one. */
+        @Volatile
+        private var running = false
+
+        @Volatile
+        private var tapIntent: PendingIntent? = null
+
         /**
          * Shows [count] on the running session's notification. Posting under
          * the service's own id replaces its notification in place, and the
-         * service stays in the foreground.
+         * service stays in the foreground. Nothing is posted when it isn't
+         * running (a start Android refused), so no stray notification shows.
          */
         fun update(context: Context, title: String, count: Int) {
+            if (!running) return
             val manager = context.getSystemService(NOTIFICATION_SERVICE) as NotificationManager
             manager.notify(NOTIFICATION_ID, buildNotification(context, title, count))
         }
 
-        fun buildNotification(context: Context, title: String, count: Int?): Notification {
-            val manager = context.getSystemService(NOTIFICATION_SERVICE) as NotificationManager
-            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
-                // Low, not min: Android never promotes a min-importance channel.
-                manager.createNotificationChannel(
-                    NotificationChannel(
-                        CHANNEL_ID,
-                        "Voice Session",
-                        NotificationManager.IMPORTANCE_LOW,
-                    ).apply { description = "Shown while voice counting is running" },
-                )
-            }
-            val open = context.packageManager.getLaunchIntentForPackage(context.packageName)?.apply {
-                flags = Intent.FLAG_ACTIVITY_SINGLE_TOP or Intent.FLAG_ACTIVITY_CLEAR_TOP
-            }
-            val tap = PendingIntent.getActivity(
-                context,
-                0,
-                open,
-                PendingIntent.FLAG_IMMUTABLE or PendingIntent.FLAG_UPDATE_CURRENT,
-            )
-            val builder = NotificationCompat.Builder(context, CHANNEL_ID)
+        private fun buildNotification(context: Context, title: String, count: Int): Notification =
+            NotificationCompat.Builder(context, CHANNEL_ID)
                 .setSmallIcon(R.drawable.ic_stat_counta)
                 .setContentTitle(title)
-                .setContentText(
-                    if (count == null) "Voice counting is on · tap to return"
-                    else "$count so far · tap to return",
-                )
-                .setContentIntent(tap)
+                .setContentText("$count so far · tap to return")
+                .setContentIntent(tapIntent(context))
                 .setOngoing(true)
                 .setOnlyAlertOnce(true)
                 .setShowWhen(false)
@@ -87,8 +74,32 @@ class VoiceSessionService : Service() {
                 // and a pinned card on the lock screen. Ignored before 16,
                 // where this stays an ordinary ongoing notification.
                 .setRequestPromotedOngoing(true)
-            if (count != null) builder.setShortCriticalText(count.toString())
-            return builder.build()
+                .setShortCriticalText(count.toString())
+                .build()
+
+        /** Built once: it never changes, and building it is a system call. */
+        private fun tapIntent(context: Context): PendingIntent =
+            tapIntent ?: PendingIntent.getActivity(
+                context,
+                0,
+                context.packageManager.getLaunchIntentForPackage(context.packageName)?.apply {
+                    flags = Intent.FLAG_ACTIVITY_SINGLE_TOP or Intent.FLAG_ACTIVITY_CLEAR_TOP
+                },
+                PendingIntent.FLAG_IMMUTABLE or PendingIntent.FLAG_UPDATE_CURRENT,
+            ).also { tapIntent = it }
+
+        /** Once per start: creating an existing channel changes nothing. */
+        private fun ensureChannel(context: Context) {
+            if (Build.VERSION.SDK_INT < Build.VERSION_CODES.O) return
+            val manager = context.getSystemService(NOTIFICATION_SERVICE) as NotificationManager
+            // Low, not min: Android never promotes a min-importance channel.
+            manager.createNotificationChannel(
+                NotificationChannel(
+                    CHANNEL_ID,
+                    "Voice Session",
+                    NotificationManager.IMPORTANCE_LOW,
+                ).apply { description = "Shown while voice counting is running" },
+            )
         }
     }
 
@@ -97,8 +108,9 @@ class VoiceSessionService : Service() {
     override fun onBind(intent: Intent?): IBinder? = null
 
     override fun onStartCommand(intent: Intent?, flags: Int, startId: Int): Int {
-        val title = intent?.getStringExtra(EXTRA_TITLE) ?: "Voice counting is on"
-        val count = intent?.takeIf { it.hasExtra(EXTRA_COUNT) }?.getIntExtra(EXTRA_COUNT, 0)
+        val title = intent?.getStringExtra(EXTRA_TITLE) ?: DEFAULT_TITLE
+        val count = intent?.getIntExtra(EXTRA_COUNT, 0) ?: 0
+        ensureChannel(this)
         try {
             ServiceCompat.startForeground(
                 this,
@@ -117,6 +129,7 @@ class VoiceSessionService : Service() {
             stopSelf()
             return START_NOT_STICKY
         }
+        running = true
         holdWakeLock()
         // Not sticky: if Android ever kills the process anyway, the session
         // is gone with it, and a service restarted with nothing to keep
@@ -125,6 +138,7 @@ class VoiceSessionService : Service() {
     }
 
     override fun onDestroy() {
+        running = false
         wakeLock?.let { if (it.isHeld) it.release() }
         wakeLock = null
         super.onDestroy()

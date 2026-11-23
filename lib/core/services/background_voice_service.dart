@@ -18,16 +18,6 @@ import 'package:flutter/services.dart';
 ///
 /// iOS needs nothing here: `UIBackgroundModes: audio` already keeps the
 /// session alive there, so on every other platform this does nothing.
-/// Whether the counting notification can show as a Live Update.
-enum LiveUpdates {
-  /// Before Android 16, or not Android: an ordinary notification at most.
-  unsupported,
-  on,
-
-  /// Supported, but the user's per-app switch is off.
-  off,
-}
-
 class BackgroundVoiceService {
   /// [start] and [stop] exist so tests can exercise the bookkeeping without
   /// the platform channel; [supported] defaults to "running on Android".
@@ -107,6 +97,11 @@ class BackgroundVoiceService {
   bool _held = false;
   bool _starting = false;
 
+  /// When the platform last declined a start. Declines last a while (the
+  /// microphone permission not granted yet), so asking again on every count
+  /// would only repeat the refusal.
+  DateTime? _declinedAt;
+
   /// What the notification shows, and what it should show next.
   (String, int)? _shown;
   (String, int)? _wanted;
@@ -131,15 +126,23 @@ class BackgroundVoiceService {
   Future<void> _acquire(String title, int count) async {
     if (!_supported || _starting) return;
     if (_held) return _show((title, count));
+    final declined = _declinedAt;
+    if (declined != null && _now().difference(declined) < updateInterval) {
+      return;
+    }
     _starting = true;
     try {
       _held = await _start(title, count);
       if (_held) {
         _shown = (title, count);
         _lastUpdate = _now();
+        _declinedAt = null;
+      } else {
+        _declinedAt = _now();
       }
     } catch (e) {
       // Not fatal: the session still counts while Counta is open.
+      _declinedAt = _now();
       debugPrint('Could not keep voice counting alive in background: $e');
     } finally {
       _starting = false;
@@ -178,10 +181,21 @@ class BackgroundVoiceService {
     _shown = null;
     _wanted = null;
     _lastUpdate = null;
+    _declinedAt = null;
     try {
       await _stop();
     } catch (e) {
       debugPrint('Could not stop the voice session service: $e');
     }
   }
+}
+
+/// Whether the counting notification can show as a Live Update.
+enum LiveUpdates {
+  /// Before Android 16, or not Android: an ordinary notification at most.
+  unsupported,
+  on,
+
+  /// Supported, but the user's per-app switch is off.
+  off,
 }

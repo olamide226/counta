@@ -20,12 +20,15 @@ class MainActivity : FlutterActivity() {
         ).setMethodCallHandler { call, result ->
             when (call.method) {
                 "start" -> result.success(
-                    startVoiceSession(call.argument<String>("title"), call.argument<Int>("count")),
+                    startVoiceSession(
+                        call.argument<String>("title") ?: VoiceSessionService.DEFAULT_TITLE,
+                        call.argument<Int>("count") ?: 0,
+                    ),
                 )
                 "update" -> {
                     VoiceSessionService.update(
                         this,
-                        call.argument<String>("title") ?: "Voice counting is on",
+                        call.argument<String>("title") ?: VoiceSessionService.DEFAULT_TITLE,
                         call.argument<Int>("count") ?: 0,
                     )
                     result.success(null)
@@ -46,7 +49,7 @@ class MainActivity : FlutterActivity() {
      * needs the permission already granted, so this declines until it is and
      * the Dart side asks again on the next status change.
      */
-    private fun startVoiceSession(title: String?, count: Int?): Boolean {
+    private fun startVoiceSession(title: String, count: Int): Boolean {
         val granted = ContextCompat.checkSelfPermission(
             this,
             Manifest.permission.RECORD_AUDIO,
@@ -54,7 +57,7 @@ class MainActivity : FlutterActivity() {
         if (!granted) return false
         val intent = Intent(this, VoiceSessionService::class.java)
             .putExtra(VoiceSessionService.EXTRA_TITLE, title)
-            .apply { if (count != null) putExtra(VoiceSessionService.EXTRA_COUNT, count) }
+            .putExtra(VoiceSessionService.EXTRA_COUNT, count)
         return try {
             ContextCompat.startForegroundService(this, intent)
             true

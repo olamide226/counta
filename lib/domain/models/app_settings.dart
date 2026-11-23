@@ -37,6 +37,11 @@ class AppSettings {
   @HiveField(8, defaultValue: false)
   final bool voiceDisclosureSeen;
 
+  /// Whether Android's Live Updates (the count on the lock screen and in the
+  /// status bar) have been offered. Offered once, so never asked twice.
+  @HiveField(9, defaultValue: false)
+  final bool liveUpdatesOffered;
+
   const AppSettings({
     required this.themeModeChoice,
     required this.themeId,
@@ -47,6 +52,7 @@ class AppSettings {
     required this.confirmReset,
     required this.keepScreenOn,
     this.voiceDisclosureSeen = false,
+    this.liveUpdatesOffered = false,
   });
 
   factory AppSettings.defaults() {
@@ -73,6 +79,7 @@ class AppSettings {
     bool? confirmReset,
     bool? keepScreenOn,
     bool? voiceDisclosureSeen,
+    bool? liveUpdatesOffered,
   }) {
     return AppSettings(
       themeModeChoice: themeModeChoice ?? this.themeModeChoice,
@@ -85,6 +92,7 @@ class AppSettings {
       confirmReset: confirmReset ?? this.confirmReset,
       keepScreenOn: keepScreenOn ?? this.keepScreenOn,
       voiceDisclosureSeen: voiceDisclosureSeen ?? this.voiceDisclosureSeen,
+      liveUpdatesOffered: liveUpdatesOffered ?? this.liveUpdatesOffered,
     );
   }
 }

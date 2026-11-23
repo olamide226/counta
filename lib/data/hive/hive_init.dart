@@ -11,7 +11,6 @@ const String phraseHistoryBoxName = 'phrase_history';
 const String openBlocksBoxName = 'open_blocks';
 const String sessionSyncBoxName = 'session_sync';
 const String accountBoxName = 'account';
-const String promptsBoxName = 'prompts';
 
 Future<void> initHive() async {
   await Hive.initFlutter();
@@ -38,8 +37,6 @@ Future<void> initHive() async {
     Hive.openBox(sessionSyncBoxName),
     // Which method this phone signed in with (see RememberedSignIn).
     Hive.openBox(accountBoxName),
-    // One-time offers already made, so none is made twice.
-    Hive.openBox(promptsBoxName),
   ]);
 }
 
@@ -51,4 +48,3 @@ Box getPhraseHistoryBox() => Hive.box(phraseHistoryBoxName);
 Box getOpenBlocksBox() => Hive.box(openBlocksBoxName);
 Box getSessionSyncBox() => Hive.box(sessionSyncBoxName);
 Box getAccountBox() => Hive.box(accountBoxName);
-Box getPromptsBox() => Hive.box(promptsBoxName);

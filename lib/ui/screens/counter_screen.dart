@@ -13,7 +13,6 @@ import '../../state/providers/counter_provider.dart';
 import '../../state/providers/services_provider.dart';
 import '../../core/services/background_voice_service.dart';
 import '../../core/services/microphone_settings.dart';
-import '../../data/hive/hive_init.dart';
 import '../../domain/counting/block_service.dart';
 import '../../domain/counting/counting_engine.dart';
 import '../../domain/models/count_session.dart';
@@ -156,11 +155,9 @@ class _CounterScreenState extends ConsumerState<CounterScreen>
         .ensureAndroidPermission();
     if (!allowed) return;
 
-    const key = 'live_updates_offered';
-    final prompts = getPromptsBox();
-    if (prompts.get(key) == true) return;
+    if (ref.read(settingsProvider).liveUpdatesOffered) return;
     if (await background.liveUpdates() != LiveUpdates.off) return;
-    await prompts.put(key, true);
+    await ref.read(settingsProvider.notifier).markLiveUpdatesOffered();
     if (!mounted) return;
     await showLiveUpdatesDialog(
       context,
@@ -238,6 +235,8 @@ class _CounterScreenState extends ConsumerState<CounterScreen>
       final outcome = await sessionController.startVoiceSession(phrases);
       if (outcome == EngineStatus.permissionDenied) {
         await _handleMicrophoneDenied();
+      } else if (SessionController.runningStatuses.contains(outcome)) {
+        await _offerLiveUpdates();
       }
     } on BlockFailure catch (failure) {
       if (mounted) _say(failure.message);
@@ -256,19 +255,9 @@ class _CounterScreenState extends ConsumerState<CounterScreen>
     final isVoiceActive = sessionController.isVoiceActive;
     final scheme = Theme.of(context).colorScheme;
 
-    // Mirror the background service to session state here rather than at the
-    // call sites, so a session that ends by erroring out stops it too.
+    // Here rather than at the call sites, so a session that ends by erroring
+    // out clears its notification too.
     ref.listen<SessionController>(sessionControllerProvider, (prev, next) {
-      // On every change, not just the edges: the first try declines until
-      // the microphone permission is granted, a few statuses into the start.
-      ref
-          .read(backgroundVoiceServiceProvider)
-          .setActive(
-            next.isVoiceActive,
-            title: 'Counting “${next.activePhrases?.label ?? 'your phrase'}”',
-            count: next.total,
-          );
-
       final wasActive = prev?.isVoiceActive ?? false;
       if (wasActive == next.isVoiceActive) return;
 

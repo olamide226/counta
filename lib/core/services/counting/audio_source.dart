@@ -239,9 +239,8 @@ class AudioSource {
     }
 
     final Stream<Uint8List> recordStream;
-    final speech = _onAndroid && _speechSourceUsable;
     try {
-      recordStream = await _startStream(sampleRate, speech: speech);
+      recordStream = await _startStream(sampleRate);
     } catch (error, stack) {
       // iOS can refuse to start the microphone — right after a call, or from
       // the background. Unhandled, the refusal vanished: no frame and no
@@ -251,7 +250,7 @@ class AudioSource {
       return;
     }
 
-    _speechSourceUnproven = speech && _speechSourceUsable;
+    _speechSourceUnproven = _onAndroid && _speechSourceUsable;
     _lastFrameAt = DateTime.now();
     _startStallWatchdog();
 
@@ -268,26 +267,19 @@ class AudioSource {
     );
   }
 
-  /// Starts the recorder, on the speech source if [speech]; a phone that
-  /// refuses it is asked again on the default source, and remembered.
-  Future<Stream<Uint8List>> _startStream(
-    int sampleRate, {
-    required bool speech,
-  }) async {
-    if (!speech) {
-      return _recorder.startStream(
-        recordConfig(sampleRate, speechSource: false),
-      );
+  /// Starts the recorder, on Android from the speech source while this
+  /// phone has not refused it; a refusal is remembered and the default
+  /// source is used instead.
+  Future<Stream<Uint8List>> _startStream(int sampleRate) async {
+    if (_onAndroid && _speechSourceUsable) {
+      try {
+        return await _recorder.startStream(recordConfig(sampleRate));
+      } catch (error) {
+        debugPrint('Speech audio source refused ($error); using the default.');
+        _speechSourceUsable = false;
+      }
     }
-    try {
-      return await _recorder.startStream(recordConfig(sampleRate));
-    } catch (error) {
-      debugPrint('Speech audio source refused ($error); using the default.');
-      _speechSourceUsable = false;
-      return _recorder.startStream(
-        recordConfig(sampleRate, speechSource: false),
-      );
-    }
+    return _recorder.startStream(recordConfig(sampleRate, speechSource: false));
   }
 
   /// Watches for the microphone going quiet at the *frame* level.

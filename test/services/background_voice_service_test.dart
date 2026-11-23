@@ -64,6 +64,7 @@ void main() {
     var fail = true;
     final s = BackgroundVoiceService(
       supported: true,
+      updateInterval: Duration.zero,
       start: (_, _) async {
         if (fail) throw Exception('refused');
         return true;
@@ -117,4 +118,23 @@ void main() {
       });
     },
   );
+
+  test('a declined start is not asked again within the interval', () {
+    fakeAsync((async) {
+      grant = false;
+      final s = service(
+        interval: const Duration(seconds: 1),
+        now: () => DateTime(2026).add(async.elapsed),
+      );
+      s.setActive(true, title: 'a', count: 1);
+      async.flushMicrotasks();
+      s.setActive(true, title: 'a', count: 2);
+      async.flushMicrotasks();
+      expect(calls, ['start a']);
+      async.elapse(const Duration(seconds: 1));
+      s.setActive(true, title: 'a', count: 3);
+      async.flushMicrotasks();
+      expect(calls, ['start a', 'start a']);
+    });
+  });
 }

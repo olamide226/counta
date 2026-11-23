@@ -30,7 +30,7 @@ class ScreenWakeService {
     try {
       await _toggle(true);
     } catch (e) {
-      // Not fatal: the session still counts, the screen just may sleep.
+      // Not fatal: the screen just follows the phone's own auto-lock.
       _held = false;
       debugPrint('Could not keep screen awake: $e');
     }

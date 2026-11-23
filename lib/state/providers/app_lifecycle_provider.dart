@@ -36,7 +36,7 @@ class AppLifecycleNotifier extends StateNotifier<AppLifecycleState> {
             .read(notificationServiceProvider)
             .showVoiceSessionNotification(
               currentCount: session.total,
-              phrase: session.activePhrases?.label ?? 'your phrase',
+              phrase: session.sessionLabel,
             );
       }
 
