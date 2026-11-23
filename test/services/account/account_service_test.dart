@@ -258,5 +258,83 @@ void main() {
     test('an anonymous or missing user is a guest', () {
       expect(SupabaseAuthGateway.statusOf(null), isA<GuestAccount>());
     });
+
+    group('which method the label names', () {
+      UserIdentity identity(String provider, String updatedAt) => UserIdentity(
+        id: provider,
+        userId: 'u',
+        identityData: const {},
+        identityId: provider,
+        provider: provider,
+        createdAt: '2026-11-11T19:00:00Z',
+        lastSignInAt: '2026-11-11T19:00:00Z',
+        updatedAt: updatedAt,
+      );
+      // One email that signed in with Apple on an iPhone (16 Nov) and with
+      // Google on an Android phone later (23 Nov).
+      final both = User(
+        id: 'u',
+        appMetadata: const {
+          'provider': 'apple',
+          'providers': ['apple', 'google'],
+        },
+        userMetadata: const {},
+        aud: 'authenticated',
+        createdAt: '2026-11-11T19:00:00Z',
+        identities: [
+          identity('apple', '2026-11-16T06:54:00Z'),
+          identity('google', '2026-11-23T10:05:00Z'),
+        ],
+      );
+      SignInMethod? methodOf(
+        User user, {
+        SignInMethod? remembered,
+        List<SignInMethod> offered = SignInMethod.values,
+      }) =>
+          (SupabaseAuthGateway.statusOf(
+                    user,
+                    remembered: remembered,
+                    offered: offered,
+                  )
+                  as SignedInAccount)
+              .method;
+
+      test('names the method this phone signed in with', () {
+        expect(
+          methodOf(both, remembered: SignInMethod.apple),
+          SignInMethod.apple,
+        );
+        expect(
+          methodOf(both, remembered: SignInMethod.google),
+          SignInMethod.google,
+        );
+      });
+
+      test('without one, the only method this phone offers', () {
+        expect(
+          methodOf(both, offered: const [SignInMethod.google]),
+          SignInMethod.google,
+        );
+      });
+
+      test('otherwise the method most recently used', () {
+        expect(methodOf(both), SignInMethod.google);
+      });
+
+      test('ignores a remembered method the account no longer has', () {
+        final appleOnly = User(
+          id: 'u',
+          appMetadata: const {'provider': 'apple'},
+          userMetadata: const {},
+          aud: 'authenticated',
+          createdAt: '2026-11-11T19:00:00Z',
+          identities: [identity('apple', '2026-11-16T06:54:00Z')],
+        );
+        expect(
+          methodOf(appleOnly, remembered: SignInMethod.google),
+          SignInMethod.apple,
+        );
+      });
+    });
   });
 }
