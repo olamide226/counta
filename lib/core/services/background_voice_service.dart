@@ -18,6 +18,16 @@ import 'package:flutter/services.dart';
 ///
 /// iOS needs nothing here: `UIBackgroundModes: audio` already keeps the
 /// session alive there, so on every other platform this does nothing.
+/// Whether the counting notification can show as a Live Update.
+enum LiveUpdates {
+  /// Before Android 16, or not Android: an ordinary notification at most.
+  unsupported,
+  on,
+
+  /// Supported, but the user's per-app switch is off.
+  off,
+}
+
 class BackgroundVoiceService {
   /// [start] and [stop] exist so tests can exercise the bookkeeping without
   /// the platform channel; [supported] defaults to "running on Android".
@@ -49,6 +59,34 @@ class BackgroundVoiceService {
       _channel.invokeMethod<void>('update', {'title': title, 'count': count});
 
   static Future<void> _platformStop() => _channel.invokeMethod<void>('stop');
+
+  /// Whether Counta's counting notification can be a Live Update here.
+  Future<LiveUpdates> liveUpdates() async {
+    if (!_supported) return LiveUpdates.unsupported;
+    try {
+      final state = await _channel.invokeMethod<String>('liveUpdates');
+      return LiveUpdates.values.firstWhere(
+        (value) => value.name == state,
+        orElse: () => LiveUpdates.unsupported,
+      );
+    } catch (e) {
+      debugPrint('Could not read the Live Updates setting: $e');
+      return LiveUpdates.unsupported;
+    }
+  }
+
+  /// Opens the system switch for Counta's Live Updates. Android has no
+  /// permission dialog for them; this page is the only way to turn them on.
+  /// False when no settings page could be opened.
+  Future<bool> openLiveUpdatesSettings() async {
+    try {
+      return await _channel.invokeMethod<bool>('openLiveUpdatesSettings') ??
+          false;
+    } catch (e) {
+      debugPrint('Could not open the Live Updates setting: $e');
+      return false;
+    }
+  }
 
   final Future<bool> Function(String title, int count) _start;
   final Future<void> Function(String title, int count) _update;

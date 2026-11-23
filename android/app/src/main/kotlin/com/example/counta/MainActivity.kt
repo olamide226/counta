@@ -2,7 +2,10 @@ package com.ruachtech.counta
 
 import android.Manifest
 import android.content.Intent
+import android.app.NotificationManager
 import android.content.pm.PackageManager
+import android.os.Build
+import android.provider.Settings
 import androidx.core.content.ContextCompat
 import io.flutter.embedding.android.FlutterActivity
 import io.flutter.embedding.engine.FlutterEngine
@@ -27,6 +30,8 @@ class MainActivity : FlutterActivity() {
                     )
                     result.success(null)
                 }
+                "liveUpdates" -> result.success(liveUpdatesState())
+                "openLiveUpdatesSettings" -> result.success(openLiveUpdatesSettings())
                 "stop" -> {
                     stopService(Intent(this, VoiceSessionService::class.java))
                     result.success(null)
@@ -57,5 +62,35 @@ class MainActivity : FlutterActivity() {
             // Android 12+ refuses a start from the background.
             false
         }
+    }
+
+    /**
+     * Whether Counta's counting notification can be a Live Update (Android
+     * 16+): "on", "off" (the user's per-app switch is off), or "unsupported".
+     * There is no permission dialog for it, only that switch.
+     */
+    private fun liveUpdatesState(): String {
+        if (Build.VERSION.SDK_INT < Build.VERSION_CODES.BAKLAVA) return "unsupported"
+        val manager = getSystemService(NOTIFICATION_SERVICE) as NotificationManager
+        return if (manager.canPostPromotedNotifications()) "on" else "off"
+    }
+
+    /** Opens the Live Updates switch for Counta, else its notification settings. */
+    private fun openLiveUpdatesSettings(): Boolean {
+        val intents = buildList {
+            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.BAKLAVA) {
+                add(Intent(Settings.ACTION_MANAGE_APP_PROMOTED_NOTIFICATIONS))
+            }
+            add(Intent(Settings.ACTION_APP_NOTIFICATION_SETTINGS))
+        }
+        for (intent in intents) {
+            try {
+                startActivity(intent.putExtra(Settings.EXTRA_APP_PACKAGE, packageName))
+                return true
+            } catch (e: Exception) {
+                // Not on this phone: try the next page.
+            }
+        }
+        return false
     }
 }

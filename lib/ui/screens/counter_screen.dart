@@ -11,7 +11,9 @@ import '../../state/providers/session_controller.dart';
 import '../../state/providers/app_lifecycle_provider.dart';
 import '../../state/providers/counter_provider.dart';
 import '../../state/providers/services_provider.dart';
+import '../../core/services/background_voice_service.dart';
 import '../../core/services/microphone_settings.dart';
+import '../../data/hive/hive_init.dart';
 import '../../domain/counting/block_service.dart';
 import '../../domain/counting/counting_engine.dart';
 import '../../domain/models/count_session.dart';
@@ -24,6 +26,7 @@ import '../sheets/save_session_sheet.dart';
 import '../sheets/sound_mode_sheet.dart';
 import '../sheets/voice_minutes_sheet.dart';
 import '../widgets/count_display.dart';
+import '../widgets/live_updates_dialog.dart';
 import '../widgets/microphone_denied_dialog.dart';
 import '../widgets/quick_controls_bar.dart';
 import '../widgets/resizable_tap_layout.dart';
@@ -131,10 +134,28 @@ class _CounterScreenState extends ConsumerState<CounterScreen>
               try {
                 await history.record(phrases);
               } catch (_) {}
+              await _offerLiveUpdates();
             }
           },
         ),
       ),
+    );
+  }
+
+  /// Once ever, on the first voice session that starts with Live Updates
+  /// switched off on a phone that has them: ask, rather than hope the user
+  /// finds the switch. Declining changes nothing about counting.
+  Future<void> _offerLiveUpdates() async {
+    const key = 'live_updates_offered';
+    final prompts = getPromptsBox();
+    if (prompts.get(key) == true) return;
+    final background = ref.read(backgroundVoiceServiceProvider);
+    if (await background.liveUpdates() != LiveUpdates.off) return;
+    await prompts.put(key, true);
+    if (!mounted) return;
+    await showLiveUpdatesDialog(
+      context,
+      onOpenSettings: background.openLiveUpdatesSettings,
     );
   }
 
