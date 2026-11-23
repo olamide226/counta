@@ -48,7 +48,7 @@ domain/models → data/repositories → state/providers → ui/screens
 - **data/hive/** — Hive initialization, adapter registration, box opening.
 - **state/providers/** — Riverpod providers plus `SessionController` (the `ChangeNotifier` that owns the authoritative session count). This is where business logic lives.
 - **core/config/** — `BuildConfig`: the single source of truth for dev-vs-release behaviour (app name, whether debug tools are reachable).
-- **core/services/** — Cross-cutting: `CounterAlertService` (threshold alerts), `TapFeedbackService` (audio/haptics), `NotificationService` (local push), `ScreenWakeService` (wakelock).
+- **core/services/** — Cross-cutting: `CounterAlertService` (threshold alerts), `TapFeedbackService` (audio/haptics), `NotificationService` (local push), `ScreenWakeService` (wakelock, follows Keep Screen On), `BackgroundVoiceService` (Android microphone foreground service).
 - **core/services/counting/** — Platform adapters implementing the domain ports: `AudioSource` (record plugin), `DeepgramSocket` (WebSocket), `CloudCountingEngine`, `TapCountingEngine`.
 - **core/theme/** — `ThemeRegistry` with 5 color schemes, plus presentation extensions like `SoundModePresentation`.
 - **ui/screens/** — Full pages using `ConsumerWidget`/`ConsumerStatefulWidget`.
@@ -101,7 +101,7 @@ Every ending goes through `_teardown(status, [reason])` — the one place that s
 - `voiceEngineFactoryProvider` / `tapEngineFactoryProvider` — build `CountingEngine`s so the UI never constructs platform stacks
 - `settingsProvider` — `StateNotifierProvider<SettingsNotifier, AppSettings>`: persisted app settings (theme, sound, defaults)
 - `sessionsProvider` — saved session list from Hive
-- `screenWakeServiceProvider` — holds the wakelock while a voice session is in the foreground
+- `screenWakeServiceProvider` — holds the wakelock exactly when Settings → Keep Screen On is on (read once by `App`); voice sessions do not force it, since they survive a lock
 - `hiveInitProvider` — `FutureProvider` for async Hive initialization at startup
 - `sessionStartupProvider` — `FutureProvider<CountSession?>`: takes the previous run's checkpoint, then attaches the checkpointer. Watched by `App`; must run before anything counts
 - `supabaseSessionProvider` — `FutureProvider<Session?>`: initialises Supabase from `SUPABASE_URL` / `SUPABASE_PUBLISHABLE_KEY` dart-defines and signs in anonymously; null when the build has no backend config

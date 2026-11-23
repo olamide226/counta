@@ -193,6 +193,11 @@ class AudioSource {
         IosAudioCategoryOption.overrideMutedMicrophoneInterruption,
       ],
     ),
+    // The source Android tunes for speech recognition, rather than the
+    // default one meant for recording sound in general.
+    androidConfig: const AndroidRecordConfig(
+      audioSource: AndroidAudioSource.voiceRecognition,
+    ),
   );
 
   Future<void> _startCapture(int sampleRate) async {

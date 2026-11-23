@@ -1,12 +1,12 @@
 import 'package:flutter/foundation.dart';
 import 'package:wakelock_plus/wakelock_plus.dart';
 
-/// Keeps the screen awake while a voice session is running.
+/// Keeps the screen awake while Settings → Keep Screen On is switched on.
 ///
-/// Sessions run 1–2 hours. Without this the display sleeps after the system
-/// idle timeout, and on iOS that takes the app with it — the microphone stops
-/// and the session dies. Holding the wakelock only while counting is active
-/// keeps the battery cost proportional to the feature.
+/// Off, the phone's own auto-lock applies, and touching the screen resets it
+/// as it does in any app. A voice session no longer needs the screen awake:
+/// it survives a lock (the audio background mode on iOS, a microphone
+/// foreground service on Android).
 class ScreenWakeService {
   /// [toggle] exists so tests can exercise the acquire/release bookkeeping
   /// without standing up the plugin's platform channel.
