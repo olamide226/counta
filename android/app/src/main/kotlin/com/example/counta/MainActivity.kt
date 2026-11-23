@@ -79,7 +79,7 @@ class MainActivity : FlutterActivity() {
     private fun openLiveUpdatesSettings(): Boolean {
         val intents = buildList {
             if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.BAKLAVA) {
-                add(Intent(Settings.ACTION_MANAGE_APP_PROMOTED_NOTIFICATIONS))
+                add(Intent(Settings.ACTION_APP_NOTIFICATION_PROMOTION_SETTINGS))
             }
             add(Intent(Settings.ACTION_APP_NOTIFICATION_SETTINGS))
         }
