@@ -6,6 +6,7 @@ import '../../domain/counting/counting_engine.dart';
 import '../../domain/models/count_session.dart';
 import '../../domain/validation/phrase_validator.dart';
 import '../../core/services/counting/tap_counting_engine.dart';
+import '../../core/services/background_voice_service.dart';
 import '../../core/services/live_activity_service.dart';
 
 /// Why a running voice session ended without the user stopping it.
@@ -50,6 +51,12 @@ class SessionController extends ChangeNotifier {
 
   CountingEngine _engine;
   final LiveActivityService? _liveActivityService;
+
+  /// Android's counterpart of the Live Activity: the microphone service that
+  /// keeps a session alive through a screen lock, and its counting
+  /// notification. Synced on every change, so it follows each start, count
+  /// and ending, including one the engine makes itself.
+  final BackgroundVoiceService? _backgroundVoice;
   final CountingEngine Function() _voiceEngineFactory;
   final CountingEngine Function() _tapEngineFactory;
 
@@ -97,11 +104,13 @@ class SessionController extends ChangeNotifier {
   SessionController({
     CountingEngine? engine,
     LiveActivityService? liveActivityService,
+    BackgroundVoiceService? backgroundVoice,
     CountingEngine Function()? voiceEngineFactory,
     CountingEngine Function()? tapEngineFactory,
     this.disclosureGate,
   }) : _engine = engine ?? TapCountingEngine(),
        _liveActivityService = liveActivityService,
+       _backgroundVoice = backgroundVoice,
        // Defaulting the voice factory to the tap engine keeps a controller
        // built without wiring harmless: it can never open a microphone by
        // accident. The provider injects the real factories.
@@ -225,6 +234,19 @@ class SessionController extends ChangeNotifier {
     // controllers. Dropping the reference without disposing leaked all of them
     // for the life of the app, once per voice session.
     unawaited(previous.dispose());
+  }
+
+  /// What the session is counting, for the lines that name it.
+  String get sessionLabel => _activePhrases?.label ?? 'your phrase';
+
+  @override
+  void notifyListeners() {
+    _backgroundVoice?.setActive(
+      isVoiceActive,
+      title: 'Counting “$sessionLabel”',
+      count: total,
+    );
+    super.notifyListeners();
   }
 
   void _attachEngineListeners() {

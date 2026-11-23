@@ -26,13 +26,14 @@ class AppSettingsAdapter extends TypeAdapter<AppSettings> {
       confirmReset: fields[6] as bool,
       keepScreenOn: fields[7] as bool,
       voiceDisclosureSeen: fields[8] == null ? false : fields[8] as bool,
+      liveUpdatesOffered: fields[9] == null ? false : fields[9] as bool,
     );
   }
 
   @override
   void write(BinaryWriter writer, AppSettings obj) {
     writer
-      ..writeByte(9)
+      ..writeByte(10)
       ..writeByte(0)
       ..write(obj.themeModeChoice)
       ..writeByte(1)
@@ -50,7 +51,9 @@ class AppSettingsAdapter extends TypeAdapter<AppSettings> {
       ..writeByte(7)
       ..write(obj.keepScreenOn)
       ..writeByte(8)
-      ..write(obj.voiceDisclosureSeen);
+      ..write(obj.voiceDisclosureSeen)
+      ..writeByte(9)
+      ..write(obj.liveUpdatesOffered);
   }
 
   @override

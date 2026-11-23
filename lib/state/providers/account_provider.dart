@@ -8,6 +8,7 @@ import '../../core/config/app_env.dart';
 import '../../core/services/account/account_service.dart';
 import '../../core/services/account/native_identity_source.dart';
 import '../../core/services/account/supabase_auth_gateway.dart';
+import '../../data/hive/hive_init.dart';
 import '../../domain/account/account.dart';
 import 'counter_provider.dart';
 import 'minute_store_provider.dart';
@@ -150,6 +151,8 @@ final accountProvider = StateNotifierProvider<AccountController, AccountState>((
         auth: SupabaseAuthGateway(
           Supabase.instance.client.auth,
           accessToken: () => liveAccessToken(ref),
+          remembered: _rememberedSignIn(),
+          offered: methods,
         ),
         identity: NativeIdentitySource(
           googleWebClientId: AppEnv.googleWebClientId,
@@ -163,3 +166,17 @@ final accountProvider = StateNotifierProvider<AccountController, AccountState>((
   }, fireImmediately: true);
   return controller;
 });
+
+/// The sign-in method this phone used, in the `account` Hive box.
+RememberedSignIn _rememberedSignIn() {
+  const key = 'sign_in_method';
+  final box = getAccountBox();
+  return RememberedSignIn(
+    read: () {
+      final name = box.get(key);
+      return SignInMethod.values.where((m) => m.name == name).firstOrNull;
+    },
+    write: (method) =>
+        method == null ? box.delete(key) : box.put(key, method.name),
+  );
+}

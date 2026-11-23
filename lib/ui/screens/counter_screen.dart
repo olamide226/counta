@@ -11,6 +11,7 @@ import '../../state/providers/session_controller.dart';
 import '../../state/providers/app_lifecycle_provider.dart';
 import '../../state/providers/counter_provider.dart';
 import '../../state/providers/services_provider.dart';
+import '../../core/services/background_voice_service.dart';
 import '../../core/services/microphone_settings.dart';
 import '../../domain/counting/block_service.dart';
 import '../../domain/counting/counting_engine.dart';
@@ -24,6 +25,7 @@ import '../sheets/save_session_sheet.dart';
 import '../sheets/sound_mode_sheet.dart';
 import '../sheets/voice_minutes_sheet.dart';
 import '../widgets/count_display.dart';
+import '../widgets/live_updates_dialog.dart';
 import '../widgets/microphone_denied_dialog.dart';
 import '../widgets/quick_controls_bar.dart';
 import '../widgets/resizable_tap_layout.dart';
@@ -131,10 +133,35 @@ class _CounterScreenState extends ConsumerState<CounterScreen>
               try {
                 await history.record(phrases);
               } catch (_) {}
+              await _offerLiveUpdates();
             }
           },
         ),
       ),
+    );
+  }
+
+  /// On Android, once a voice session is running: first the notification
+  /// permission (without it the session's notification, Live Update
+  /// included, is hidden), then — once ever, with Live Updates switched off
+  /// on a phone that has them — the offer to turn them on, rather than
+  /// hoping the user finds the switch. Declining either changes nothing
+  /// about counting.
+  Future<void> _offerLiveUpdates() async {
+    final background = ref.read(backgroundVoiceServiceProvider);
+    if (!background.isAndroid) return;
+    final allowed = await ref
+        .read(notificationServiceProvider)
+        .ensureAndroidPermission();
+    if (!allowed) return;
+
+    if (ref.read(settingsProvider).liveUpdatesOffered) return;
+    if (await background.liveUpdates() != LiveUpdates.off) return;
+    await ref.read(settingsProvider.notifier).markLiveUpdatesOffered();
+    if (!mounted) return;
+    await showLiveUpdatesDialog(
+      context,
+      onOpenSettings: background.openLiveUpdatesSettings,
     );
   }
 
@@ -208,6 +235,8 @@ class _CounterScreenState extends ConsumerState<CounterScreen>
       final outcome = await sessionController.startVoiceSession(phrases);
       if (outcome == EngineStatus.permissionDenied) {
         await _handleMicrophoneDenied();
+      } else if (SessionController.runningStatuses.contains(outcome)) {
+        await _offerLiveUpdates();
       }
     } on BlockFailure catch (failure) {
       if (mounted) _say(failure.message);
@@ -226,13 +255,12 @@ class _CounterScreenState extends ConsumerState<CounterScreen>
     final isVoiceActive = sessionController.isVoiceActive;
     final scheme = Theme.of(context).colorScheme;
 
-    // Mirror the screen wakelock to session state here rather than at the call
-    // sites, so a session that ends by erroring out releases it too.
+    // Here rather than at the call sites, so a session that ends by erroring
+    // out clears its notification too.
     ref.listen<SessionController>(sessionControllerProvider, (prev, next) {
       final wasActive = prev?.isVoiceActive ?? false;
       if (wasActive == next.isVoiceActive) return;
 
-      ref.read(screenWakeServiceProvider).setActive(next.isVoiceActive);
       if (!next.isVoiceActive) {
         ref.read(notificationServiceProvider).cancelVoiceSessionNotification();
       }

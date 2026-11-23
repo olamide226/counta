@@ -29,17 +29,17 @@ class AppLifecycleNotifier extends StateNotifier<AppLifecycleState> {
     // the audio background mode. Nagging the user to "resume" a session that
     // never stopped would be wrong, so show a live status instead.
     if (session.isVoiceActive) {
-      _ref
-          .read(notificationServiceProvider)
-          .showVoiceSessionNotification(
-            currentCount: session.total,
-            phrase: session.activePhrases?.label ?? 'your phrase',
-          );
+      // On Android the background service already shows the ongoing
+      // "counting" notification; a second one would only repeat it.
+      if (!_ref.read(backgroundVoiceServiceProvider).isHeld) {
+        _ref
+            .read(notificationServiceProvider)
+            .showVoiceSessionNotification(
+              currentCount: session.total,
+              phrase: session.sessionLabel,
+            );
+      }
 
-      // Drop the wakelock once we are in the background. The audio background
-      // mode keeps counting alive on its own, and forcing another app's screen
-      // to stay lit would be both rude and a battery cost.
-      _ref.read(screenWakeServiceProvider).release();
       return;
     }
 
@@ -91,12 +91,7 @@ class AppLifecycleNotifier extends StateNotifier<AppLifecycleState> {
     // Cancel any shown notifications when app is resumed
     notificationService.cancelAllNotifications();
 
-    // Back in the foreground with a session still running: hold the screen
-    // awake again so it does not sleep mid-session.
     final session = _ref.read(sessionControllerProvider);
-    if (session.isVoiceActive) {
-      _ref.read(screenWakeServiceProvider).acquire();
-    }
     // Paused by a call whose end iOS never announced: being back in the app
     // is the sign the user is ready again.
     if (session.status == EngineStatus.paused) {

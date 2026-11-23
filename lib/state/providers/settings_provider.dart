@@ -72,4 +72,11 @@ class SettingsNotifier extends StateNotifier<AppSettings> {
     state = updated;
     await _repository.saveSettings(updated);
   }
+
+  Future<void> markLiveUpdatesOffered() async {
+    if (state.liveUpdatesOffered) return;
+    final updated = state.copyWith(liveUpdatesOffered: true);
+    state = updated;
+    await _repository.saveSettings(updated);
+  }
 }

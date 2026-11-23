@@ -6,6 +6,7 @@ import 'core/theme/theme_registry.dart';
 import 'state/providers/counter_provider.dart';
 import 'state/providers/session_recovery.dart';
 import 'state/providers/session_sync.dart';
+import 'state/providers/services_provider.dart';
 import 'state/providers/settings_provider.dart';
 import 'ui/screens/counter_screen.dart';
 import 'ui/sheets/voice_disclosure_sheet.dart';
@@ -20,6 +21,8 @@ class App extends ConsumerWidget {
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     final settings = ref.watch(settingsProvider);
+    // Keep Screen On: the provider follows the setting from here on.
+    ref.watch(screenWakeServiceProvider);
 
     // Starts the recovery sequence here, in composition: the previous run's
     // checkpoint has to be taken out of the store — and the checkpointer

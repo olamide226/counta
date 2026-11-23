@@ -127,4 +127,7 @@ flutter {
 
 dependencies {
     coreLibraryDesugaring("com.android.tools:desugar_jdk_libs:2.0.4")
+    // NotificationCompat / ServiceCompat for VoiceSessionService; 1.17 for
+    // Android 16 Live Updates (setRequestPromotedOngoing, setShortCriticalText).
+    implementation("androidx.core:core-ktx:1.17.0")
 }

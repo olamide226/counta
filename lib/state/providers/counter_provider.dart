@@ -20,6 +20,7 @@ final sessionControllerProvider = ChangeNotifierProvider<SessionController>((
 ) {
   final controller = SessionController(
     liveActivityService: ref.watch(liveActivityServiceProvider),
+    backgroundVoice: ref.watch(backgroundVoiceServiceProvider),
     voiceEngineFactory: ref.watch(voiceEngineFactoryProvider),
     tapEngineFactory: ref.watch(tapEngineFactoryProvider),
   );

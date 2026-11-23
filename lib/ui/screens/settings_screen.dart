@@ -1,11 +1,14 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
+import '../../core/services/background_voice_service.dart';
 import '../../core/theme/sound_mode_presentation.dart';
 
 import '../../domain/models/enums.dart';
 import '../../domain/account/account.dart';
 import '../../state/providers/account_provider.dart';
+import '../../state/providers/live_updates_provider.dart';
+import '../../state/providers/services_provider.dart';
 import '../../state/providers/settings_provider.dart';
 import '../../state/providers/voice_minutes_provider.dart';
 import '../sheets/account_sheet.dart';
@@ -97,6 +100,7 @@ class SettingsScreen extends ConsumerWidget {
             onChanged: (_) =>
                 ref.read(settingsProvider.notifier).toggleKeepScreenOn(),
           ),
+          const _LiveUpdatesTile(),
         ],
       ),
     );
@@ -341,6 +345,33 @@ class _AccountTile extends ConsumerWidget {
       subtitle: Text(subtitle),
       trailing: const Icon(Icons.chevron_right_rounded),
       onTap: () => showAccountSheet(context),
+    );
+  }
+}
+
+/// "Count on lock screen": where a user who said "Not now" (or never saw
+/// the offer) turns Live Updates on later. Shown only on phones that have
+/// them.
+class _LiveUpdatesTile extends ConsumerWidget {
+  const _LiveUpdatesTile();
+
+  @override
+  Widget build(BuildContext context, WidgetRef ref) {
+    final state = ref.watch(liveUpdatesProvider).value;
+    if (state == null || state == LiveUpdates.unsupported) {
+      return const SizedBox.shrink();
+    }
+    return ListTile(
+      leading: const Icon(Icons.lock_clock),
+      title: const Text('Count on Lock Screen'),
+      subtitle: Text(
+        state == LiveUpdates.on
+            ? 'On · shown while voice counting runs'
+            : 'Off · tap to turn on Live Updates',
+      ),
+      trailing: const Icon(Icons.open_in_new),
+      onTap: () =>
+          ref.read(backgroundVoiceServiceProvider).openLiveUpdatesSettings(),
     );
   }
 }
