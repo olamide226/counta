@@ -33,6 +33,22 @@ class NotificationService {
     _initialized = true;
   }
 
+  /// Android 13+ hides every notification from an app that has not asked
+  /// for permission, including the ongoing one a voice session shows and
+  /// its Live Update. Asks with the system dialog when they are off; Android
+  /// itself stops showing it after the user declines twice. True when
+  /// notifications are allowed, and on every other platform.
+  Future<bool> ensureAndroidPermission() async {
+    if (!_initialized) await init();
+    final android = _notifications
+        .resolvePlatformSpecificImplementation<
+          AndroidFlutterLocalNotificationsPlugin
+        >();
+    if (android == null) return true;
+    if (await android.areNotificationsEnabled() ?? true) return true;
+    return await android.requestNotificationsPermission() ?? false;
+  }
+
   Future<void> _requestPermissions() async {
     await _notifications
         .resolvePlatformSpecificImplementation<

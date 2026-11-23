@@ -72,13 +72,18 @@ class MainActivity : FlutterActivity() {
     private fun liveUpdatesState(): String {
         if (Build.VERSION.SDK_INT < Build.VERSION_CODES.BAKLAVA) return "unsupported"
         val manager = getSystemService(NOTIFICATION_SERVICE) as NotificationManager
-        return if (manager.canPostPromotedNotifications()) "on" else "off"
+        // canPostPromotedNotifications() reads only the Live Updates switch:
+        // it says yes for an app whose notifications are blocked outright.
+        return if (manager.areNotificationsEnabled() && manager.canPostPromotedNotifications()) "on" else "off"
     }
 
     /** Opens the Live Updates switch for Counta, else its notification settings. */
     private fun openLiveUpdatesSettings(): Boolean {
+        val manager = getSystemService(NOTIFICATION_SERVICE) as NotificationManager
         val intents = buildList {
-            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.BAKLAVA) {
+            // Blocked notifications are fixed on the app's notification page;
+            // the Live Updates page cannot help until they are allowed.
+            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.BAKLAVA && manager.areNotificationsEnabled()) {
                 add(Intent(Settings.ACTION_APP_NOTIFICATION_PROMOTION_SETTINGS))
             }
             add(Intent(Settings.ACTION_APP_NOTIFICATION_SETTINGS))

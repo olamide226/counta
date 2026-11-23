@@ -60,7 +60,12 @@ class BackgroundVoiceService {
 
   static Future<void> _platformStop() => _channel.invokeMethod<void>('stop');
 
-  /// Whether Counta's counting notification can be a Live Update here.
+  /// Whether this runs on Android, where all of this applies.
+  bool get isAndroid => _supported;
+
+  /// Whether Counta's counting notification can be a Live Update here. Off
+  /// also when notifications as a whole are blocked for Counta, since
+  /// nothing can show then.
   Future<LiveUpdates> liveUpdates() async {
     if (!_supported) return LiveUpdates.unsupported;
     try {

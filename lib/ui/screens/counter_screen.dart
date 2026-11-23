@@ -142,14 +142,23 @@ class _CounterScreenState extends ConsumerState<CounterScreen>
     );
   }
 
-  /// Once ever, on the first voice session that starts with Live Updates
-  /// switched off on a phone that has them: ask, rather than hope the user
-  /// finds the switch. Declining changes nothing about counting.
+  /// On Android, once a voice session is running: first the notification
+  /// permission (without it the session's notification, Live Update
+  /// included, is hidden), then — once ever, with Live Updates switched off
+  /// on a phone that has them — the offer to turn them on, rather than
+  /// hoping the user finds the switch. Declining either changes nothing
+  /// about counting.
   Future<void> _offerLiveUpdates() async {
+    final background = ref.read(backgroundVoiceServiceProvider);
+    if (!background.isAndroid) return;
+    final allowed = await ref
+        .read(notificationServiceProvider)
+        .ensureAndroidPermission();
+    if (!allowed) return;
+
     const key = 'live_updates_offered';
     final prompts = getPromptsBox();
     if (prompts.get(key) == true) return;
-    final background = ref.read(backgroundVoiceServiceProvider);
     if (await background.liveUpdates() != LiveUpdates.off) return;
     await prompts.put(key, true);
     if (!mounted) return;

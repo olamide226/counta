@@ -67,6 +67,9 @@ class MockNotificationService implements NotificationService {
   Future<void> cancelVoiceSessionNotification() async {}
 
   @override
+  Future<bool> ensureAndroidPermission() async => true;
+
+  @override
   Future<void> cancelAllNotifications() async {
     cancelAllCalls++;
   }
