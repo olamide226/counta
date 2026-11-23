@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:flutter/foundation.dart';
 import 'package:flutter/services.dart';
 
@@ -10,16 +12,25 @@ import 'package:flutter/services.dart';
 /// that service; this class starts it while a session runs and stops it when
 /// the session ends. Capture and streaming carry on in Dart unchanged.
 ///
+/// The service's notification carries the live count. On Android 16+ it is a
+/// Live Update: a chip in the status bar and a pinned card on the lock
+/// screen, Android's counterpart of the iPhone Live Activity.
+///
 /// iOS needs nothing here: `UIBackgroundModes: audio` already keeps the
 /// session alive there, so on every other platform this does nothing.
 class BackgroundVoiceService {
   /// [start] and [stop] exist so tests can exercise the bookkeeping without
   /// the platform channel; [supported] defaults to "running on Android".
   BackgroundVoiceService({
-    Future<bool> Function(String title)? start,
+    Future<bool> Function(String title, int count)? start,
+    Future<void> Function(String title, int count)? update,
     Future<void> Function()? stop,
     bool? supported,
-  }) : _start = start ?? _platformStart,
+    this.updateInterval = const Duration(seconds: 1),
+    DateTime Function()? now,
+  }) : _now = now ?? DateTime.now,
+       _start = start ?? _platformStart,
+       _update = update ?? _platformUpdate,
        _stop = stop ?? _platformStop,
        _supported =
            supported ??
@@ -27,17 +38,37 @@ class BackgroundVoiceService {
 
   static const _channel = MethodChannel('com.ruachtech.counta/voice_session');
 
-  static Future<bool> _platformStart(String title) async =>
-      await _channel.invokeMethod<bool>('start', {'title': title}) ?? false;
+  static Future<bool> _platformStart(String title, int count) async =>
+      await _channel.invokeMethod<bool>('start', {
+        'title': title,
+        'count': count,
+      }) ??
+      false;
+
+  static Future<void> _platformUpdate(String title, int count) =>
+      _channel.invokeMethod<void>('update', {'title': title, 'count': count});
 
   static Future<void> _platformStop() => _channel.invokeMethod<void>('stop');
 
-  final Future<bool> Function(String title) _start;
+  final Future<bool> Function(String title, int count) _start;
+  final Future<void> Function(String title, int count) _update;
   final Future<void> Function() _stop;
   final bool _supported;
+  final DateTime Function() _now;
+
+  /// The least time between two updates of the notification. Android drops
+  /// updates an app posts faster than a few a second, which could leave a
+  /// stale count showing; the latest one is always sent once it has passed.
+  final Duration updateInterval;
 
   bool _held = false;
   bool _starting = false;
+
+  /// What the notification shows, and what it should show next.
+  (String, int)? _shown;
+  (String, int)? _wanted;
+  DateTime? _lastUpdate;
+  Timer? _pending;
 
   /// Whether the service is running, so the background handler can skip the
   /// separate "counting" notification the service already shows.
@@ -46,14 +77,24 @@ class BackgroundVoiceService {
   /// Mirrors the service to whether a session is running. Safe to call on
   /// every status change: a start the platform declined (the microphone
   /// permission not granted yet) is simply asked for again next time.
-  Future<void> setActive(bool active, {required String title}) =>
-      active ? _acquire(title) : _release();
+  ///
+  /// While it runs, [title] and [count] keep its notification current.
+  Future<void> setActive(
+    bool active, {
+    required String title,
+    required int count,
+  }) => active ? _acquire(title, count) : _release();
 
-  Future<void> _acquire(String title) async {
-    if (!_supported || _held || _starting) return;
+  Future<void> _acquire(String title, int count) async {
+    if (!_supported || _starting) return;
+    if (_held) return _show((title, count));
     _starting = true;
     try {
-      _held = await _start(title);
+      _held = await _start(title, count);
+      if (_held) {
+        _shown = (title, count);
+        _lastUpdate = _now();
+      }
     } catch (e) {
       // Not fatal: the session still counts while Counta is open.
       debugPrint('Could not keep voice counting alive in background: $e');
@@ -62,9 +103,38 @@ class BackgroundVoiceService {
     }
   }
 
+  Future<void> _show((String, int) wanted) async {
+    _wanted = wanted;
+    if (wanted == _shown || _pending != null) return;
+    final last = _lastUpdate;
+    final wait = last == null
+        ? Duration.zero
+        : updateInterval - _now().difference(last);
+    if (wait > Duration.zero) {
+      _pending = Timer(wait, () {
+        _pending = null;
+        final latest = _wanted;
+        if (_held && latest != null) unawaited(_show(latest));
+      });
+      return;
+    }
+    _shown = wanted;
+    _lastUpdate = _now();
+    try {
+      await _update(wanted.$1, wanted.$2);
+    } catch (e) {
+      debugPrint('Could not update the voice session notification: $e');
+    }
+  }
+
   Future<void> _release() async {
     if (!_supported || !_held) return;
     _held = false;
+    _pending?.cancel();
+    _pending = null;
+    _shown = null;
+    _wanted = null;
+    _lastUpdate = null;
     try {
       await _stop();
     } catch (e) {

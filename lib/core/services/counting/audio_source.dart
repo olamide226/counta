@@ -169,7 +169,10 @@ class AudioSource {
   /// assertable — these flags are easy to drop and the symptoms (a dead mic, or
   /// silencing the user's music) only show up on a real device.
   @visibleForTesting
-  static RecordConfig recordConfig(int sampleRate) => RecordConfig(
+  static RecordConfig recordConfig(
+    int sampleRate, {
+    bool speechSource = true,
+  }) => RecordConfig(
     encoder: AudioEncoder.pcm16bits,
     sampleRate: sampleRate,
     numChannels: 1,
@@ -194,11 +197,34 @@ class AudioSource {
       ],
     ),
     // The source Android tunes for speech recognition, rather than the
-    // default one meant for recording sound in general.
-    androidConfig: const AndroidRecordConfig(
-      audioSource: AndroidAudioSource.voiceRecognition,
+    // default one meant for recording sound in general. Every Android version
+    // has it, but a phone whose audio driver mishandles it falls back to the
+    // default (see [_speechSourceUsable]).
+    androidConfig: AndroidRecordConfig(
+      audioSource: speechSource
+          ? AndroidAudioSource.voiceRecognition
+          : AndroidAudioSource.defaultSource,
     ),
   );
+
+  /// Whether this phone captures from the speech-recognition source. Turned
+  /// off for the rest of the run the first time that source refuses to start,
+  /// or starts and never delivers a frame; the default source is what every
+  /// phone supports.
+  static bool _speechSourceUsable = true;
+
+  @visibleForTesting
+  static bool get speechSourceUsable => _speechSourceUsable;
+
+  @visibleForTesting
+  static void resetSourceChoice() => _speechSourceUsable = true;
+
+  static bool get _onAndroid =>
+      !kIsWeb && defaultTargetPlatform == TargetPlatform.android;
+
+  /// Whether the capture now running uses the speech source and has not yet
+  /// delivered a frame: a stall in that state blames the source.
+  bool _speechSourceUnproven = false;
 
   Future<void> _startCapture(int sampleRate) async {
     final hasPerm = await hasPermission();
@@ -213,8 +239,9 @@ class AudioSource {
     }
 
     final Stream<Uint8List> recordStream;
+    final speech = _onAndroid && _speechSourceUsable;
     try {
-      recordStream = await _recorder.startStream(recordConfig(sampleRate));
+      recordStream = await _startStream(sampleRate, speech: speech);
     } catch (error, stack) {
       // iOS can refuse to start the microphone — right after a call, or from
       // the background. Unhandled, the refusal vanished: no frame and no
@@ -224,6 +251,7 @@ class AudioSource {
       return;
     }
 
+    _speechSourceUnproven = speech && _speechSourceUsable;
     _lastFrameAt = DateTime.now();
     _startStallWatchdog();
 
@@ -238,6 +266,28 @@ class AudioSource {
         _controller?.close();
       },
     );
+  }
+
+  /// Starts the recorder, on the speech source if [speech]; a phone that
+  /// refuses it is asked again on the default source, and remembered.
+  Future<Stream<Uint8List>> _startStream(
+    int sampleRate, {
+    required bool speech,
+  }) async {
+    if (!speech) {
+      return _recorder.startStream(
+        recordConfig(sampleRate, speechSource: false),
+      );
+    }
+    try {
+      return await _recorder.startStream(recordConfig(sampleRate));
+    } catch (error) {
+      debugPrint('Speech audio source refused ($error); using the default.');
+      _speechSourceUsable = false;
+      return _recorder.startStream(
+        recordConfig(sampleRate, speechSource: false),
+      );
+    }
   }
 
   /// Watches for the microphone going quiet at the *frame* level.
@@ -260,6 +310,13 @@ class AudioSource {
         // raised again: the session sat on "Listening" with a dead
         // microphone, counting nothing, until the user stopped it.
         _lastFrameAt = DateTime.now();
+        if (_speechSourceUnproven) {
+          // Started on the speech source and never delivered anything: the
+          // restart this stall prompts uses the default source instead.
+          debugPrint('Speech audio source gave no audio; using the default.');
+          _speechSourceUsable = false;
+          _speechSourceUnproven = false;
+        }
         _controller?.addError(AudioSourceStalled(silentFor));
       }
     });
@@ -269,6 +326,7 @@ class AudioSource {
     if (_controller == null || _controller!.isClosed) return;
 
     _lastFrameAt = DateTime.now();
+    _speechSourceUnproven = false;
     _controller!.add(chunk);
   }
 

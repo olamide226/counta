@@ -236,6 +236,7 @@ class _CounterScreenState extends ConsumerState<CounterScreen>
           .setActive(
             next.isVoiceActive,
             title: 'Counting “${next.activePhrases?.label ?? 'your phrase'}”',
+            count: next.total,
           );
 
       final wasActive = prev?.isVoiceActive ?? false;

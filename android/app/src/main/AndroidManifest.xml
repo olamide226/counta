@@ -7,6 +7,9 @@
     <uses-permission android:name="android.permission.FOREGROUND_SERVICE"/>
     <uses-permission android:name="android.permission.FOREGROUND_SERVICE_MICROPHONE"/>
     <uses-permission android:name="android.permission.WAKE_LOCK"/>
+    <!-- Android 16 Live Updates: the counting notification as a status-bar
+         chip and a pinned lock-screen card. Not a runtime permission. -->
+    <uses-permission android:name="android.permission.POST_PROMOTED_NOTIFICATIONS"/>
     <application
         android:label="Counta"
         android:name="${applicationName}"

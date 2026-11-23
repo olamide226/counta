@@ -1,9 +1,11 @@
 package com.ruachtech.counta
 
+import android.app.Notification
 import android.app.NotificationChannel
 import android.app.NotificationManager
 import android.app.PendingIntent
 import android.app.Service
+import android.content.Context
 import android.content.Intent
 import android.content.pm.ServiceInfo
 import android.os.Build
@@ -28,12 +30,66 @@ import androidx.core.app.ServiceCompat
 class VoiceSessionService : Service() {
     companion object {
         const val EXTRA_TITLE = "title"
+        const val EXTRA_COUNT = "count"
 
         // Shared with the notification the Dart side used to show, so the
         // user keeps one "Voice Session" setting rather than two.
         private const val CHANNEL_ID = "voice_session_channel"
         private const val NOTIFICATION_ID = 7301
         private const val WAKE_LOCK_TAG = "Counta:VoiceSession"
+
+        /**
+         * Shows [count] on the running session's notification. Posting under
+         * the service's own id replaces its notification in place, and the
+         * service stays in the foreground.
+         */
+        fun update(context: Context, title: String, count: Int) {
+            val manager = context.getSystemService(NOTIFICATION_SERVICE) as NotificationManager
+            manager.notify(NOTIFICATION_ID, buildNotification(context, title, count))
+        }
+
+        fun buildNotification(context: Context, title: String, count: Int?): Notification {
+            val manager = context.getSystemService(NOTIFICATION_SERVICE) as NotificationManager
+            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
+                // Low, not min: Android never promotes a min-importance channel.
+                manager.createNotificationChannel(
+                    NotificationChannel(
+                        CHANNEL_ID,
+                        "Voice Session",
+                        NotificationManager.IMPORTANCE_LOW,
+                    ).apply { description = "Shown while voice counting is running" },
+                )
+            }
+            val open = context.packageManager.getLaunchIntentForPackage(context.packageName)?.apply {
+                flags = Intent.FLAG_ACTIVITY_SINGLE_TOP or Intent.FLAG_ACTIVITY_CLEAR_TOP
+            }
+            val tap = PendingIntent.getActivity(
+                context,
+                0,
+                open,
+                PendingIntent.FLAG_IMMUTABLE or PendingIntent.FLAG_UPDATE_CURRENT,
+            )
+            val builder = NotificationCompat.Builder(context, CHANNEL_ID)
+                .setSmallIcon(R.mipmap.ic_launcher)
+                .setContentTitle(title)
+                .setContentText(
+                    if (count == null) "Voice counting is on · tap to return"
+                    else "$count so far · tap to return",
+                )
+                .setContentIntent(tap)
+                .setOngoing(true)
+                .setOnlyAlertOnce(true)
+                .setShowWhen(false)
+                .setCategory(NotificationCompat.CATEGORY_SERVICE)
+                .setPriority(NotificationCompat.PRIORITY_LOW)
+                .setForegroundServiceBehavior(NotificationCompat.FOREGROUND_SERVICE_IMMEDIATE)
+                // Android 16 Live Update: a status-bar chip showing the count
+                // and a pinned card on the lock screen. Ignored before 16,
+                // where this stays an ordinary ongoing notification.
+                .setRequestPromotedOngoing(true)
+            if (count != null) builder.setShortCriticalText(count.toString())
+            return builder.build()
+        }
     }
 
     private var wakeLock: PowerManager.WakeLock? = null
@@ -42,11 +98,12 @@ class VoiceSessionService : Service() {
 
     override fun onStartCommand(intent: Intent?, flags: Int, startId: Int): Int {
         val title = intent?.getStringExtra(EXTRA_TITLE) ?: "Voice counting is on"
+        val count = intent?.takeIf { it.hasExtra(EXTRA_COUNT) }?.getIntExtra(EXTRA_COUNT, 0)
         try {
             ServiceCompat.startForeground(
                 this,
                 NOTIFICATION_ID,
-                buildNotification(title),
+                buildNotification(this, title, count),
                 if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.R) {
                     ServiceInfo.FOREGROUND_SERVICE_TYPE_MICROPHONE
                 } else {
@@ -82,39 +139,5 @@ class VoiceSessionService : Service() {
             // stop that never arrives; the service releases it on stop.
             acquire(4 * 60 * 60 * 1000L)
         }
-    }
-
-    private fun buildNotification(title: String): android.app.Notification {
-        val manager = getSystemService(NOTIFICATION_SERVICE) as NotificationManager
-        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
-            manager.createNotificationChannel(
-                NotificationChannel(
-                    CHANNEL_ID,
-                    "Voice Session",
-                    NotificationManager.IMPORTANCE_LOW,
-                ).apply { description = "Shown while voice counting is running" },
-            )
-        }
-        val open = packageManager.getLaunchIntentForPackage(packageName)?.apply {
-            flags = Intent.FLAG_ACTIVITY_SINGLE_TOP or Intent.FLAG_ACTIVITY_CLEAR_TOP
-        }
-        val tap = PendingIntent.getActivity(
-            this,
-            0,
-            open,
-            PendingIntent.FLAG_IMMUTABLE or PendingIntent.FLAG_UPDATE_CURRENT,
-        )
-        return NotificationCompat.Builder(this, CHANNEL_ID)
-            .setSmallIcon(R.mipmap.ic_launcher)
-            .setContentTitle(title)
-            .setContentText("Voice counting is on · tap to return")
-            .setContentIntent(tap)
-            .setOngoing(true)
-            .setOnlyAlertOnce(true)
-            .setShowWhen(false)
-            .setCategory(NotificationCompat.CATEGORY_SERVICE)
-            .setPriority(NotificationCompat.PRIORITY_LOW)
-            .setForegroundServiceBehavior(NotificationCompat.FOREGROUND_SERVICE_IMMEDIATE)
-            .build()
     }
 }

@@ -1,6 +1,7 @@
 import 'dart:async';
 import 'dart:typed_data';
 
+import 'package:flutter/foundation.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:record/record.dart';
 
@@ -20,17 +21,27 @@ class _RefusingRecorder implements AudioRecorder {
 /// Grants permission, then [startStream] either throws or hands back a
 /// stream that never delivers.
 class _ScriptedRecorder implements AudioRecorder {
-  _ScriptedRecorder({this.refuseToStart = false});
+  _ScriptedRecorder({this.refuseToStart = false, this.refuseSpeech = false});
 
   final bool refuseToStart;
+
+  /// Refuses the speech-recognition source only, as a phone whose audio
+  /// driver mishandles it would.
+  final bool refuseSpeech;
   final _frames = StreamController<Uint8List>();
+  final sources = <AndroidAudioSource>[];
 
   @override
   Future<bool> hasPermission() async => true;
 
   @override
   Future<Stream<Uint8List>> startStream(RecordConfig config) async {
+    final source = config.androidConfig.audioSource;
+    sources.add(source);
     if (refuseToStart) throw StateError('cannot start recording now');
+    if (refuseSpeech && source == AndroidAudioSource.voiceRecognition) {
+      throw StateError('audio source not supported');
+    }
     return _frames.stream;
   }
 
@@ -45,6 +56,55 @@ class _ScriptedRecorder implements AudioRecorder {
 }
 
 void main() {
+  tearDown(AudioSource.resetSourceChoice);
+
+  group('Android speech-recognition source', () {
+    setUp(() => debugDefaultTargetPlatformOverride = TargetPlatform.android);
+    tearDown(() => debugDefaultTargetPlatformOverride = null);
+
+    test('is what Android captures from', () async {
+      final recorder = _ScriptedRecorder();
+      final sub = AudioSource(recorder: recorder).start().listen((_) {});
+      await Future<void>.delayed(Duration.zero);
+      expect(recorder.sources, [AndroidAudioSource.voiceRecognition]);
+      await sub.cancel();
+    });
+
+    test('a phone that refuses it falls back to the default source', () async {
+      final recorder = _ScriptedRecorder(refuseSpeech: true);
+      final errors = <Object>[];
+      final sub = AudioSource(
+        recorder: recorder,
+      ).start().listen((_) {}, onError: errors.add);
+      await Future<void>.delayed(Duration.zero);
+
+      expect(recorder.sources, [
+        AndroidAudioSource.voiceRecognition,
+        AndroidAudioSource.defaultSource,
+      ]);
+      expect(errors, isEmpty);
+      expect(AudioSource.speechSourceUsable, isFalse);
+      await sub.cancel();
+    });
+
+    test(
+      'a speech source that never delivers is not used for the restart',
+      () async {
+        final recorder = _ScriptedRecorder();
+        final stalls = <Object>[];
+        final sub = AudioSource(
+          recorder: recorder,
+        ).start().listen((_) {}, onError: stalls.add);
+        await Future<void>.delayed(const Duration(milliseconds: 3600));
+
+        expect(stalls.whereType<AudioSourceStalled>(), isNotEmpty);
+        expect(AudioSource.speechSourceUsable, isFalse);
+        await sub.cancel();
+      },
+      timeout: const Timeout(Duration(seconds: 10)),
+    );
+  });
+
   test('a recorder that refuses to start says so on the stream', () async {
     // Regression: the refusal was thrown nowhere anyone listened, so no
     // frame and no error ever came, and a resume waiting on either waited
