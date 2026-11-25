@@ -336,6 +336,16 @@ class CloudCountingEngine implements CountingEngine {
   /// connects the moment it starts.
   final bool startOnVoice;
 
+  /// How long a connected session may go without the service hearing a word
+  /// before it stops paying and goes back to waiting for the user's voice,
+  /// as at the start. A session survives a screen lock on both platforms, so
+  /// one left running would otherwise buy minutes all night. Only with
+  /// [startOnVoice]: that waiting state is what it falls back to.
+  final Duration idleTimeout;
+
+  /// How often [idleTimeout] is checked.
+  final Duration idleCheckInterval;
+
   final StreamController<CountEvent> _countsController =
       StreamController<CountEvent>.broadcast();
   final StreamController<EngineStatus> _statusController =
@@ -442,6 +452,10 @@ class CloudCountingEngine implements CountingEngine {
   /// Listening for the user to start speaking, when [startOnVoice] is on.
   VoiceActivityDetector? _voiceGate;
 
+  /// When the service last heard words, or the session last connected.
+  DateTime? _lastHeardAt;
+  Timer? _idleTimer;
+
   /// Audio kept from before speech was heard, so the first word is whole.
   static const Duration _preRoll = Duration(milliseconds: 1500);
 
@@ -498,6 +512,8 @@ class CloudCountingEngine implements CountingEngine {
     this.transcriptionWatchdogInterval = const Duration(seconds: 5),
     this.openBlocks,
     this.startOnVoice = false,
+    this.idleTimeout = const Duration(minutes: 10),
+    this.idleCheckInterval = const Duration(seconds: 30),
   }) : assert(
          tokenProvider != null || blockService != null,
          'A voice session needs a credential source: a block service in '
@@ -573,6 +589,7 @@ class CloudCountingEngine implements CountingEngine {
     _preConnectStartByte = 0;
     _preConnectBytes = 0;
     _voiceGate = null;
+    _lastHeardAt = null;
     _awaitingFirstConnect = true;
     _capturedBytes = 0;
     _streamSeq = 0;
@@ -609,6 +626,7 @@ class CloudCountingEngine implements CountingEngine {
       // Nothing is bought until the user speaks. The silence before that
       // used to be paid for, by them and by us.
       _armVoiceGate();
+      _startIdleWatch();
       return;
     }
 
@@ -827,6 +845,7 @@ class CloudCountingEngine implements CountingEngine {
     });
 
     connection.segments = connection.socket.segments.listen((segment) {
+      if (segment.text.trim().isNotEmpty) _lastHeardAt = DateTime.now();
       final matcher = _matcher;
       if (matcher == null) return;
       // A connection that has not been given a frame has no place on the
@@ -1179,6 +1198,47 @@ class CloudCountingEngine implements CountingEngine {
         .timeout(within, onTimeout: () => false);
   }
 
+  void _startIdleWatch() {
+    _idleTimer?.cancel();
+    _idleTimer = Timer.periodic(idleCheckInterval, (_) {
+      if (_stopped || _paused || _restarting) return;
+      if (_awaitingFirstConnect || _voiceGate != null) return;
+      final heard = _lastHeardAt;
+      if (heard == null) return;
+      if (DateTime.now().difference(heard) < idleTimeout) return;
+      unawaited(_pauseForSilence());
+    });
+  }
+
+  /// Nobody has spoken for [idleTimeout]: stops paying and goes back to
+  /// waiting for the user's voice, the state a session starts in. Capture
+  /// carries on, so the next word reconnects on the same timeline and the
+  /// count, the session and its notification are all kept. Unlike a call,
+  /// nothing has to come back: the user only has to speak, or tap "Start
+  /// now".
+  Future<void> _pauseForSilence() async {
+    if (_stopped || _paused || _restarting || _awaitingFirstConnect) return;
+    _streamGeneration++;
+    _expiredWhileRenewing = false;
+    _cancelTimers();
+    _reconnectAttempts = 0;
+    _recoveringSince = null;
+    // From here on frames go to the lead-in buffer and the gate, not to a
+    // connection that is closing.
+    _awaitingFirstConnect = true;
+    _armVoiceGate();
+    _report(
+      'Paused after ${idleTimeout.inMinutes} quiet minutes, so no minutes '
+      'are used. Start speaking to carry on.',
+    );
+    try {
+      await _closeConnections();
+    } catch (_) {
+      // Closing is best effort; the pause stands either way.
+    }
+    await _releaseBlock();
+  }
+
   void _armVoiceGate() {
     _clearPreConnect();
     _voiceGate = VoiceActivityDetector(
@@ -1330,6 +1390,8 @@ class CloudCountingEngine implements CountingEngine {
     _streamGeneration++;
     if (reason != null) _report(reason);
     _cancelTimers();
+    _idleTimer?.cancel();
+    _idleTimer = null;
     _preConnectFrames.clear();
 
     // Ending during startup — before capture has delivered its first frame —
@@ -1481,6 +1543,7 @@ class CloudCountingEngine implements CountingEngine {
     final primary = _primary;
     if (primary == null) return;
     _awaitingFirstConnect = false;
+    _lastHeardAt = DateTime.now();
 
     // The buffer starts at [_preConnectStartByte]: the first captured frame,
     // or the start of the lead-in kept from before a voice was heard.

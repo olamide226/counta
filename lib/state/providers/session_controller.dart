@@ -243,7 +243,11 @@ class SessionController extends ChangeNotifier {
   void notifyListeners() {
     _backgroundVoice?.setActive(
       isVoiceActive,
-      title: 'Counting “$sessionLabel”',
+      // Ready is waiting for a voice, at the start or after a quiet spell,
+      // and no minutes are being used.
+      title: _status == EngineStatus.ready
+          ? 'Waiting for your voice · “$sessionLabel”'
+          : 'Counting “$sessionLabel”',
       count: total,
     );
     super.notifyListeners();
