@@ -28,6 +28,8 @@ void main() {
       FakeBlockService blocks, {
       InMemoryOpenBlockStore? openBlocks,
       bool startOnVoice = false,
+      Duration idleTimeout = const Duration(minutes: 10),
+      Duration idleCheckInterval = const Duration(seconds: 30),
       Duration renewalOverlap = const Duration(seconds: 3),
       Duration renewalRetryDelay = const Duration(seconds: 10),
       Duration maxReconnectBackoff = const Duration(milliseconds: 20),
@@ -44,6 +46,8 @@ void main() {
       transcriptionWatchdogInterval: const Duration(days: 1),
       openBlocks: openBlocks,
       startOnVoice: startOnVoice,
+      idleTimeout: idleTimeout,
+      idleCheckInterval: idleCheckInterval,
     );
 
     setUp(() {
@@ -901,6 +905,77 @@ void main() {
           engine.dispose();
           async.flushTimers();
         });
+      });
+    });
+
+    group('a quiet session stops paying', () {
+      const quiet = Duration(milliseconds: 300);
+
+      Future<CloudCountingEngine> live(FakeBlockService blocks) async {
+        final engine = engineWith(
+          blocks,
+          startOnVoice: true,
+          idleTimeout: quiet,
+          idleCheckInterval: const Duration(milliseconds: 20),
+        );
+        addTearDown(engine.dispose);
+        await engine.start(testPhraseSet);
+        await pumpEventQueue();
+        audio.emitSpeech();
+        audio.emitSpeech();
+        await pumpEventQueue();
+        expect(engine.currentStatus, EngineStatus.live);
+        return engine;
+      }
+
+      test('silence hands the block back and waits for a voice', () async {
+        final blocks = FakeBlockService();
+        final engine = await live(blocks);
+
+        await Future<void>.delayed(quiet * 2);
+        await pumpEventQueue();
+
+        expect(engine.currentStatus, EngineStatus.ready);
+        expect(blocks.releases.map((r) => r.blockId), ['block-1']);
+        expect(sockets.single.closeCount, greaterThanOrEqualTo(1));
+        // Waiting is free: more silence buys nothing.
+        for (var i = 0; i < 20; i++) {
+          audio.emitFrame(3200);
+        }
+        await pumpEventQueue();
+        expect(blocks.acquiredSessionIds, hasLength(1));
+      });
+
+      test('words keep it live', () async {
+        final blocks = FakeBlockService();
+        final engine = await live(blocks);
+
+        for (var i = 0; i < 6; i++) {
+          await Future<void>.delayed(quiet ~/ 3);
+          sockets.single.emitSegment(finalSegment('thank you'));
+        }
+        await pumpEventQueue();
+
+        expect(engine.currentStatus, EngineStatus.live);
+        expect(blocks.releases, isEmpty);
+      });
+
+      test('speaking again carries on, on a fresh block', () async {
+        final blocks = FakeBlockService();
+        final engine = await live(blocks);
+        await Future<void>.delayed(quiet * 2);
+        await pumpEventQueue();
+        expect(engine.currentStatus, EngineStatus.ready);
+
+        audio.emitSpeech();
+        audio.emitSpeech();
+        await pumpEventQueue();
+
+        expect(engine.currentStatus, EngineStatus.live);
+        expect(blocks.acquiredSessionIds, hasLength(2));
+        // The same session: the server sees one session id throughout.
+        expect(blocks.acquiredSessionIds.toSet(), hasLength(1));
+        expect(sockets, hasLength(2));
       });
     });
 
